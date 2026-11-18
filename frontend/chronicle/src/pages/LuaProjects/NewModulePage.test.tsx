@@ -26,7 +26,7 @@ describe("new module page", () => {
     vi.mocked(useSession).mockReturnValue({ data: { user_id: "me" }, isLoading: false } as ReturnType<typeof useSession>)
     vi.mocked(useAuthorizationCheck).mockReturnValue({ data: { createLuaProject: false }, isPending: false } as unknown as ReturnType<typeof useAuthorizationCheck>)
     const html = render(<NewModulePage />)
-    expect(html).toContain("You need Revered or Exalted supporter status, or the module-creator role, to create modules")
+    expect(html).toContain("You need Revered or Exalted supporter status, or the module_creator role, to create modules")
     expect(html).not.toContain("Create module</button>")
   })
 

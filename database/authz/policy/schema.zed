@@ -17,7 +17,7 @@ definition chronicle {
   relation inference_debug_capable: user
   relation inference_disabled: user
   relation lua_project_author: user // Deprecated; module creation uses supporter tiers or module_creator.
-  relation module_creator: user // Manually assigned module-creator role.
+  relation module_creator: user // Manually assigned module_creator role.
   relation technical_user: user
   relation supporter: user
 

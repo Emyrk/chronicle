@@ -47,7 +47,7 @@ export function ReveredUpsell() {
     style={{ borderColor: `${TIER_COLOR.revered}66`, backgroundColor: `${TIER_COLOR.revered}14` }}>
     <LockKeyhole className="size-4 shrink-0" style={{ color: TIER_COLOR.revered }} aria-hidden="true" />
     <p className="min-w-0 flex-1"><span className="font-medium">Making modules is a Revered perk.</span>{" "}
-      <span className="text-muted-foreground">The module-creator role also grants creation access. Anyone can track released modules.</span></p>
+      <span className="text-muted-foreground">The module_creator role also grants creation access. Anyone can track released modules.</span></p>
     <Link to="/supporter" className="inline-flex shrink-0 items-center gap-1 font-medium underline-offset-4 hover:underline" style={{ color: TIER_COLOR.revered }}>
       Become Revered <ArrowRight className="size-4" />
     </Link>

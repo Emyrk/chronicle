@@ -28,12 +28,11 @@ func TestModuleCreatorRole(t *testing.T) {
 		require.Equal(t, want, allowed)
 	}
 	checkCreation(false)
-	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"module-creator"}))
+	require.NoError(t, zed.SetUserChronicleRoles(ctx, userID, []string{"module_creator"}))
 	checkCreation(true)
 	roles, err := zed.UserChronicleRoles(ctx, userID)
 	require.NoError(t, err)
-	require.Contains(t, roles, "module-creator", "API role names must round-trip through manual assignment")
-	require.NotContains(t, roles, "module_creator")
+	require.Contains(t, roles, "module_creator", "API role names must round-trip through manual assignment")
 
 	// This is a narrow creation grant, not a supporter tier or administrative role.
 	for _, permission := range []rel.Interface{
@@ -51,7 +50,7 @@ func TestModuleCreatorRole(t *testing.T) {
 	} {
 		allowed, err := zed.CheckOne(ctx, nil, permission)
 		require.NoError(t, err)
-		require.False(t, allowed, "module-creator must not grant unrelated permissions: %v", permission)
+		require.False(t, allowed, "module_creator must not grant unrelated permissions: %v", permission)
 	}
 
 	// Saving the returned API role list retains the grant.
@@ -61,6 +60,6 @@ func TestModuleCreatorRole(t *testing.T) {
 	checkCreation(false)
 	roles, err = zed.UserChronicleRoles(ctx, userID)
 	require.NoError(t, err)
-	require.NotContains(t, roles, "module-creator")
+	require.NotContains(t, roles, "module_creator")
 	require.Contains(t, roles, "chronicle_member", "revocation preserves baseline membership")
 }
