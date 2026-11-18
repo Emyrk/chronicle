@@ -62,6 +62,8 @@ type gatewaySession interface {
 
 // Bot represents a Discord bot instance.
 type Bot struct {
+	unknownUnitDebounce unknownUnitDebounce
+
 	session         *discordgo.Session
 	gateway         gatewaySession
 	httpDiagnostics *discordHTTPDiagnostics

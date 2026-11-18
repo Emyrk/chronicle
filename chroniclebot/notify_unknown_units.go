@@ -19,7 +19,7 @@ type UnknownUnitZoneSummary struct {
 
 // EnqueueUnknownUnitNotification sends one bounded summary per parse job after
 // successful persistence. Job identity, not evidence, determines uniqueness.
-func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotificationInserter, bot *Bot, jobID int64, reportURL string, zones []UnknownUnitZoneSummary) error {
+func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotificationInserter, bot *Bot, tenantID uuid.UUID, jobID int64, reportURL string, zones []UnknownUnitZoneSummary) error {
 	if bot == nil || bot.Disabled() || bot.AdminNotificationsChannelID() == "" {
 		return nil
 	}
@@ -27,6 +27,12 @@ func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotification
 	if len(zones) == 0 {
 		return nil
 	}
+	zones, finish := bot.unknownUnitDebounce.reserve(tenantID, zones)
+	if len(zones) == 0 {
+		return nil
+	}
+	succeeded := false
+	defer func() { finish(succeeded) }()
 	slices.SortFunc(zones, func(a, b UnknownUnitZoneSummary) int {
 		if a.Zone < b.Zone {
 			return -1
@@ -54,11 +60,14 @@ func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotification
 	if len(zones) > maxZones {
 		fields = append(fields, AdminNotificationField{Name: "More zones", Value: fmt.Sprintf("%d more zones. See the parse report for all details.", len(zones)-maxZones)})
 	}
-	return EnqueueAdminNotification(ctx, queue, bot, ArgsNotifyAdmin{
+	err := EnqueueAdminNotification(ctx, queue, bot, ArgsNotifyAdmin{
 		Title: "Unknown unit categories in parse job", URL: reportURL, Fields: fields,
 		// No rolling time bucket: retries of this parse job retain the same key.
-		UniqueKey: fmt.Sprintf("unknown-unit-parse-job:%d", jobID),
+		UniqueKey:   fmt.Sprintf("unknown-unit-parse-job:%d", jobID),
+		MaxAttempts: 2,
 	})
+	succeeded = err == nil
+	return err
 }
 
 func boundedUnknownUnitText(value string, limit int) string {

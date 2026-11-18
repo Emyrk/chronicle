@@ -32,11 +32,16 @@ type ArgsNotifyAdmin struct {
 	// the identity. Existing callers without a key remain non-unique.
 	UniqueKey      string        `json:"unique_key,omitempty" river:"unique"`
 	DeduplicateFor time.Duration `json:"-"`
+	// MaxAttempts overrides the default only at insertion; River persists the limit.
+	MaxAttempts int `json:"-"`
 }
 
 func (ArgsNotifyAdmin) Kind() string { return KindNotifyAdmin }
 func (a ArgsNotifyAdmin) InsertOpts() river.InsertOpts {
 	opts := river.InsertOpts{Queue: riverconst.QueueDiscordAnnouncements, MaxAttempts: 3}
+	if a.MaxAttempts > 0 {
+		opts.MaxAttempts = a.MaxAttempts
+	}
 	if a.UniqueKey != "" {
 		opts.UniqueOpts = river.UniqueOpts{ByArgs: true, ByPeriod: a.DeduplicateFor}
 	}

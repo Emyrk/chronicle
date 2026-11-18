@@ -61,7 +61,7 @@ func (w *WorkerLogParse) notifyUnknownUnits(ctx context.Context, tenantID, logID
 		}
 		tenantSlug = tenant.Slug
 	}
-	if err := chroniclebot.EnqueueUnknownUnitNotification(ctx, w.parent.queue, w.bot, jobID, w.bot.UnknownUnitReportURL(logID, tenantSlug), zones); err != nil {
+	if err := chroniclebot.EnqueueUnknownUnitNotification(ctx, w.parent.queue, w.bot, tenantID, jobID, w.bot.UnknownUnitReportURL(logID, tenantSlug), zones); err != nil {
 		slog.WarnContext(ctx, "failed to enqueue unknown unit category notification", slog.Any("error", err))
 	}
 }

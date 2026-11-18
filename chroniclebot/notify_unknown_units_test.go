@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -31,10 +32,12 @@ func TestUnknownUnitNotificationOnePerJob(t *testing.T) {
 	ctx := context.Background()
 	bot, err := New(ctx, testutil.Logger(t), Config{Token: "test", AdminNotificationsChannelID: "admins"})
 	require.NoError(t, err)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	bot.unknownUnitDebounce.now = func() time.Time { return now }
 	queue := &unknownUnitQueue{}
 	zones := []UnknownUnitZoneSummary{{Zone: "Zone B", Entries: 4, GUIDs: 20}, {Zone: "Zone A", Entries: 2, GUIDs: 7}}
 	reportURL := "https://chronicle.example/logs/abc"
-	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, 123, reportURL, zones))
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 123, reportURL, zones))
 	require.Len(t, queue.jobs, 1)
 	job := queue.jobs[0]
 	require.Equal(t, "Unknown unit categories in parse job", job.Title)
@@ -43,13 +46,17 @@ func TestUnknownUnitNotificationOnePerJob(t *testing.T) {
 	require.Contains(t, job.Fields[0].Value, "2 zones; 27 unknown GUIDs")
 	require.Equal(t, AdminNotificationField{Name: "Zone A", Value: "2 distinct entries; 7 GUIDs (per-instance sum)"}, job.Fields[1])
 	require.Equal(t, AdminNotificationField{Name: "Zone B", Value: "4 distinct entries; 20 GUIDs (per-instance sum)"}, job.Fields[2])
+	require.Equal(t, 2, job.InsertOpts().MaxAttempts)
+	require.Equal(t, 3, ArgsNotifyAdmin{}.InsertOpts().MaxAttempts)
 	require.True(t, job.InsertOpts().UniqueOpts.ByArgs)
 	require.Zero(t, job.InsertOpts().UniqueOpts.ByPeriod)
-	// Retry evidence can change, but River's unique args and key stay stable.
-	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, 123, reportURL, zones[:1]))
+	// Even after the local window expires, retry evidence keeps the River key.
+	now = now.Add(4 * time.Hour)
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 123, reportURL, zones[:1]))
 	require.Equal(t, job.UniqueKey, queue.jobs[1].UniqueKey)
 	require.Equal(t, job.ChannelID, queue.jobs[1].ChannelID)
-	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, 124, reportURL, zones))
+	now = now.Add(4 * time.Hour)
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 124, reportURL, zones))
 	require.NotEqual(t, job.UniqueKey, queue.jobs[2].UniqueKey)
 	require.False(t, ArgsNotifyAdmin{}.InsertOpts().UniqueOpts.ByArgs)
 }
@@ -61,16 +68,16 @@ func TestUnknownUnitNotificationOptionalAndErrors(t *testing.T) {
 	require.NoError(t, err)
 	queue := &unknownUnitQueue{err: errors.New("offline")}
 	zones := []UnknownUnitZoneSummary{{Zone: "Zone", Entries: 1, GUIDs: 2}}
-	require.ErrorIs(t, EnqueueUnknownUnitNotification(ctx, queue, bot, 1, "", zones), queue.err)
+	require.ErrorIs(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 1, "", zones), queue.err)
 	require.Len(t, queue.jobs, 1)
-	require.Error(t, EnqueueUnknownUnitNotification(ctx, nil, bot, 1, "", zones))
-	require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, bot, 1, "", nil))
-	require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, bot, 1, "", []UnknownUnitZoneSummary{{Entries: 1}}))
-	require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, nil, 1, "", zones))
+	require.Error(t, EnqueueUnknownUnitNotification(ctx, nil, bot, uuid.Nil, 1, "", zones))
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, bot, uuid.Nil, 1, "", nil))
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, bot, uuid.Nil, 1, "", []UnknownUnitZoneSummary{{Entries: 1}}))
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, nil, uuid.Nil, 1, "", zones))
 	for _, config := range []Config{{}, {Token: "test"}} {
 		disabled, err := New(ctx, testutil.Logger(t), config)
 		require.NoError(t, err)
-		require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, disabled, 1, "", zones))
+		require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, disabled, uuid.Nil, 1, "", zones))
 	}
 }
 
@@ -84,7 +91,7 @@ func TestUnknownUnitNotificationBounds(t *testing.T) {
 		zones[i] = UnknownUnitZoneSummary{Zone: fmt.Sprintf("%03d%s", i, strings.Repeat("界", 1000)), Entries: 123456, GUIDs: 1234567}
 	}
 	queue := &unknownUnitQueue{}
-	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, 1, "", zones))
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 1, "", zones))
 	require.Len(t, queue.jobs, 1)
 	job := queue.jobs[0]
 	require.LessOrEqual(t, len(job.Fields), 25)

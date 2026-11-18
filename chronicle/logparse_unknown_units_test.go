@@ -35,7 +35,7 @@ func TestUnknownUnitsAcrossInstancesOneNotification(t *testing.T) {
 	bot, err := chroniclebot.New(context.Background(), testutil.Logger(t), chroniclebot.Config{Token: "test", AdminNotificationsChannelID: "admins"})
 	require.NoError(t, err)
 	queue := &unknownReportQueue{}
-	require.NoError(t, chroniclebot.EnqueueUnknownUnitNotification(context.Background(), queue, bot, 42, "https://chronicle.example/logs/test", zones))
+	require.NoError(t, chroniclebot.EnqueueUnknownUnitNotification(context.Background(), queue, bot, uuid.Nil, 42, "https://chronicle.example/logs/test", zones))
 	require.Len(t, queue.jobs, 1)
 	require.Contains(t, queue.jobs[0].Fields[0].Value, "2 zones; 11 unknown GUIDs")
 }
