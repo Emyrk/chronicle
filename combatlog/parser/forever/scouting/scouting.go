@@ -1,5 +1,5 @@
-// Package scouting interprets Sidekick Forever scouting snapshots without merging
-// accounts or applying observations to combat logs. Timestamps are Unix seconds.
+// Package scouting interprets and indexes independent Sidekick Forever scouting
+// snapshots without applying them to combat logs. Timestamps are Unix seconds.
 package scouting
 
 import (

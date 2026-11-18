@@ -33,7 +33,7 @@ func TestScoutingPayloadIndependentFreshness(t *testing.T) {
 			{At: 15, Name: "Nearby", Level: ptr.Ref(21), Guild: ptr.Ref("Stale")},
 		}},
 	}}
-	payload, err := scoutingPayload(players, uuid.New())
+	payload, err := scoutingPayload(newTestScouting(t, players), uuid.New())
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -55,7 +55,7 @@ func TestScoutingPayloadThousandPlayers(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		players[guid.GUID(i)] = []scouting.Player{{Name: fmt.Sprintf("Nearby%d", i), LastSeen: 20, Observations: []scouting.Observation{{At: 10, Name: fmt.Sprintf("Nearby%d", i)}}}}
 	}
-	payload, err := scoutingPayload(players, uuid.New())
+	payload, err := scoutingPayload(newTestScouting(t, players), uuid.New())
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -75,10 +75,10 @@ func TestScoutingTimelineDoesNotBackfillFutureEvidence(t *testing.T) {
 	before := &messages.Unit{MessageBase: messages.Base(time.Unix(5, 0)), Info: unitinfo.Info{Guid: 1, Owner: ptr.Ref(guid.GUID(2))}}
 	after := &messages.Unit{MessageBase: messages.Base(time.Unix(15, 0)), Info: unitinfo.Info{Guid: 1, CanCooperate: true}}
 	known := &messages.Unit{MessageBase: messages.Base(time.Unix(25, 0)), Info: unitinfo.Info{Guid: 1, Name: "Combat", Level: 60}}
-	source := scoutingAdvancer{source: scoutingTestSource{messages: []messages.Message{before, after, known}}, players: map[guid.GUID][]scouting.Player{1: {{Name: "Scout", LastSeen: 30, Observations: []scouting.Observation{
+	source := scoutingAdvancer{source: scoutingTestSource{messages: []messages.Message{before, after, known}}, players: newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", LastSeen: 30, Observations: []scouting.Observation{
 		{At: 10, Name: "Scout", Level: ptr.Ref(20), Guild: ptr.Ref("Ignored")},
 		{At: 20, Name: "Later", Level: ptr.Ref(21)},
-	}}}}}
+	}}}})}
 	batch, err := source.Advance(t.Context())
 	require.ErrorIs(t, err, io.EOF)
 	require.Empty(t, batch[0].(*messages.Unit).Name)
@@ -112,11 +112,24 @@ func TestScoutingArtifactLoaderPreservesOriginalsAndSkipsUnsupported(t *testing.
 		{Kind: "other", ObjectKey: "ignored"},
 	})
 	require.NoError(t, err)
-	require.Len(t, players, 2)
+	require.Equal(t, 2, players.Len())
 	retained, err := objects.DownloadFile(ctx, BucketRaidLogs, "valid.json")
 	require.NoError(t, err)
 	require.Equal(t, fixture, retained)
 	retained, err = objects.DownloadFile(ctx, BucketRaidLogs, "future.json")
 	require.NoError(t, err)
 	require.JSONEq(t, `{"schema_version":99}`, string(retained))
+}
+
+func newTestScouting(t *testing.T, players map[guid.GUID][]scouting.Player) *scouting.Scouting {
+	t.Helper()
+	var sources []scouting.Source
+	for id, snapshots := range players {
+		for _, snapshot := range snapshots {
+			sources = append(sources, scouting.Source{Players: map[string]scouting.Player{id.String(): snapshot}})
+		}
+	}
+	index, err := scouting.New(sources)
+	require.NoError(t, err)
+	return index
 }

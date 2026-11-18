@@ -6,15 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
-	"sort"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/consumers"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/events"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/google/uuid"
@@ -22,8 +19,8 @@ import (
 
 // Scouting is supplemental. Retain the original artifacts even when a future or
 // malformed collection cannot be interpreted by this version of the server.
-func (w *WorkerLogParse) loadForeverScouting(ctx context.Context, artifacts []database.LogGroupArtifact) (map[guid.GUID][]scouting.Player, error) {
-	players := make(map[guid.GUID][]scouting.Player)
+func (w *WorkerLogParse) loadForeverScouting(ctx context.Context, artifacts []database.LogGroupArtifact) (*scouting.Scouting, error) {
+	var allSources []scouting.Source
 	for _, artifact := range artifacts {
 		if artifact.Kind != ArtifactKindForeverEvents {
 			continue
@@ -49,43 +46,9 @@ func (w *WorkerLogParse) loadForeverScouting(ctx context.Context, artifacts []da
 			w.parent.logger.WarnContext(ctx, "skip invalid Forever scouting collection", "artifact_id", artifact.ID, "error", err)
 			continue
 		}
-		for _, source := range sources {
-			// Stable iteration also makes equivalent legacy/modern identity aliases deterministic.
-			keys := make([]string, 0, len(source.Players))
-			for key := range source.Players {
-				keys = append(keys, key)
-			}
-			sort.Strings(keys)
-			for _, raw := range keys {
-				id, err := scouting.NormalizeGUID(raw)
-				if err != nil {
-					return nil, err
-				}
-				players[id] = append(players[id], source.Players[raw])
-			}
-		}
+		allSources = append(allSources, sources...)
 	}
-	return players, nil
-}
-
-// Merge known fields only after each independent source has resolved its deltas.
-// Equal timestamps retain the first source, matching the DB's strict-newer guard.
-func scoutingKnownAt(players []scouting.Player, at int64) scouting.KnownFields {
-	var known scouting.KnownFields
-	newer := func(old, next *scouting.Observation) *scouting.Observation {
-		if next != nil && (old == nil || next.At > old.At) {
-			return next
-		}
-		return old
-	}
-	for _, player := range players {
-		next := player.KnownAt(at)
-		known.Name = newer(known.Name, next.Name)
-		known.Level = newer(known.Level, next.Level)
-		known.Guild = newer(known.Guild, next.Guild)
-		known.Party = newer(known.Party, next.Party)
-	}
-	return known
+	return scouting.New(allSources)
 }
 
 type scoutingPlayerInput struct {
@@ -104,12 +67,8 @@ type scoutingPlayerInput struct {
 	Gender             *int       `json:"gender"`
 }
 
-func scoutingPayload(players map[guid.GUID][]scouting.Player, realmID uuid.UUID) ([]byte, error) {
-	ids := make([]guid.GUID, 0, len(players))
-	for id := range players {
-		ids = append(ids, id)
-	}
-	sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] })
+func scoutingPayload(players *scouting.Scouting, realmID uuid.UUID) ([]byte, error) {
+	ids := players.PlayerIDs()
 	rows := make([]scoutingPlayerInput, 0, len(ids))
 	timestamp := func(o *scouting.Observation) *time.Time {
 		if o == nil {
@@ -119,21 +78,10 @@ func scoutingPayload(players map[guid.GUID][]scouting.Player, realmID uuid.UUID)
 		return &t
 	}
 	for _, id := range ids {
-		sources := players[id]
-		known := scoutingKnownAt(sources, math.MaxInt64)
-		row := scoutingPlayerInput{ID: id.String(), RealmID: realmID}
-		var lastSeen int64
-		for _, source := range sources {
-			if source.LastSeen > lastSeen {
-				lastSeen = source.LastSeen
-			}
-			for _, observation := range source.Observations {
-				if observation.At > lastSeen {
-					lastSeen = observation.At
-				}
-			}
-		}
-		row.ObservedAt = time.Unix(lastSeen, 0).UTC()
+		snapshot, _ := players.Latest(id)
+		known := snapshot.Known
+		row := scoutingPlayerInput{ID: id.String(), RealmID: realmID, Name: snapshot.Name}
+		row.ObservedAt = time.Unix(snapshot.LastSeen, 0).UTC()
 		row.ScoutingLastSeenAt = row.ObservedAt
 		if known.Name != nil {
 			row.Name = known.Name.Name
@@ -148,16 +96,6 @@ func scoutingPayload(players map[guid.GUID][]scouting.Player, realmID uuid.UUID)
 			row.GuildKnown = true
 			row.GuildObservedAt = timestamp(known.Guild)
 		}
-		// A required name can be present even on a sighting with no At rows. It is an
-		// insert identity label, not a newly observed field on an existing armory.
-		if row.Name == "" {
-			for _, source := range sources {
-				if source.Name != "" {
-					row.Name = source.Name
-					break
-				}
-			}
-		}
 		rows = append(rows, row)
 	}
 	return json.Marshal(rows)
@@ -167,7 +105,7 @@ func scoutingPayload(players map[guid.GUID][]scouting.Player, realmID uuid.UUID)
 // affiliation, or guild membership, which could change raid ownership votes.
 type scoutingAdvancer struct {
 	source  consumers.Advancer
-	players map[guid.GUID][]scouting.Player
+	players *scouting.Scouting
 }
 
 func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, error) {
@@ -177,7 +115,7 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 		if !ok {
 			continue
 		}
-		known := scoutingKnownAt(s.players[unit.Guid], unit.Date().Unix())
+		known := s.players.KnownAt(unit.Guid, unit.Date().Unix())
 		copy := *unit
 		if (copy.Name == "" || copy.Name == "Unknown") && known.Name != nil {
 			copy.Name = known.Name.Name
