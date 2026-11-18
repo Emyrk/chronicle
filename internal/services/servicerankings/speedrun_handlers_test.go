@@ -1,6 +1,8 @@
 package servicerankings
 
 import (
+	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -29,4 +31,13 @@ func TestSpeedrunUsesRankedTiming(t *testing.T) {
 			assert.Equal(t, tt.valid, valid)
 		})
 	}
+}
+
+func TestSpeedrunLeaderboardRejectsInvalidBoard(t *testing.T) {
+	t.Parallel()
+	service := &Service{}
+	response := httptest.NewRecorder()
+	service.handleSpeedrunLeaderboard(response, httptest.NewRequest(http.MethodGet, "/speedrun?instance_name=Molten+Core&board=invalid", nil))
+	assert.Equal(t, http.StatusBadRequest, response.Code)
+	assert.Contains(t, response.Body.String(), "board query parameter must be guild or all")
 }

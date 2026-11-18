@@ -149,7 +149,7 @@ ORDER BY start_time DESC;
 
 -- name: SpeedrunLeaderboard :many
 -- Returns the leaderboard for a given instance name.
--- Deduplicates by duplicate_group, then by guild (best per guild unless guild_id filter is set).
+-- Deduplicates by duplicate_group, then by guild (best per guild unless all_runs or guild_id filter is set).
 -- Excludes runs without a guild. Optional filters: realm, player count, guild.
 -- Each difficulty has its own board: set filter_difficulty to select the board
 -- matching difficulty_name (empty string matches runs with no recorded difficulty).
@@ -230,15 +230,15 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
             ELSE COALESCE(sr.ranked_duration_ms, sr.duration_ms)
         END ASC
 ),
--- When no guild filter: keep only the best run per guild.
--- When guild filter is set: keep all runs for that guild.
+-- By default with no guild filter: keep only the best run per guild.
+-- With all_runs or a guild filter: keep each distinct run.
 best AS (
     SELECT DISTINCT ON (
-        CASE WHEN @guild_id :: text = '' THEN guild_id END
+        CASE WHEN NOT @all_runs::boolean AND @guild_id :: text = '' THEN guild_id ELSE instance_id END
     ) *
     FROM deduped
     ORDER BY
-        CASE WHEN @guild_id :: text = '' THEN guild_id END,
+        CASE WHEN NOT @all_runs::boolean AND @guild_id :: text = '' THEN guild_id ELSE instance_id END,
         duration_ms ASC
 )
 SELECT * FROM best

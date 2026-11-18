@@ -1449,14 +1449,14 @@ type sqlcQuerier interface {
 	// JOINs wow_server_realms so RLS tenant filtering cascades.
 	SpeedrunInstanceBoards(ctx context.Context) ([]SpeedrunInstanceBoardsRow, error)
 	// Returns the leaderboard for a given instance name.
-	// Deduplicates by duplicate_group, then by guild (best per guild unless guild_id filter is set).
+	// Deduplicates by duplicate_group, then by guild (best per guild unless all_runs or guild_id filter is set).
 	// Excludes runs without a guild. Optional filters: realm, player count, guild.
 	// Each difficulty has its own board: set filter_difficulty to select the board
 	// matching difficulty_name (empty string matches runs with no recorded difficulty).
 	// use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing,
 	// falling back to raw timing for qualified legacy rows that predate ranked timing storage.
-	// When no guild filter: keep only the best run per guild.
-	// When guild filter is set: keep all runs for that guild.
+	// By default with no guild filter: keep only the best run per guild.
+	// With all_runs or a guild filter: keep each distinct run.
 	SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error)
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)

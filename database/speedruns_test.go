@@ -357,6 +357,30 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, secondPage, 1)
 	require.Equal(t, legacyID, secondPage[0].InstanceID)
+
+	// Separate clears by the same guild rank independently only on the all-runs board.
+	otherClear := insertRun(fullGuildID, 65*time.Minute, 60*time.Minute, 50*time.Minute, 6*time.Hour)
+	reupload := insertRun(fullGuildID, 66*time.Minute, 61*time.Minute, 51*time.Minute, 6*time.Hour)
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET duplicate_group_id = $1 WHERE id IN ($1, $2)", otherClear, reupload)
+	require.NoError(t, err)
+	for _, ranked := range []bool{false, true} {
+		params := database.SpeedrunLeaderboardParams{InstanceName: "Molten Core", UseRankedTiming: ranked}
+		guildBest, err := store.SpeedrunLeaderboard(ctx, params)
+		require.NoError(t, err)
+		params.AllRuns = true
+		allRuns, err := store.SpeedrunLeaderboard(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, allRuns, len(guildBest)+1)
+		require.Equal(t, otherClear, allRuns[len(allRuns)-1].InstanceID)
+		for _, run := range allRuns {
+			require.NotEqual(t, reupload, run.InstanceID, "duplicate uploads must not rank twice")
+		}
+		params.AllRuns = false
+		params.GuildID = fullGuildID.String()
+		guildRuns, err := store.SpeedrunLeaderboard(ctx, params)
+		require.NoError(t, err)
+		require.Len(t, guildRuns, 2, "a guild-filtered board keeps all distinct runs")
+	}
 }
 
 func TestExternalAPILeaderboardDuplicateLogsFollowTimingMode(t *testing.T) {

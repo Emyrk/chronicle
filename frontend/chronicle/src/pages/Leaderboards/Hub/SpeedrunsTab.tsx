@@ -22,6 +22,8 @@ export function SpeedrunsTab({
   selection,
   view: controlledView,
   onView,
+  clearBoard = "guild",
+  onClearBoard,
   killPage = 1,
   killPageSize = 50,
   onKillPage,
@@ -33,6 +35,8 @@ export function SpeedrunsTab({
   /** Controlled view, so a host only loads the board that is shown. */
   view?: SpeedrunsView
   onView?: (view: SpeedrunsView) => void
+  clearBoard?: "guild" | "all"
+  onClearBoard?: (board: "guild" | "all") => void
   killPage?: number
   killPageSize?: number
   onKillPage?: (page: number) => void
@@ -44,27 +48,40 @@ export function SpeedrunsTab({
   const setView = onView ?? setOwnView
   const chosen = selectedBosses(selection, bosses)
   const switcher = (
-    <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-xs sm:text-sm">
-      {(
-        [
-          ["clear", "Full clear"],
-          ["kills", `Kill times${chosen.length ? ` · ${chosen.length === 1 ? chosen[0] : `${chosen.length} bosses`}` : ""}`],
-        ] as const
-      ).map(([id, label]) => (
-        <button
-          key={id}
-          type="button"
-          aria-pressed={view === id}
-          onClick={() => setView(id)}
-          className={cn(
-            "cursor-pointer rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
-            view === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
-          )}
-        >
-          {label}
-        </button>
-      ))}
-    </nav>
+    <div className="flex flex-wrap items-center gap-2">
+      <nav aria-label="Speedrun board" className="inline-flex rounded-md border bg-card p-0.5 text-xs sm:text-sm">
+        {(
+          [
+            ["clear", "Full clear"],
+            ["kills", `Kill times${chosen.length ? ` · ${chosen.length === 1 ? chosen[0] : `${chosen.length} bosses`}` : ""}`],
+          ] as const
+        ).map(([id, label]) => (
+          <button
+            key={id}
+            type="button"
+            aria-pressed={view === id}
+            onClick={() => setView(id)}
+            className={cn(
+              "cursor-pointer rounded px-2.5 py-1 font-medium transition-colors sm:px-3 sm:py-1.5",
+              view === id ? "bg-muted text-foreground" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {label}
+          </button>
+        ))}
+      </nav>
+      {view === "clear" && onClearBoard && (
+        <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          Runs
+          <select aria-label="Full clear ranking" value={clearBoard}
+            onChange={(event) => onClearBoard(event.target.value as "guild" | "all")}
+            className="cursor-pointer rounded-md border bg-card px-2 py-1.5 text-foreground">
+            <option value="guild">Guild best</option>
+            <option value="all">All runs</option>
+          </select>
+        </label>
+      )}
+    </div>
   )
   // Full clears carry the switch in the podium card's header; kill times have no podium, so it sits above.
   return view === "clear" ? (

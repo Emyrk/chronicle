@@ -34209,11 +34209,11 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
 ),
 best AS (
     SELECT DISTINCT ON (
-        CASE WHEN $9 :: text = '' THEN guild_id END
+        CASE WHEN NOT $15::boolean AND $9 :: text = '' THEN guild_id ELSE instance_id END
     ) instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url
     FROM deduped
     ORDER BY
-        CASE WHEN $9 :: text = '' THEN guild_id END,
+        CASE WHEN NOT $15::boolean AND $9 :: text = '' THEN guild_id ELSE instance_id END,
         duration_ms ASC
 )
 SELECT instance_id, instance_name, difficulty_name, guild_id, duration_ms, start_time, completion_time, qualified, addon_version, hashed_slug, duplicate_group_id, parser_version, guild_name, realm_name, player_count, guild_logo_url, has_youtube_video, youtube_url FROM best
@@ -34239,6 +34239,7 @@ type SpeedrunLeaderboardParams struct {
 	DifficultyName           string      `db:"difficulty_name" json:"difficulty_name"`
 	FilterInstanceMaxPlayers bool        `db:"filter_instance_max_players" json:"filter_instance_max_players"`
 	InstanceMaxPlayers       int16       `db:"instance_max_players" json:"instance_max_players"`
+	AllRuns                  bool        `db:"all_runs" json:"all_runs"`
 }
 
 type SpeedrunLeaderboardRow struct {
@@ -34263,14 +34264,14 @@ type SpeedrunLeaderboardRow struct {
 }
 
 // Returns the leaderboard for a given instance name.
-// Deduplicates by duplicate_group, then by guild (best per guild unless guild_id filter is set).
+// Deduplicates by duplicate_group, then by guild (best per guild unless all_runs or guild_id filter is set).
 // Excludes runs without a guild. Optional filters: realm, player count, guild.
 // Each difficulty has its own board: set filter_difficulty to select the board
 // matching difficulty_name (empty string matches runs with no recorded difficulty).
 // use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing,
 // falling back to raw timing for qualified legacy rows that predate ranked timing storage.
-// When no guild filter: keep only the best run per guild.
-// When guild filter is set: keep all runs for that guild.
+// By default with no guild filter: keep only the best run per guild.
+// With all_runs or a guild filter: keep each distinct run.
 func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeaderboardParams) ([]SpeedrunLeaderboardRow, error) {
 	rows, err := q.db.Query(ctx, speedrunLeaderboard,
 		arg.MinPlayers,
@@ -34287,6 +34288,7 @@ func (q *sqlQuerier) SpeedrunLeaderboard(ctx context.Context, arg SpeedrunLeader
 		arg.DifficultyName,
 		arg.FilterInstanceMaxPlayers,
 		arg.InstanceMaxPlayers,
+		arg.AllRuns,
 	)
 	if err != nil {
 		return nil, err

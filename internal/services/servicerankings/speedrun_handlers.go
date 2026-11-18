@@ -28,6 +28,7 @@ func speedrunUsesRankedTiming(value string) (bool, bool) {
 //	GET /speedrun?instance_name=Molten+Core&realm_name=Turtle+WoW&timing=ranked
 //
 // timing defaults to full; ranked re-ranks by the boss-to-boss duration.
+// board defaults to guild best; all keeps every distinct qualifying run.
 func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
@@ -79,7 +80,14 @@ func (s *Service) handleSpeedrunLeaderboard(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
+	board := r.URL.Query().Get("board")
+	if board != "" && board != "guild" && board != "all" {
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "board query parameter must be guild or all"})
+		return
+	}
+
 	rows, err := s.store.SpeedrunLeaderboard(ctx, database.SpeedrunLeaderboardParams{
+		AllRuns:                  board == "all",
 		InstanceName:             instanceName,
 		RealmNames:               realmNames,
 		MinPlayers:               minPlayers,
