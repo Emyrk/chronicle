@@ -15,12 +15,12 @@ func TestMoltenCoreEnvironmentCategories(t *testing.T) {
 	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla, database.FlavorNightmareOfUrsol}, {database.FlavorVanilla, database.FlavorTurtle}, {database.FlavorVanillaPlus}, {database.FlavorVanilla}, {database.FlavorWrath}, {database.FlavorEpoch}} {
 		units := unitdb.New(flavor)
 		mc := MoltenCoreFactory.Hostiles(flavor)
-		for entry, name := range map[uint32]string{178088: "Ragnaros", 13148: "Flame of Ragnaros"} {
+		for entry, name := range map[uint32]string{178088: "Ragnaros", 13148: "Flame of Ragnaros", 177704: "Lava Bomb", 178164: "Hot Coal"} {
 			for _, high := range []uint64{0xF110000000000000, 0xF130000000000000, 0xF140000000000000, 0xF150000000000000} {
 				id := guid.GUID(high | uint64(entry)<<24 | 1)
 				want := unitdb.CategoryUnknown
 				identity := Identity{Affiliation: types.AffiliationUnknown}
-				if flavor.Has(database.FlavorNightmareOfUrsol) && ((entry == 178088 && id.IsObject()) || (entry == 13148 && (id.IsCreature() || id.IsVehicle()))) {
+				if flavor.Has(database.FlavorNightmareOfUrsol) && ((entry != 13148 && id.IsObject()) || (entry == 13148 && (id.IsCreature() || id.IsVehicle()))) {
 					want = unitdb.CategoryEnvironment
 					identity = Identity{Name: name, Category: want, Affiliation: types.AffiliationUnknown}
 				}
@@ -40,7 +40,7 @@ func TestMoltenCoreEnvironmentCategories(t *testing.T) {
 			}
 		}
 		// Unverified entries and Scarshield Spellbinder remain unknown in MC.
-		for _, entry := range []uint32{57645, 177704, 178164, 178194, 9098} {
+		for _, entry := range []uint32{57645, 178194, 9098} {
 			for _, high := range []uint64{0xF110000000000000, 0xF130000000000000} {
 				require.Equal(t, unitdb.CategoryUnknown, units.Category(guid.GUID(high|uint64(entry)<<24|1), mc))
 			}
