@@ -184,14 +184,14 @@ function KillTimes({
                     <li key={r.key} className="flex items-center gap-3 border-b border-white/5 px-4 py-2 text-sm last:border-b-0">
                       <span className="w-8 font-mono text-xs text-muted-foreground">{rankOffset + i + 1}</span>
                       <span className="min-w-0 flex-1 truncate text-amber-500" {...guildAttributes(r.guildId, r.guild)}>
-                        &lt;{r.guild || "Unknown guild"}&gt;
+                        &lt;{r.guild || "No guild"}&gt;
                       </span>
                       <span className="hidden truncate text-xs text-muted-foreground sm:inline">{r.realm}</span>
                       {r.entry ? (
                         <a
                           href={`/instances/${r.entry.log_hashed_slug || r.entry.instance_id}`}
                           className="font-mono tabular-nums hover:underline"
-                          aria-label={`Open ${boss} kill log for ${r.guild || "Unknown guild"}`}
+                          aria-label={`Open ${boss} kill log for ${r.guild || "No guild"}`}
                           {...killAttributes(r.entry)}
                         >
                           {formatClock(r.ms)}
@@ -278,14 +278,14 @@ function ClearBoard({ instanceName, bosses, live, story, switcher }: { instanceN
                     ) : (
                       <span className="size-5 shrink-0" aria-hidden />
                     )}
-                    <span className="truncate" {...guildAttributes(r.guild_id, r.guild_name)}>{r.guild_name}</span>
+                    <span className="truncate" {...guildAttributes(r.guild_id, r.guild_name)}>{r.guild_name || "No guild"}</span>
                   </span>
                 </td>
                 <td className="px-2 py-2 text-right font-mono tabular-nums">
                   <a
                     href={`/instances/${r.slug || r.instance_id}`}
                     className="hover:underline"
-                    aria-label={`Open ${instanceName} speedrun log for ${r.guild_name || "Unknown guild"}`}
+                    aria-label={`Open ${instanceName} speedrun log for ${r.guild_name || "No guild"}`}
                     {...speedrunClearAttributes(r, instanceName)}
                   >
                     {formatClock(r.duration_ms)}

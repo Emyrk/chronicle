@@ -150,7 +150,7 @@ ORDER BY start_time DESC;
 -- name: SpeedrunLeaderboard :many
 -- Returns the leaderboard for a given instance name.
 -- Deduplicates by duplicate_group, then by guild (best per guild unless all_runs or guild_id filter is set).
--- Excludes runs without a guild. Optional filters: realm, player count, guild.
+-- Includes runs without a guild only with all_runs. Optional filters: realm, player count, guild.
 -- Each difficulty has its own board: set filter_difficulty to select the board
 -- matching difficulty_name (empty string matches runs with no recorded difficulty).
 -- use_ranked_timing selects boss-to-boss timing; false selects ranked clear timing,
@@ -178,7 +178,7 @@ WITH deduped AS (
         li.hashed_slug,
         li.duplicate_group_id,
         li.parser_version,
-        g.name AS guild_name,
+        COALESCE(g.name, '')::text AS guild_name,
         COALESCE(wsr.name, '') AS realm_name,
         (SELECT COUNT(*) FROM log_instance_players lip WHERE lip.instance_id = sr.instance_id) AS player_count,
         COALESCE(gp.theme->>'logo_url', '')::text AS guild_logo_url,
@@ -187,7 +187,7 @@ WITH deduped AS (
     FROM instance_speedruns sr
     JOIN log_instances_resolved li ON li.id = sr.instance_id
 JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
-    JOIN guilds g ON sr.guild_id = g.id
+    LEFT JOIN guilds g ON sr.guild_id = g.id
     LEFT JOIN guild_pages gp ON gp.guild_id = sr.guild_id
     JOIN wow_server_realms wsr ON sr.realm_id = wsr.id
     LEFT JOIN LATERAL (
@@ -200,7 +200,7 @@ JOIN wow_log_groups wlg ON wlg.id = li.log_group_id AND NOT wlg.unlisted
       AND sr.qualified = true
       AND NOT li.mixed_difficulty
       AND (NOT @use_ranked_timing::boolean OR sr.boss_to_boss_duration_ms IS NOT NULL)
-      AND sr.guild_id IS NOT NULL
+      AND (@all_runs::boolean OR sr.guild_id IS NOT NULL)
       AND (COALESCE(cardinality(@realm_ids::uuid[]),0)=0 OR li.realm_id=ANY(@realm_ids::uuid[]))
       AND CASE
           WHEN cardinality(@realm_names :: text[]) > 0 THEN

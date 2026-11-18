@@ -363,6 +363,12 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 	reupload := insertRun(fullGuildID, 66*time.Minute, 61*time.Minute, 51*time.Minute, 6*time.Hour)
 	_, err = pool.Exec(ctx, "UPDATE log_instances SET duplicate_group_id = $1 WHERE id IN ($1, $2)", otherClear, reupload)
 	require.NoError(t, err)
+	unguilded := insertRun(fullGuildID, 80*time.Minute, 75*time.Minute, 70*time.Minute, 8*time.Hour)
+	unguildedReupload := insertRun(fullGuildID, 81*time.Minute, 76*time.Minute, 71*time.Minute, 8*time.Hour)
+	_, err = pool.Exec(ctx, "UPDATE log_instances SET guild_id = NULL, duplicate_group_id = $1 WHERE id IN ($1, $2)", unguilded, unguildedReupload)
+	require.NoError(t, err)
+	_, err = pool.Exec(ctx, "UPDATE instance_speedruns SET guild_id = NULL WHERE instance_id IN ($1, $2)", unguilded, unguildedReupload)
+	require.NoError(t, err)
 	for _, ranked := range []bool{false, true} {
 		params := database.SpeedrunLeaderboardParams{InstanceName: "Molten Core", UseRankedTiming: ranked}
 		guildBest, err := store.SpeedrunLeaderboard(ctx, params)
@@ -370,16 +376,29 @@ func TestSpeedrunLeaderboardTimingModes(t *testing.T) {
 		params.AllRuns = true
 		allRuns, err := store.SpeedrunLeaderboard(ctx, params)
 		require.NoError(t, err)
-		require.Len(t, allRuns, len(guildBest)+1)
-		require.Equal(t, otherClear, allRuns[len(allRuns)-1].InstanceID)
+		expectedGuilds := 3
+		if ranked {
+			expectedGuilds = 2 // The legacy run has no boss-to-boss timing.
+		}
+		require.Len(t, guildBest, expectedGuilds, "guild best must exclude non-guild runs")
+		require.Len(t, allRuns, len(guildBest)+2)
+		require.Equal(t, otherClear, allRuns[len(allRuns)-2].InstanceID)
+		require.Equal(t, unguilded, allRuns[len(allRuns)-1].InstanceID)
+		require.False(t, allRuns[len(allRuns)-1].GuildID.Valid)
+		require.Empty(t, allRuns[len(allRuns)-1].GuildName)
 		for _, run := range allRuns {
 			require.NotEqual(t, reupload, run.InstanceID, "duplicate uploads must not rank twice")
+			require.NotEqual(t, unguildedReupload, run.InstanceID, "non-guild duplicate uploads must not rank twice")
 		}
 		params.AllRuns = false
 		params.GuildID = fullGuildID.String()
 		guildRuns, err := store.SpeedrunLeaderboard(ctx, params)
 		require.NoError(t, err)
 		require.Len(t, guildRuns, 2, "a guild-filtered board keeps all distinct runs")
+		params.AllRuns = true
+		filteredAllRuns, err := store.SpeedrunLeaderboard(ctx, params)
+		require.NoError(t, err)
+		require.Equal(t, guildRuns, filteredAllRuns, "all runs must still honor the guild filter")
 	}
 }
 

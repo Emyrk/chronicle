@@ -62,6 +62,7 @@ vi.mock("@/api/rankingsQueries", () => ({
   useTimeParseSpreads: () => ({ data: { spreads: [] }, isPending: false, isError: false }),
 }))
 vi.mock("@/api/queries", () => ({
+  useSession: () => ({ data: undefined }),
   useSiteConfig: vi.fn(() => ({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false })),
   useSupportedInstances: () => ({ data: [{ name: "Molten Core", category: "raid", raid_progression_order: 100 }] }),
   useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false }),
@@ -132,6 +133,7 @@ describe("live Storybook Hub", () => {
       max_players: 40,
       limit: 50,
       offset: 50,
+      board: "guild",
     }, true);
     expect(vi.mocked(useRankingsKillTimesByBoss).mock.calls.at(-1)?.[3]).toBe(false);
   });

@@ -806,7 +806,7 @@ export function Podium({ entries, instanceName, compact }: PodiumProps) {
                 className={`${style.name} font-bold ${isFirst ? "text-white" : colors.text} truncate w-full`}
                 {...guildAttributes(entry.guild_id, entry.guild_name)}
               >
-                {entry.guild_name || "Unknown Guild"}
+                {entry.guild_name || "No guild"}
               </span>
               <span className={`${style.duration} font-mono font-bold text-foreground mt-1`}>
                 <span {...speedrunClearAttributes(entry, instanceName)}>{formatDuration(entry.duration_ms)}</span>
@@ -851,7 +851,7 @@ export function PodiumList({ entries, instanceName }: PodiumProps) {
                 className={`block truncate text-sm font-semibold ${rank === 0 ? "text-white" : MEDAL_COLORS[rank].text}`}
                 {...guildAttributes(entry.guild_id, entry.guild_name)}
               >
-                {entry.guild_name || "Unknown Guild"}
+                {entry.guild_name || "No guild"}
               </span>
               <span className="flex items-center gap-1.5 truncate text-[11px] text-muted-foreground">
                 {entry.player_count > 0 && (
