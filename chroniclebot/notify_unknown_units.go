@@ -2,113 +2,80 @@ package chroniclebot
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
-	"strings"
-	"time"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// UnknownUnitCategory describes unique observed GUIDs that remain unclassified
-// after enrichment and finalization, not combat-event or lookup counts.
-type UnknownUnitCategory struct {
-	Name    string
-	Count   int
-	Samples []guid.GUID
+// UnknownUnitZoneSummary counts distinct entry IDs within a zone. GUID counts
+// are summed per instance; a GUID observed in two instances counts twice.
+type UnknownUnitZoneSummary struct {
+	Zone    string
+	Entries int
+	GUIDs   int
 }
 
-type UnknownUnitNotificationContext struct {
-	TenantID    uuid.UUID
-	Zone        string
-	InstanceURL string
-}
-
-// EnqueueUnknownUnitNotifications must be called after the finalized instance
-// commits. Callers should log errors without failing the successful parse.
-// Each entry/zone gets one alert, independent of spawns, samples and instance;
-// River suppresses repeated alerts within a 24-hour uniqueness period.
-func EnqueueUnknownUnitNotifications(ctx context.Context, queue AdminNotificationInserter, bot *Bot, instance UnknownUnitNotificationContext, units map[uint32]UnknownUnitCategory) error {
+// EnqueueUnknownUnitNotification sends one bounded summary per parse job after
+// successful persistence. Job identity, not evidence, determines uniqueness.
+func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotificationInserter, bot *Bot, jobID int64, reportURL string, zones []UnknownUnitZoneSummary) error {
 	if bot == nil || bot.Disabled() || bot.AdminNotificationsChannelID() == "" {
 		return nil
 	}
-	zone := strings.TrimSpace(instance.Zone)
-	if zone == "" {
+	zones = slices.DeleteFunc(slices.Clone(zones), func(z UnknownUnitZoneSummary) bool { return z.GUIDs <= 0 })
+	if len(zones) == 0 {
 		return nil
 	}
-	entries := make([]uint32, 0, len(units))
-	for entry, unit := range units {
-		if entry <= 0xFFFFFF && unit.Count > 0 {
-			entries = append(entries, entry)
+	slices.SortFunc(zones, func(a, b UnknownUnitZoneSummary) int {
+		if a.Zone < b.Zone {
+			return -1
 		}
+		if a.Zone > b.Zone {
+			return 1
+		}
+		return 0
+	})
+	totalGUIDs := 0
+	for _, zone := range zones {
+		totalGUIDs += zone.GUIDs
 	}
-	slices.Sort(entries)
-	var errs []error
-	for _, entry := range entries {
-		unit := units[entry]
-		name := strings.TrimSpace(unit.Name)
+	fields := []AdminNotificationField{{Name: "Summary", Value: fmt.Sprintf("%d zones; %d unknown GUIDs (unique within each instance, summed across instances). Entry counts are distinct per zone. Entry 0 groups GUIDs without a meaningful template ID. Details and sample GUIDs are in the log's parse report.", len(zones), totalGUIDs)}}
+	// Bound both the number of fields and total embed size, even with long UTF-8
+	// zone names. Twenty 200-byte fields leave ample room below Discord's 6000.
+	const maxZones = 20
+	for _, zone := range zones[:min(len(zones), maxZones)] {
+		name := zone.Zone
 		if name == "" {
-			name = "Unknown"
+			name = "Unknown zone"
 		}
-		samples := make([]guid.GUID, 0, len(unit.Samples))
-		for _, sample := range unit.Samples {
-			sampleEntry, _ := sample.GetEntry()
-			if !sample.IsZero() && sampleEntry == entry {
-				samples = append(samples, sample)
-			}
-		}
-		slices.Sort(samples)
-		samples = slices.Compact(samples)
-		if len(samples) > 5 {
-			samples = samples[:5]
-		}
-		sampleText := make([]string, 0, len(samples))
-		for _, sample := range samples {
-			sampleText = append(sampleText, sample.String())
-		}
-		entryText := fmt.Sprint(entry)
-		if entry == 0 {
-			entryText = "No meaningful entry ID (unresolved GUID structure or zero template ID)"
-		}
-		fields := []AdminNotificationField{
-			{Name: "Zone", Value: boundedUnknownUnitField(zone), Inline: true},
-			{Name: "Entry ID", Value: entryText, Inline: true},
-			{Name: "Name", Value: boundedUnknownUnitField(name)},
-			{Name: "Unique observed GUIDs", Value: fmt.Sprint(unit.Count), Inline: true},
-		}
-		if len(sampleText) > 0 {
-			fields = append(fields, AdminNotificationField{Name: "Sample GUIDs", Value: strings.Join(sampleText, "\n")})
-		}
-		err := EnqueueAdminNotification(ctx, queue, bot, ArgsNotifyAdmin{
-			Title: "Unknown unit category", URL: instance.InstanceURL, Fields: fields,
-			UniqueKey:      fmt.Sprintf("unknown-unit:%s:%s:%d", instance.TenantID, zone, entry),
-			DeduplicateFor: 24 * time.Hour,
-		})
-		if err != nil {
-			errs = append(errs, fmt.Errorf("unknown unit entry %d: %w", entry, err))
-		}
+		fields = append(fields, AdminNotificationField{Name: boundedUnknownUnitText(name, 160), Value: fmt.Sprintf("%d distinct entries; %d GUIDs (per-instance sum)", zone.Entries, zone.GUIDs)})
 	}
-	return errors.Join(errs...)
+	if len(zones) > maxZones {
+		fields = append(fields, AdminNotificationField{Name: "More zones", Value: fmt.Sprintf("%d more zones. See the parse report for all details.", len(zones)-maxZones)})
+	}
+	return EnqueueAdminNotification(ctx, queue, bot, ArgsNotifyAdmin{
+		Title: "Unknown unit categories in parse job", URL: reportURL, Fields: fields,
+		// No rolling time bucket: retries of this parse job retain the same key.
+		UniqueKey: fmt.Sprintf("unknown-unit-parse-job:%d", jobID),
+	})
 }
 
-func boundedUnknownUnitField(value string) string {
-	// Bound bytes as well as characters so all Discord character-count variants
-	// remain below the field limit, without splitting a UTF-8 sequence.
-	if len(value) <= 1000 {
+func boundedUnknownUnitText(value string, limit int) string {
+	if len(value) <= limit {
 		return value
 	}
+	end := 0
 	for index := range value {
-		if index >= 997 {
-			return value[:index] + "…"
+		if index > limit-3 {
+			break
 		}
+		end = index
 	}
-	return value
+	return value[:end] + "…"
 }
 
-// UnknownUnitInstanceURL uses the same tenant and durable-slug routing as raid announcements.
-func (b *Bot) UnknownUnitInstanceURL(instanceID uuid.UUID, slug, tenantSlug pgtype.Text) string {
-	return b.instanceURL(instanceID, slug, tenantSlug)
+// UnknownUnitReportURL links to the authenticated log detail and parse report.
+func (b *Bot) UnknownUnitReportURL(logID uuid.UUID, tenantSlug pgtype.Text) string {
+	return fmt.Sprintf("%s/logs/%s", b.tenantBaseURL(tenantSlug), logID)
 }

@@ -528,6 +528,7 @@ function TimingSection({ report, logId }: { report: LogParseReport; logId: strin
                       <span className="flex items-center gap-2">
                         <Castle className="h-4 w-4 text-muted-foreground" />
                         {inst.name}
+                        {inst.zone && inst.zone !== inst.name && <span className="text-muted-foreground">{inst.zone}</span>}
                         <span className="text-muted-foreground">({inst.encounter_count} encounters)</span>
                       </span>
                       <span className="font-mono text-muted-foreground">
@@ -544,9 +545,12 @@ function TimingSection({ report, logId }: { report: LogParseReport; logId: strin
                           {Object.entries(inst.unknown_units)
                             .sort(([, a], [, b]) => b.count - a.count)
                             .map(([entryId, unit]) => (
-                            <div key={entryId} className="flex justify-between font-mono text-yellow-800 dark:text-yellow-300">
+                            <div key={entryId} className="font-mono text-yellow-800 dark:text-yellow-300">
+                              <div className="flex justify-between gap-2">
                               <span>{unit.name || `Entry ${entryId}`} <span className="text-yellow-600 dark:text-yellow-500">({entryId})</span></span>
-                              <span className="text-yellow-600 dark:text-yellow-500">{unit.count}× lookups</span>
+                              <span className="text-yellow-600 dark:text-yellow-500">{unit.count} unique GUIDs</span>
+                              </div>
+                              {unit.samples && unit.samples.length > 0 && <div className="break-all text-muted-foreground">Sample GUIDs: {unit.samples.join(", ")}</div>}
                             </div>
                           ))}
                         </div>

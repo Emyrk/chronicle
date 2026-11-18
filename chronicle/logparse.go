@@ -494,6 +494,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		instParseDuration := encountersState.InstanceProcessDuration(inst)
 		instReport := chroniclesdk.InstanceReport{
 			Name:             instanceName,
+			Zone:             inst.CurrentZone.Name,
 			ParseDuration:    chroniclesdk.DurationFrom(instParseDuration),
 			FinalizeDuration: chroniclesdk.DurationFrom(instFinalizeDuration),
 		}
@@ -511,9 +512,14 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 		if len(finalized.UnknownUnits) > 0 {
 			instReport.UnknownUnits = make(map[uint32]chroniclesdk.UnknownUnit, len(finalized.UnknownUnits))
 			for entryID, u := range finalized.UnknownUnits {
+				samples := make([]string, 0, len(u.Samples))
+				for _, sample := range u.Samples {
+					samples = append(samples, sample.String())
+				}
 				instReport.UnknownUnits[entryID] = chroniclesdk.UnknownUnit{
-					Name:  u.Name,
-					Count: u.Count,
+					Samples: samples,
+					Name:    u.Name,
+					Count:   u.Count,
 				}
 			}
 		}
@@ -1148,7 +1154,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	jobOut.Report = report
 	jobOut.Complete = ptr.Ref(time.Now())
 	jobResult = "success"
-	_ = river.RecordOutput(ctx, jobOut)
+	if err := river.RecordOutput(ctx, jobOut); err != nil {
+		w.parent.logger.WarnContext(ctx, "failed to record parse report; skipping unknown unit notification", slog.Any("error", err))
+	} else {
+		w.notifyUnknownUnits(ctx, job.Args.TenantID, job.Args.LogID, job.ID, report.Instances)
+	}
 
 	if w.parent.queue == nil || !publicLog {
 		return nil

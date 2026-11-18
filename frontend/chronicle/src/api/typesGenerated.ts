@@ -3428,13 +3428,14 @@ export interface InstanceRatingPlayerRenownFact {
  * InstanceReport contains timing details for a single parsed instance.
  */
 export interface InstanceReport {
+    readonly zone?: string;
     readonly name: string;
     readonly parse_duration_ms: Duration;
     readonly finalize_duration_ms: Duration;
     readonly db_insert_duration_ms: Duration;
     readonly encounter_count: number;
     /**
-     * UnknownUnits maps creature entry IDs not in the hostiles map to name and hit count.
+     * UnknownUnits groups finalized uncategorized GUIDs by entry ID (zero when unavailable).
      */
     readonly unknown_units?: Record<number, UnknownUnit>;
 }
@@ -7207,9 +7208,10 @@ export interface UIUsageRequest {
 
 // From chroniclesdk/log.go
 /**
- * UnknownUnit represents a creature entry not found in the hostiles map.
+ * UnknownUnit counts unique observed GUIDs within one finalized instance.
  */
 export interface UnknownUnit {
+    readonly samples?: readonly string[];
     readonly name: string;
     readonly count: number;
 }

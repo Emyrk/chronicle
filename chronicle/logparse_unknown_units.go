@@ -5,17 +5,45 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/chroniclebot"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
-	"github.com/Emyrk/chronicle/database"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-// notifyUnknownUnits is best effort and runs only after instance persistence.
-// Notification lookup/queue failures must never undo a successfully parsed log.
-func (w *WorkerLogParse) notifyUnknownUnits(ctx context.Context, tenantID uuid.UUID, instance database.LogInstance, unknown map[uint32]instances.UnknownUnit) {
-	if len(unknown) == 0 || w.bot == nil || w.bot.Disabled() || w.bot.AdminNotificationsChannelID() == "" {
+func unknownUnitZoneSummaries(reports []chroniclesdk.InstanceReport) []chroniclebot.UnknownUnitZoneSummary {
+	type summary struct {
+		entries map[uint32]struct{}
+		guids   int
+	}
+	zones := make(map[string]*summary)
+	for _, report := range reports {
+		zone := report.Zone
+		if zone == "" {
+			zone = report.Name
+		}
+		for entry, unit := range report.UnknownUnits {
+			if unit.Count <= 0 {
+				continue
+			}
+			if zones[zone] == nil {
+				zones[zone] = &summary{entries: make(map[uint32]struct{})}
+			}
+			zones[zone].entries[entry] = struct{}{}
+			zones[zone].guids += unit.Count
+		}
+	}
+	result := make([]chroniclebot.UnknownUnitZoneSummary, 0, len(zones))
+	for zone, summary := range zones {
+		result = append(result, chroniclebot.UnknownUnitZoneSummary{Zone: zone, Entries: len(summary.entries), GUIDs: summary.guids})
+	}
+	return result
+}
+
+// Best effort, once all relevant persistence and report recording succeeded.
+func (w *WorkerLogParse) notifyUnknownUnits(ctx context.Context, tenantID, logID uuid.UUID, jobID int64, reports []chroniclesdk.InstanceReport) {
+	zones := unknownUnitZoneSummaries(reports)
+	if len(zones) == 0 || w.bot == nil || w.bot.Disabled() || w.bot.AdminNotificationsChannelID() == "" {
 		return
 	}
 	if w.parent.queue == nil {
@@ -33,13 +61,7 @@ func (w *WorkerLogParse) notifyUnknownUnits(ctx context.Context, tenantID uuid.U
 		}
 		tenantSlug = tenant.Slug
 	}
-	units := make(map[uint32]chroniclebot.UnknownUnitCategory, len(unknown))
-	for entry, unit := range unknown {
-		units[entry] = chroniclebot.UnknownUnitCategory{Name: unit.Name, Count: unit.Count, Samples: unit.Samples}
-	}
-	if err := chroniclebot.EnqueueUnknownUnitNotifications(ctx, w.parent.queue, w.bot, chroniclebot.UnknownUnitNotificationContext{
-		TenantID: tenantID, Zone: instance.Name, InstanceURL: w.bot.UnknownUnitInstanceURL(instance.ID, instance.HashedSlug, tenantSlug),
-	}, units); err != nil {
-		slog.WarnContext(ctx, "failed to enqueue unknown unit category notifications", slog.Any("error", err))
+	if err := chroniclebot.EnqueueUnknownUnitNotification(ctx, w.parent.queue, w.bot, jobID, w.bot.UnknownUnitReportURL(logID, tenantSlug), zones); err != nil {
+		slog.WarnContext(ctx, "failed to enqueue unknown unit category notification", slog.Any("error", err))
 	}
 }

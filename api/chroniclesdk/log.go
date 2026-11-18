@@ -323,19 +323,21 @@ type MissedSpell struct {
 
 // InstanceReport contains timing details for a single parsed instance.
 type InstanceReport struct {
+	Zone             string   `json:"zone,omitempty"`
 	Name             string   `json:"name"`
 	ParseDuration    Duration `json:"parse_duration_ms"`
 	FinalizeDuration Duration `json:"finalize_duration_ms"`
 	DBInsertDuration Duration `json:"db_insert_duration_ms"`
 	EncounterCount   int      `json:"encounter_count"`
-	// UnknownUnits maps creature entry IDs not in the hostiles map to name and hit count.
+	// UnknownUnits groups finalized uncategorized GUIDs by entry ID (zero when unavailable).
 	UnknownUnits map[uint32]UnknownUnit `json:"unknown_units,omitempty"`
 }
 
-// UnknownUnit represents a creature entry not found in the hostiles map.
+// UnknownUnit counts unique observed GUIDs within one finalized instance.
 type UnknownUnit struct {
-	Name  string `json:"name"`
-	Count int    `json:"count"`
+	Samples []string `json:"samples,omitempty"`
+	Name    string   `json:"name"`
+	Count   int      `json:"count"`
 }
 
 // IdentityReport contains finalized unit categories and spell diagnostics.
