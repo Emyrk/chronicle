@@ -14,23 +14,34 @@ import (
 
 var foreverScoutingServerID = uuid.MustParse("2e1868f9-d491-4a64-8622-8ba4785fe5e5")
 
-// These clusters/rulesets are confirmed Forever API forms. Shard numbers are
-// positive integers, not realm identities. Do not infer unobserved regions or
-// rulesets, or fold AU into US merely because the catalog has no AU realm.
-var foreverNormalUSRealm = regexp.MustCompile(`^(CAMWOWUS[12]Realm[1-9][0-9]*PvE|CAMWOW US2 Realm [1-9][0-9]* PvE)$`)
-var foreverPvPUSRealm = regexp.MustCompile(`^CAMWOWUS[12]Realm[1-9][0-9]*PvP$`)
-var foreverRoleplayPvPUSRealm = regexp.MustCompile(`^CAMWOWUS2Realm[1-9][0-9]*RPPvP$`)
+// US1/US2 PvE/PvP and US2 RPPvP have observed fixtures. Other supported
+// region/cluster combinations and RP are explicitly approved inferences, not
+// verified API observations. Exact server/tenant catalog lookup remains required.
+// AU and beta have no inferred mapping. Accept only fully compact or consistently
+// spaced forms, with positive cluster and shard numbers.
+var foreverCompactRealm = regexp.MustCompile(`^CAMWOW(US|EU|KR|TW)[1-9][0-9]*Realm[1-9][0-9]*(PvE|PvP|RPPvP|RP)$`)
+var foreverSpacedRealm = regexp.MustCompile(`^CAMWOW (US|EU|KR|TW)[1-9][0-9]* Realm [1-9][0-9]* (PvE|PvP|RPPvP|RP)$`)
 
 func canonicalScoutingRealm(raw string) string {
-	switch {
-	case foreverNormalUSRealm.MatchString(raw):
-		return "Normal-US"
-	case foreverPvPUSRealm.MatchString(raw):
-		return "PvP-US"
-	case foreverRoleplayPvPUSRealm.MatchString(raw):
-		return "Roleplay PvP-US"
+	match := foreverCompactRealm.FindStringSubmatch(raw)
+	if match == nil {
+		match = foreverSpacedRealm.FindStringSubmatch(raw)
 	}
-	return raw // Only an exact server-scoped DB name can match anything else.
+	if match == nil {
+		return raw
+	} // Otherwise require an exact server-scoped DB name.
+	var ruleset string
+	switch match[2] {
+	case "PvE":
+		ruleset = "Normal"
+	case "PvP":
+		ruleset = "PvP"
+	case "RPPvP":
+		ruleset = "Roleplay PvP"
+	case "RP":
+		ruleset = "Roleplay"
+	}
+	return ruleset + "-" + match[1]
 }
 
 type scoutingRealmStore interface {

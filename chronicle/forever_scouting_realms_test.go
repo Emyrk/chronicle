@@ -3,6 +3,7 @@ package chronicle
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 	"time"
 
@@ -54,8 +55,9 @@ func TestScoutingRealmMappingIsAnchored(t *testing.T) {
 		require.Equal(t, tc.want, canonicalScoutingRealm(tc.raw), tc.raw)
 	}
 	for _, raw := range []string{
-		"CAMWOWAU1Realm1PvE", "CAMWOWEU1Realm1PvE", "CAMWOWKR1Realm1PvE", "CAMWOWTW1Realm1PvE", "CAMWOWUS3Realm1PvE",
-		"CAMWOWUS1Realm10RPPvP", "CAMWOWUS2Realm1RP", "CAMWOWUS2Realm1RPPvE",
+		"CAMWOWAU1Realm1PvE", "CAMWOWZZ1Realm1PvE", "CAMWOWUS1Realm1Beta",
+		"CAMWOWUS2Realm1RPPvE", "CAMWOWUS0Realm1PvE", "CAMWOWUS01Realm1PvE",
+		"CAMWOW US1Realm1PvE", "CAMWOWUS1 Realm 1 PvE", "CAMWOW US1 Realm1 PvE", "CAMWOW US1 Realm 1PvE", "CAMWOW  US1 Realm 1 PvE", "CAMWOW US1 Realm  1 PvE", "CAMWOW\tUS1 Realm 1 PvE", "CAMWOW US1 Realm 1 PvE\n",
 		"CAMWOWUS2Realm5PvE-extra", "xCAMWOWUS2Realm5PvE", "CAMWOW US2 Realm 1 PvE ",
 		"CAMWOWUS2Realm0PvE", "CAMWOWUS2Realm0PvP", "CAMWOWUS2Realm0RPPvP", "CAMWOWUS2Realm01PvE",
 		"CAMWOWUS2Realm-1PvP", "CAMWOWUS2Realm1PvP-extra", "CAMWOWUS2Realm10RPPvP-extra",
@@ -164,7 +166,7 @@ func TestScoutingMixedConfirmedRealmsRemainDistinct(t *testing.T) {
 		4: {{Realm: "CAMWOWAU1Realm1PvE"}},
 		5: {{Race: "Skyborne", Gender: ptr.Ref(2)}},
 		6: {{Realm: "CAMWOWUS2Realm5PvE"}, {Realm: "CAMWOWUS2Realm4PvP"}},
-		7: {{Realm: "CAMWOWUS3Realm1PvE"}},
+		7: {{Realm: "CAMWOWZZ1Realm1PvE"}},
 	}
 	for id, sources := range players {
 		for i := range sources {
@@ -205,4 +207,58 @@ func TestScoutingGroupDepartureDoesNotExcludeArmoryPayload(t *testing.T) {
 	require.True(t, rows[0].GuildKnown)
 	require.Equal(t, int64(140), rows[0].GuildObservedAt.Unix())
 	require.Equal(t, int64(140), rows[0].LevelObservedAt.Unix())
+}
+
+func TestScoutingInferredRegionRulesetCombinations(t *testing.T) {
+	t.Parallel()
+	for _, region := range []string{"US", "EU", "KR", "TW"} {
+		for _, ruleset := range []struct{ suffix, name string }{{"PvE", "Normal"}, {"PvP", "PvP"}, {"RPPvP", "Roleplay PvP"}, {"RP", "Roleplay"}} {
+			for _, numbers := range [][2]int{{1, 1}, {3, 10}, {123, 456}} {
+				for _, raw := range []string{
+					fmt.Sprintf("CAMWOW%s%dRealm%d%s", region, numbers[0], numbers[1], ruleset.suffix),
+					fmt.Sprintf("CAMWOW %s%d Realm %d %s", region, numbers[0], numbers[1], ruleset.suffix),
+				} {
+					require.Equal(t, ruleset.name+"-"+region, canonicalScoutingRealm(raw), raw)
+				}
+			}
+		}
+	}
+}
+
+func TestScoutingInferredRegionsRequireCatalogAndKeepDistinctIDs(t *testing.T) {
+	t.Parallel()
+	tenant := uuid.New()
+	normalUS, pvpEU, roleplayKR, roleplayPvPTW := uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	store := &scoutingRealmFake{server: database.WowServer{ID: foreverScoutingServerID, TenantID: uuid.NullUUID{UUID: tenant, Valid: true}}, realms: []database.WowServerRealm{
+		{ID: normalUS, ServerID: foreverScoutingServerID, Name: "Normal-US"},
+		{ID: pvpEU, ServerID: foreverScoutingServerID, Name: "PvP-EU"},
+		{ID: roleplayKR, ServerID: foreverScoutingServerID, Name: "Roleplay-KR"},
+		{ID: roleplayPvPTW, ServerID: foreverScoutingServerID, Name: "Roleplay PvP-TW"},
+	}}
+	players := map[guid.GUID][]scouting.Player{
+		1: {{Realm: "CAMWOWUS3Realm1PvE"}}, 2: {{Realm: "CAMWOW EU4 Realm 7 PvP"}},
+		3: {{Realm: "CAMWOWKR5Realm2RP"}}, 4: {{Realm: "CAMWOW TW6 Realm 10 RPPvP"}},
+		5: {{Realm: "CAMWOWTW1Realm1PvE"}}, // Plausible mapping but no Normal-TW catalog row.
+		6: {{Realm: "CAMWOWAU1Realm1PvE"}}, 7: {{Realm: "CAMWOWEU1Realm1Beta"}},
+	}
+	for id, sources := range players {
+		sources[0].Name = "Synthetic"
+		sources[0].LastSeen = 10
+		sources[0].Observations = []scouting.Observation{{At: 10, Name: "Synthetic", Guild: ptr.Ref("Synthetic Guild")}}
+		players[id] = sources
+	}
+	index := newTestScouting(t, players)
+	resolved, err := resolveScoutingRealms(t.Context(), store, index, tenant)
+	require.NoError(t, err)
+	require.Equal(t, 2, store.reads)
+	expected := map[guid.GUID]uuid.UUID{1: normalUS, 2: pvpEU, 3: roleplayKR, 4: roleplayPvPTW}
+	require.Equal(t, expected, resolved)
+	payload, err := scoutingPayload(index, resolved)
+	require.NoError(t, err)
+	var rows []scoutingPlayerInput
+	require.NoError(t, json.Unmarshal(payload, &rows))
+	require.Len(t, rows, 4)
+	for i, row := range rows {
+		require.Equal(t, expected[guid.GUID(i+1)], row.RealmID)
+	}
 }
