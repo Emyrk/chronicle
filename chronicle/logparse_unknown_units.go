@@ -23,7 +23,7 @@ func unknownUnitZoneSummaries(reports []chroniclesdk.InstanceReport) []chronicle
 			zone = report.Name
 		}
 		for entry, unit := range report.UnknownUnits {
-			if unit.Count <= 0 {
+			if entry == 0 || unit.Count <= 0 {
 				continue
 			}
 			if zones[zone] == nil {

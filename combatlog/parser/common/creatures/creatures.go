@@ -133,6 +133,9 @@ func (s *Creatures) Process(m messages.Message) error {
 
 		unit, ok := s.Units.Get(gid)
 		if !ok {
+			if entry == 0 {
+				continue
+			} // No meaningful template to report.
 			if s.UnknownUnits[s.CurrentZone.Name] == nil {
 				s.UnknownUnits[s.CurrentZone.Name] = map[uint32]int{}
 			}

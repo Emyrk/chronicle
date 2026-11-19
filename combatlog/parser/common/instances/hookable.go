@@ -1471,9 +1471,12 @@ func (h *Hookable) resolveUnknownUnits() map[uint32]UnknownUnit {
 		if h.units.Category(id, h.Identifier) != unitdb.CategoryUnknown {
 			continue
 		}
-		// Entry zero groups unresolved structural GUIDs without a meaningful
-		// template ID. Keep their samples rather than silently losing them.
-		entry, _ := id.GetEntry()
+		// Keep unresolved GUIDs in the catalogue, but do not report a fictitious
+		// template zero as an unknown unit to register.
+		entry, valid := id.GetEntry()
+		if !valid || entry == 0 {
+			continue
+		}
 		unit := result[entry]
 		if info, ok := h.units.Get(id); ok && info.Name != "" {
 			unit.Name = info.Name

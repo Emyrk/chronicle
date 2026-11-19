@@ -1338,19 +1338,30 @@ func TestCritterMessagesAdvanceProcessingWithoutInstanceActivity(t *testing.T) {
 
 func TestFinalizeUnknownGUIDWithoutMeaningfulEntry(t *testing.T) {
 	t.Parallel()
-	noEntry := guid.GUID(0xF160000000000001)
-	zeroEntry := guid.GUID(0xF130000000000001)
-	_, hasEntry := noEntry.GetEntry()
-	require.False(t, hasEntry)
-	h := &Hookable{units: unitdb.New(database.WoWFlavor{}), Identifier: identifier.NewIdentifier(map[uint32]identifier.Identity{})}
-	for _, id := range []guid.GUID{0, noEntry, zeroEntry, noEntry} {
-		h.ObserveUnits(&messages.UnitTarget{Unit: id})
+	ids := []guid.GUID{0xF160000000000001, 0xF130000000000001}
+	for _, sample := range []string{"0x30930149A4DF0002", "0x32DC014A20DF0002"} {
+		id, err := guid.FromString(sample)
+		require.NoError(t, err)
+		ids = append(ids, id)
 	}
-	result, err := h.Finalize(context.Background())
+	valid := creatureGUID(12345, 1)
+	ids = append(ids, valid)
+	h := &Hookable{units: unitdb.New(database.WoWFlavor{}), Identifier: identifier.NewIdentifier(nil)}
+	for _, id := range ids {
+		msg := &messages.UnitTarget{Unit: id}
+		h.ObserveUnits(msg)
+		h.ObserveUnits(msg)
+		require.Equal(t, id, msg.Unit)
+	}
+	result, err := h.Finalize(t.Context())
 	require.NoError(t, err)
-	require.ElementsMatch(t, []guid.GUID{noEntry, zeroEntry}, result.PersistedUnits)
-	require.Equal(t, 2, result.UnknownUnits[0].Count)
-	require.ElementsMatch(t, []guid.GUID{noEntry, zeroEntry}, result.UnknownUnits[0].Samples)
+	require.ElementsMatch(t, ids, result.PersistedUnits)
+	for _, id := range ids {
+		require.Equal(t, unitdb.CategoryUnknown, result.UnitCategories[id])
+	}
+	require.Len(t, result.UnknownUnits, 1)
+	require.NotContains(t, result.UnknownUnits, uint32(0))
+	require.Equal(t, []guid.GUID{valid}, result.UnknownUnits[12345].Samples)
 }
 
 func TestFinalizeMoltenCoreEnvironmentFlavor(t *testing.T) {

@@ -384,3 +384,16 @@ func NewVaelChained(id guid.GUID, all *characters.Characters) (characters.Charac
 	base.SetRecentlySlainDuration(time.Second * 45)
 	return base, true
 }
+
+// NewBWLPassiveController keeps Ursol's pre-fight Nefarius and domination orb
+// from contributing activity. The encounter bosses remain separate identities.
+func NewBWLPassiveController(id guid.GUID, _ *characters.Characters) (characters.Character, bool) {
+	if !id.IsCreature() {
+		return nil, false
+	}
+	entry, ok := id.GetEntry()
+	if !ok || (entry != 10162 && entry != 14453) {
+		return nil, false
+	}
+	return characters.NewNeverActive(id), true
+}

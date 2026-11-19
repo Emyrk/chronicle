@@ -329,7 +329,7 @@ type InstanceReport struct {
 	FinalizeDuration Duration `json:"finalize_duration_ms"`
 	DBInsertDuration Duration `json:"db_insert_duration_ms"`
 	EncounterCount   int      `json:"encounter_count"`
-	// UnknownUnits groups finalized uncategorized GUIDs by entry ID (zero when unavailable).
+	// UnknownUnits groups finalized uncategorized GUIDs with valid, nonzero entry IDs.
 	UnknownUnits map[uint32]UnknownUnit `json:"unknown_units,omitempty"`
 }
 

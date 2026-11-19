@@ -35,6 +35,11 @@ func buildIdentityInstance(name, zone string, finalized *instances.FinalizedInst
 		if !id.IsPet() {
 			entry, _ = id.GetEntry()
 		}
+		// Retain unresolved GUIDs in the persisted catalogue, not as unknown
+		// template-zero rows in the identity report or copied suggestions.
+		if category == unitdb.CategoryUnknown && entry == 0 {
+			continue
+		}
 		k := key{category, entry}
 		u := grouped[k]
 		if u == nil {
