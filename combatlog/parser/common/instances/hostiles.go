@@ -589,17 +589,10 @@ func OnyxiaHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	return idf
 }
 
-func RagefireChasmIdentifier(fl database.WoWFlavor) *identifier.Identifier {
-	hostile := RagefireChasmHostiles()
-	if fl.Has(database.FlavorWoWForever) {
-		LoadAdds(hostile, map[uint32]string{8996: "Voidwalker Minion"})
-	}
-	return identifier.NewIdentifier(hostile)
-}
-
 func RagefireChasmHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		8996:  "Voidwalker Minion",
 		11323: "Searing Blade Enforcer",
 		11322: "Searing Blade Cultist",
 		11320: "Earthborer",
