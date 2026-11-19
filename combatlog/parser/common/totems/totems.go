@@ -167,6 +167,11 @@ func init() {
 		variant{id: 7399, duration: 15 * time.Second},
 	)
 
+	// https://classicdb.ch/?spell=8170 summons entry 5924 for two minutes.
+	register("Disease Cleansing Totem", modifierTotemicMastery,
+		variant{id: 5924, duration: 120 * time.Second},
+	)
+
 	register("Poison Cleaning Totem",
 		modifierTotemicMastery,
 		variant{id: 5923, duration: 120 * time.Second},

@@ -74,3 +74,19 @@ func TestBrainWashTotem(t *testing.T) {
 		}
 	}
 }
+
+func TestDiseaseCleansingTotem(t *testing.T) {
+	t.Parallel()
+	want := Totem{ID: 5924, Name: "Disease Cleansing Totem", NormalDuration: 120 * time.Second, Modifier: modifierTotemicMastery}
+	got, ok := EntryIsTotem(5924)
+	require.True(t, ok)
+	require.Equal(t, want, got)
+	require.Equal(t, 144*time.Second, got.MaxDuration())
+	for _, high := range []uint64{0xF130000000000000, 0xF110000000000000, 0xF140000000000000, 0xF150000000000000} {
+		got, ok := IsTotem(totemEntryGUID(high, 5924))
+		require.Equal(t, high == 0xF130000000000000, ok)
+		if ok {
+			require.Equal(t, want, got)
+		}
+	}
+}
