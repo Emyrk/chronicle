@@ -64,10 +64,13 @@ describe("ensureRequiredRaidsTab", () => {
     });
   });
 
-  it("does not append Raids to a default page without a calendar panel", () => {
-    const tabs = [tab("overview", "overview", 0)];
+  it("appends Raids to the default page after its Overview", () => {
+    const tabs = ensureRequiredRaidsTab(
+      [tab("overview", "overview", 0)],
+      "00000000-0000-0000-0000-000000000000",
+    );
 
-    expect(ensureRequiredRaidsTab(tabs, "00000000-0000-0000-0000-000000000000")).toEqual(tabs);
+    expect(tabs.map((item) => item.slug)).toEqual(["overview", "calendar"]);
   });
 
   it("renames an existing Calendar tab to Raids without duplicating it", () => {
