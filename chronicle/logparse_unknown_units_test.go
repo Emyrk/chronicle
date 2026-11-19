@@ -18,7 +18,7 @@ type unknownReportQueue struct {
 }
 
 func (q *unknownReportQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
-	q.jobs = append(q.jobs, args.(chroniclebot.ArgsNotifyAdmin))
+	q.jobs = append(q.jobs, args.(chroniclebot.ArgsNotifyUnknownUnits).Notification)
 	return nil, nil
 }
 
