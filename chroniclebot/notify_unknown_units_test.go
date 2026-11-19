@@ -18,13 +18,14 @@ import (
 )
 
 type unknownUnitQueue struct {
-	jobs []ArgsNotifyAdmin
-	err  error
+	jobs      []ArgsNotifyAdmin
+	err       error
+	duplicate bool
 }
 
 func (q *unknownUnitQueue) Insert(_ context.Context, args river.JobArgs, _ *river.InsertOpts) (*rivertype.JobInsertResult, error) {
-	q.jobs = append(q.jobs, args.(ArgsNotifyAdmin))
-	return nil, q.err
+	q.jobs = append(q.jobs, args.(ArgsNotifyUnknownUnits).Notification)
+	return &rivertype.JobInsertResult{UniqueSkippedAsDuplicate: q.duplicate}, q.err
 }
 
 func TestUnknownUnitNotificationOnePerJob(t *testing.T) {
