@@ -103,3 +103,23 @@ func TestStoneskinTotemRankOne(t *testing.T) {
 		}
 	}
 }
+
+func TestZulFarrakWards(t *testing.T) {
+	t.Parallel()
+	for _, want := range []Totem{
+		{ID: 7785, Name: "Ward of Zum'rah", NormalDuration: 20 * time.Second},
+		{ID: 8179, Name: "Greater Healing Ward", NormalDuration: 30 * time.Second},
+	} {
+		got, ok := EntryIsTotem(want.ID)
+		require.True(t, ok)
+		require.Equal(t, want, got)
+		require.Equal(t, want.NormalDuration, got.MaxDuration())
+		for _, high := range []uint64{0xF130000000000000, 0xF140000000000000, 0xF150000000000000, 0xF110000000000000} {
+			got, ok := IsTotem(totemEntryGUID(high, want.ID))
+			require.Equal(t, high == 0xF130000000000000, ok)
+			if ok {
+				require.Equal(t, want, got)
+			}
+		}
+	}
+}

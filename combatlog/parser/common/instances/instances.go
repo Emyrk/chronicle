@@ -444,7 +444,7 @@ var (
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"zul'farrak", "祖尔法拉克"},
 		MapIDs:    []uint32{209},
-		Hostiles:  FromMap(ZulFarrakHostiles()),
+		Hostiles:  ZulFarrakIdentifier,
 	}
 
 	BlackfathomDeepsFactory = &CommonFactory{
