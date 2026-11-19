@@ -16,8 +16,11 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/pageload"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -48,9 +51,15 @@ var noIndexPrefixes = []string{
 	"/modules/new", "/modules/id",
 }
 
+// SEOSummaryService renders crawlable summaries for SPA pages.
+type SEOSummaryService interface {
+	Summary(r *http.Request) *frontend.PageSummary
+}
+
 func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
+	canonical := api.canonical()
 	resolved := &frontend.HTMLBranding{
-		CanonicalURL: canonicalRequestURL(api, r),
+		CanonicalURL: canonical.URL(r),
 		GA4ID:        api.Opts.GA4ID,
 	}
 	t := servicetenant.TenantFromContext(r.Context())
@@ -77,7 +86,7 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 		resolved.Description = firstNonEmpty(branding.Description, branding.Tagline, defaultSEODescription)
 		resolved.Favicon = branding.Favicon
 		resolved.ThemeCSS = buildThemeCSS(branding)
-		resolved.ImageURL = absoluteAssetURL(api, r, firstNonEmpty(branding.BackgroundBanner, branding.LogoWide, branding.SquareLogo))
+		resolved.ImageURL = absoluteAssetURL(canonical, r, firstNonEmpty(branding.BackgroundBanner, branding.LogoWide, branding.SquareLogo))
 	} else {
 		resolved.SiteName = "Chronicle"
 		resolved.Description = defaultSEODescription
@@ -85,6 +94,8 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 
 	if !discoverable || !isIndexablePath(r.URL.Path) || pathHasPrefix(r.URL.Path, noIndexPrefixes) || isPrivateGuildPath(r.URL.Path) || api.isUnlistedInstancePath(r) {
 		resolved.Robots = "noindex, nofollow"
+	} else if api.Opts.SEO != nil {
+		resolved.Summary = api.Opts.SEO.Summary(r)
 	}
 	if r.URL.Path == "/" {
 		config, err := api.Opts.Zed.GetSiteConfig(r.Context())
@@ -98,7 +109,9 @@ func (api *API) brandingResolver(r *http.Request) *frontend.HTMLBranding {
 			}
 		}
 	}
-	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, resolved.CanonicalURL, resolved.ImageURL)
+	// The WebSite entity describes the site serving the request, even when the
+	// page itself is canonical on another host.
+	resolved.JSONLD = websiteJSONLD(resolved.SiteName, resolved.Description, canonical.Origin(r), resolved.ImageURL)
 	return resolved
 }
 
@@ -112,49 +125,23 @@ func (api *API) isUnlistedInstancePath(r *http.Request) bool {
 		return false
 	}
 
-	if id, err := uuid.Parse(parts[1]); err == nil {
-		instance, err := api.Zed.InstanceWithUnlisted(r.Context(), id)
-		return err == nil && instance.Unlisted
-	}
-	instance, err := api.Zed.InstanceBySlugWithUnlisted(r.Context(), pgtype.Text{String: parts[1], Valid: true})
+	instance, err := pageload.InstanceWithUnlisted(r.Context(), api.Zed, parts[1])
 	return err == nil && instance.Unlisted
 }
 
-// ogHost returns a validated request host for canonical URL construction.
-func ogHost(r *http.Request) string {
-	host := strings.ToLower(r.Host)
-	for _, ch := range host {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '-' && ch != ':' {
-			return "chronicleclassic.com"
-		}
-	}
-	if host == "" {
-		return "chronicleclassic.com"
-	}
-	return host
+// canonical returns the canonical URL policy for the API's options.
+func (api *API) canonical() *serviceseo.Canonical {
+	return serviceseo.NewCanonical(serviceseo.CanonicalOptions{
+		SharedContentSlug: api.Opts.SharedContentSlug,
+		Logger:            api.Opts.Logger,
+		Tenant:            api.Opts.Tenant,
+		Dataset:           api.Opts.Dataset,
+		AccessURL:         api.Opts.AccessURL,
+		BlogFS:            api.sitemapBlogFS,
+	})
 }
 
-func canonicalRequestURL(api *API, r *http.Request) string {
-	path := r.URL.EscapedPath()
-	if path == "" {
-		path = "/"
-	}
-	return canonicalOrigin(api, r) + path
-}
-
-// canonicalOrigin returns the canonical scheme and host for SEO URLs.
-func canonicalOrigin(api *API, r *http.Request) string {
-	return canonicalScheme(api) + "://" + ogHost(r)
-}
-
-func canonicalScheme(api *API) string {
-	if api.Opts.AccessURL != nil && api.Opts.AccessURL.Scheme != "" {
-		return api.Opts.AccessURL.Scheme
-	}
-	return "https"
-}
-
-func absoluteAssetURL(api *API, r *http.Request, raw string) string {
+func absoluteAssetURL(canonical *serviceseo.Canonical, r *http.Request, raw string) string {
 	if raw == "" {
 		return ""
 	}
@@ -171,11 +158,7 @@ func absoluteAssetURL(api *API, r *http.Request, raw string) string {
 	if !strings.HasPrefix(u.Path, "/") {
 		return ""
 	}
-	scheme := "https"
-	if api.Opts.AccessURL != nil && api.Opts.AccessURL.Scheme != "" {
-		scheme = api.Opts.AccessURL.Scheme
-	}
-	return scheme + "://" + ogHost(r) + u.String()
+	return canonical.Origin(r) + u.String()
 }
 
 func websiteJSONLD(name, description, canonical, image string) string {
@@ -226,30 +209,46 @@ func pathHasPrefix(path string, prefixes []string) bool {
 	return false
 }
 
-var sitemapPaths = []string{
-	"/",
-	"/recent",
-	"/guilds",
-	"/armory",
-	"/leaderboards",
-	"/leaderboards/statistics",
-	"/leaderboards/speedruns",
-	"/talents",
-	"/talents/warrior",
-	"/talents/paladin",
-	"/talents/hunter",
-	"/talents/rogue",
-	"/talents/priest",
-	"/talents/shaman",
-	"/talents/mage",
-	"/talents/warlock",
-	"/talents/druid",
-	"/wowdb",
-	"/technical",
-	"/census",
-	"/speedrunning",
-	"/tools",
-	"/blog",
+// sitemapPath is a static sitemap entry. lastMod says where its <lastmod>
+// comes from; truly static pages carry none rather than a made-up date.
+type sitemapPath struct {
+	path    string
+	lastMod sitemapLastModSource
+}
+
+type sitemapLastModSource int
+
+const (
+	// sitemapLastModInstances is the newest instance the sitemap lists.
+	sitemapLastModInstances sitemapLastModSource = iota + 1
+	// sitemapLastModBlog is the newest blog post the sitemap lists.
+	sitemapLastModBlog
+)
+
+var sitemapPaths = []sitemapPath{
+	{path: "/"},
+	{path: "/recent", lastMod: sitemapLastModInstances},
+	{path: "/guilds", lastMod: sitemapLastModInstances},
+	{path: "/armory", lastMod: sitemapLastModInstances},
+	{path: "/leaderboards", lastMod: sitemapLastModInstances},
+	{path: "/leaderboards/statistics", lastMod: sitemapLastModInstances},
+	{path: "/leaderboards/speedruns", lastMod: sitemapLastModInstances},
+	{path: "/talents"},
+	{path: "/talents/warrior"},
+	{path: "/talents/paladin"},
+	{path: "/talents/hunter"},
+	{path: "/talents/rogue"},
+	{path: "/talents/priest"},
+	{path: "/talents/shaman"},
+	{path: "/talents/mage"},
+	{path: "/talents/warlock"},
+	{path: "/talents/druid"},
+	{path: "/wowdb"},
+	{path: "/technical"},
+	{path: "/census"},
+	{path: "/speedrunning"},
+	{path: "/tools"},
+	{path: "/blog", lastMod: sitemapLastModBlog},
 }
 
 func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
@@ -259,7 +258,7 @@ func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
 		_, _ = fmt.Fprint(w, "User-agent: *\nDisallow: /\n")
 		return
 	}
-	_, _ = fmt.Fprintf(w, "User-agent: *\nDisallow: /api/\nDisallow: /admin/\nDisallow: /account/\nDisallow: /settings/\nDisallow: /debug/\nDisallow: /upload\nDisallow: /servers/\nSitemap: %s/sitemap.xml\n", strings.TrimSuffix(canonicalRequestURL(api, r), "/robots.txt"))
+	_, _ = fmt.Fprintf(w, "User-agent: *\nDisallow: /api/\nDisallow: /admin/\nDisallow: /account/\nDisallow: /settings/\nDisallow: /debug/\nDisallow: /upload\nDisallow: /servers/\nSitemap: %s/sitemap.xml\n", strings.TrimSuffix(api.canonical().URL(r), "/robots.txt"))
 }
 
 // Caps on the sitemap's database-backed URLs, newest first. With the static
@@ -267,8 +266,23 @@ func (api *API) robotsTXT(w http.ResponseWriter, r *http.Request) {
 // sitemap file may hold, so /sitemap.xml needs no sitemap index.
 const (
 	sitemapGuildLimit     = 1000
-	sitemapCharacterLimit = 5000
+	sitemapCharacterLimit = 2000
 	sitemapInstanceLimit  = 1000
+)
+
+// Bars a database-backed page must clear to be listed, so the sitemap lists
+// pages worth finding rather than thousands of near-empty ones. "Listed
+// instances" are listed, valid, finalized logs.
+const (
+	// Guilds without an edited page need this many listed runs.
+	sitemapGuildMinInstances = 3
+	// Characters need a known class, this many listed instances and a
+	// sighting within sitemapCharacterRecency.
+	sitemapCharacterMinInstances = 3
+	sitemapCharacterRecency      = 90 * 24 * time.Hour
+	// Instances need a boss kill, this many minutes and this many players.
+	sitemapInstanceMinMinutes = 10
+	sitemapInstanceMinPlayers = 3
 )
 
 type sitemapURLSet struct {
@@ -287,6 +301,9 @@ type sitemapURL struct {
 // when to re-render.
 type sitemapDynamic struct {
 	urls []sitemapURL
+	// newestInstance is the newest lastmod among the listed instances, the
+	// lastmod of the hubs that list them. Empty when none are listed.
+	newestInstance string
 }
 
 // sitemapRenderKey identifies one rendered sitemap. host is always one of the
@@ -376,9 +393,13 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host := api.sitemapHost(r)
+	if host == "" {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, map[string]string{"error": "no valid sitemap host"})
+		return
+	}
 	key := sitemapRenderKey{tenant: servicetenant.TenantIDFromContext(ctx), host: host}
 	rendered, err := api.sitemapRendered.get(key, dynamic, func() ([]byte, error) {
-		return api.renderSitemap(r, canonicalScheme(api)+"://"+host, dynamic)
+		return api.renderSitemap(r, api.canonical().Scheme()+"://"+host, dynamic)
 	})
 	if err != nil {
 		http.Error(w, "failed to render sitemap", http.StatusInternalServerError)
@@ -398,11 +419,35 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 
 func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDynamic) ([]byte, error) {
 	set := sitemapURLSet{XMLNS: "http://www.sitemaps.org/schemas/sitemap/0.9"}
-	for _, path := range sitemapPaths {
-		set.URLs = append(set.URLs, sitemapURL{Location: base + path})
+	// A sitemap lists only URLs canonical on its own host: shared pages
+	// canonical on the shared-content tenant's host are left to its sitemap.
+	// The shared pages are resolved once for the whole render.
+	canonical := api.canonical()
+	host := strings.TrimPrefix(base, canonical.Scheme()+"://")
+	shared := canonical.SharedPages(r)
+	canonicalHere := func(path string) bool { return shared.IsCanonicalOn(host, path) }
+	// The blog hub's lastmod still covers every post this host serves: its
+	// /blog index lists them all.
+	blog := api.sitemapBlogURLs(r)
+	for _, p := range sitemapPaths {
+		if !canonicalHere(p.path) {
+			continue
+		}
+		u := sitemapURL{Location: base + p.path}
+		switch p.lastMod {
+		case sitemapLastModInstances:
+			if dynamic != nil {
+				u.LastMod = dynamic.newestInstance
+			}
+		case sitemapLastModBlog:
+			u.LastMod = newestLastMod(blog)
+		}
+		set.URLs = append(set.URLs, u)
 	}
-	for _, u := range api.sitemapBlogURLs(r) {
-		set.URLs = append(set.URLs, sitemapURL{Location: base + u.Location, LastMod: u.LastMod})
+	for _, u := range blog {
+		if canonicalHere(u.Location) {
+			set.URLs = append(set.URLs, sitemapURL{Location: base + u.Location, LastMod: u.LastMod})
+		}
 	}
 	if dynamic != nil {
 		for _, u := range dynamic.urls {
@@ -421,16 +466,19 @@ func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDyna
 // host. Arbitrary Host headers therefore never reach the render cache key.
 func (api *API) sitemapHost(r *http.Request) string {
 	hosts := api.canonicalHosts(r)
-	requested := ogHost(r)
+	requested := api.canonical().RequestHost(r)
 	if slices.Contains(hosts, requested) {
 		return requested
 	}
-	return hosts[0]
+	if len(hosts) > 0 {
+		return hosts[0]
+	}
+	return ""
 }
 
 // canonicalHosts lists the hosts the request's site is served on: the
 // tenant's subdomain for a tenant, the access URL and primary domain for the
-// site itself. It is never empty.
+// site itself. With no tenant host, it falls back to the configured access URL.
 func (api *API) canonicalHosts(r *http.Request) []string {
 	primary := ""
 	if api.Opts.Tenant != nil {
@@ -438,8 +486,8 @@ func (api *API) canonicalHosts(r *http.Request) []string {
 	}
 	var hosts []string
 	if t := servicetenant.TenantFromContext(r.Context()); t != nil {
-		if t.Slug.Valid && t.Slug.String != "" && primary != "" {
-			hosts = append(hosts, strings.ToLower(t.Slug.String)+"."+primary)
+		if host := api.Opts.Tenant.TenantHost(t.Slug.String); host != "" {
+			hosts = append(hosts, host)
 		}
 	} else {
 		if api.Opts.AccessURL != nil && api.Opts.AccessURL.Host != "" {
@@ -449,8 +497,8 @@ func (api *API) canonicalHosts(r *http.Request) []string {
 			hosts = append(hosts, primary)
 		}
 	}
-	if len(hosts) == 0 {
-		hosts = append(hosts, "chronicleclassic.com")
+	if len(hosts) == 0 && api.Opts.AccessURL != nil && api.Opts.AccessURL.Host != "" {
+		hosts = append(hosts, strings.ToLower(api.Opts.AccessURL.Host))
 	}
 	return hosts
 }
@@ -478,17 +526,7 @@ func acceptsGzip(r *http.Request) bool {
 // sitemapBlogURLs lists the blog posts the request's site serves, by the same
 // flavor rule as the blog route. Locations are paths.
 func (api *API) sitemapBlogURLs(r *http.Request) []sitemapURL {
-	siteFS := api.sitemapBlogFS
-	if siteFS == nil {
-		siteFS = frontend.FS()
-	}
-	posts, err := frontend.BlogPosts(siteFS)
-	if err != nil {
-		if api.Opts.Logger != nil {
-			api.Opts.Logger.WarnContext(r.Context(), "read blog manifest for sitemap", "error", err)
-		}
-		return nil
-	}
+	posts := api.blogPosts(r)
 	flavor := api.blogFlavorResolver(r)
 	urls := make([]sitemapURL, 0, len(posts))
 	for _, post := range posts {
@@ -497,6 +535,22 @@ func (api *API) sitemapBlogURLs(r *http.Request) []sitemapURL {
 		}
 	}
 	return urls
+}
+
+// blogPosts lists the posts in the blog manifest, or none when it cannot be read.
+func (api *API) blogPosts(r *http.Request) []frontend.BlogPost {
+	siteFS := api.sitemapBlogFS
+	if siteFS == nil {
+		siteFS = frontend.FS()
+	}
+	posts, err := frontend.BlogPosts(siteFS)
+	if err != nil {
+		if api.Opts.Logger != nil {
+			api.Opts.Logger.WarnContext(r.Context(), "read blog manifest", "error", err)
+		}
+		return nil
+	}
+	return posts
 }
 
 // loadSitemapURLs reads the tenant's guild, character and raid pages. ctx
@@ -508,22 +562,36 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 	}
 	db := api.Opts.Zed
 
-	guilds, err := db.ListSitemapGuilds(ctx, database.ListSitemapGuildsParams{TenantID: tenantID, ResultLimit: sitemapGuildLimit})
+	guilds, err := db.ListSitemapGuilds(ctx, database.ListSitemapGuildsParams{
+		TenantID:     tenantID,
+		MinInstances: sitemapGuildMinInstances,
+		ResultLimit:  sitemapGuildLimit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap guilds: %w", err)
 	}
-	characters, err := db.ListSitemapCharacters(ctx, database.ListSitemapCharactersParams{TenantID: tenantID, ResultLimit: sitemapCharacterLimit})
+	characters, err := db.ListSitemapCharacters(ctx, database.ListSitemapCharactersParams{
+		TenantID:     tenantID,
+		SeenSince:    database.Timestamptz(time.Now().Add(-sitemapCharacterRecency)),
+		MinInstances: sitemapCharacterMinInstances,
+		ResultLimit:  sitemapCharacterLimit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap characters: %w", err)
 	}
-	instances, err := db.ListSitemapInstances(ctx, database.ListSitemapInstancesParams{TenantID: tenantID, ResultLimit: sitemapInstanceLimit})
+	instances, err := db.ListSitemapInstances(ctx, database.ListSitemapInstancesParams{
+		TenantID:    tenantID,
+		MinMinutes:  sitemapInstanceMinMinutes,
+		MinPlayers:  sitemapInstanceMinPlayers,
+		ResultLimit: sitemapInstanceLimit,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list sitemap instances: %w", err)
 	}
 
 	urls := make([]sitemapURL, 0, len(guilds)+len(characters)+len(instances))
 	for _, g := range guilds {
-		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.PageUpdatedAt)})
+		urls = append(urls, sitemapURL{Location: "/g/" + g.ID.String(), LastMod: sitemapLastMod(g.LastModified)})
 	}
 	for _, c := range characters {
 		urls = append(urls, sitemapURL{
@@ -531,14 +599,27 @@ func (api *API) loadSitemapURLs(ctx context.Context) (*sitemapDynamic, error) {
 			LastMod:  sitemapLastMod(c.UpdatedAt),
 		})
 	}
+	newestInstance := ""
 	for _, inst := range instances {
 		identifier := inst.ID.String()
 		if inst.HashedSlug.Valid && inst.HashedSlug.String != "" {
 			identifier = inst.HashedSlug.String
 		}
-		urls = append(urls, sitemapURL{Location: "/instances/" + url.PathEscape(identifier), LastMod: sitemapLastMod(inst.UpdatedAt)})
+		lastMod := sitemapLastMod(inst.UpdatedAt)
+		newestInstance = max(newestInstance, lastMod)
+		urls = append(urls, sitemapURL{Location: "/instances/" + url.PathEscape(identifier), LastMod: lastMod})
 	}
-	return &sitemapDynamic{urls: urls}, nil
+	return &sitemapDynamic{urls: urls, newestInstance: newestInstance}, nil
+}
+
+// newestLastMod returns the latest lastmod among urls. Lastmods are RFC 3339
+// times or dates in UTC, so they order as strings.
+func newestLastMod(urls []sitemapURL) string {
+	newest := ""
+	for _, u := range urls {
+		newest = max(newest, u.LastMod)
+	}
+	return newest
 }
 
 func sitemapLastMod(t pgtype.Timestamptz) string {

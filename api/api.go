@@ -37,6 +37,7 @@ import (
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/billing"
 	"github.com/Emyrk/chronicle/internal/itempricing"
+	"github.com/Emyrk/chronicle/internal/pageload"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceblog"
 	"github.com/Emyrk/chronicle/internal/services/servicecache"
@@ -88,6 +89,8 @@ func browserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Handler {
 }
 
 type Options struct {
+	// SharedContentSlug selects the canonical tenant for shared content; empty keeps the request host.
+	SharedContentSlug string
 	// Blog overrides the constructed interaction service, primarily for tests.
 	Blog                  *serviceblog.Service
 	Logger                *slog.Logger
@@ -132,6 +135,9 @@ type Options struct {
 	// OG resolves route-specific Open Graph metadata. When nil, OGRoutes uses a
 	// static-only service so pages retain their pre-generated metadata.
 	OG OGService
+	// SEO renders crawlable summaries for indexable instance and character
+	// pages. When nil, those pages are served without a summary.
+	SEO SEOSummaryService
 	// LandingFeaturedID is the deployment default for the /start hero's
 	// featured instance, used when the site setting is empty.
 	LandingFeaturedID uuid.UUID
@@ -936,7 +942,12 @@ func (api *API) Routes() chi.Router {
 		}
 	})
 
-	r.NotFound(frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver).ServeHTTP)
+	// One page lookup cache per HTML request, shared by the indexing check,
+	// the page summary and the Open Graph metadata.
+	pages := frontend.Handler(frontend.FS(), api.OGRoutes(), api.brandingResolver, api.blogFlavorResolver)
+	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		pages.ServeHTTP(w, r.WithContext(pageload.WithCache(r.Context())))
+	})
 
 	return r
 }

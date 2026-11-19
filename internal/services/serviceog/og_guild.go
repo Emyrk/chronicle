@@ -329,11 +329,11 @@ func (s *Service) guildOG(r *http.Request, rawID string) *frontend.OGData {
 		return nil
 	}
 
-	host := ogHost(r)
+	host := s.ogHost(r)
 	og := &frontend.OGData{
 		Title:       guild.Name,
 		Description: fmt.Sprintf("%s guild: raid progression and best clears on Chronicle.", guild.Name),
-		URL:         fmt.Sprintf("https://%s/g/%s", host, guild.ID),
+		URL:         fmt.Sprintf("https://%s/g/%s", s.realmOwnerHost(ctx, guild.RealmID, host), guild.ID),
 	}
 	if s.imageBaseURL == nil || s.signingKey == "" {
 		return og

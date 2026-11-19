@@ -8,16 +8,16 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/Gophercraft/core/vsn"
+	"github.com/google/uuid"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/chronicle"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
-	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
 	"github.com/Emyrk/chronicle/internal/services/serviceratings"
+	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/tenantcache"
 )
@@ -38,14 +38,16 @@ func parseArmoryPlayerGUID(player string) guid.GUID {
 // card URLs. OGServiceURL and OGSigningKey are both required to enable generated
 // cards; without them, Routes preserves Chronicle's existing static metadata.
 type Options struct {
-	Logger       *slog.Logger
-	Zed          *authz.Authz
-	Chronicle    *chronicle.Chronicle
-	Tenant       *servicetenant.Service
-	Dataset      *servicedataset.Service
-	AccessURL    *url.URL
-	OGServiceURL *url.URL
-	OGSigningKey string
+	// SharedContentSlug selects the canonical tenant for shared content; empty keeps the request host.
+	SharedContentSlug string
+	Logger            *slog.Logger
+	Zed               *authz.Authz
+	Chronicle         *chronicle.Chronicle
+	Tenant            *servicetenant.Service
+	Dataset           *servicedataset.Service
+	AccessURL         *url.URL
+	OGServiceURL      *url.URL
+	OGSigningKey      string
 	// PlayerCareer is optional; without it character cards show history only.
 	PlayerCareer PlayerCareerReader
 	// CareerLeaders is optional; without it /leaderboards/career keeps the brand card.
@@ -69,6 +71,7 @@ type Service struct {
 	ogSiteStats     tenantcache.Cache[database.SiteStatsRow]
 	ogCensus        tenantcache.Cache[[]database.CensusPlayerCountsRow]
 	ogHighlights    tenantcache.Cache[[]chroniclesdk.HubLandingPreview]
+	canonical       *serviceseo.Canonical
 }
 
 func New(opts Options) *Service {
@@ -83,45 +86,40 @@ func New(opts Options) *Service {
 		signingKey:    opts.OGSigningKey,
 		playerCareer:  opts.PlayerCareer,
 		careerLeaders: opts.CareerLeaders,
+		canonical: serviceseo.NewCanonical(serviceseo.CanonicalOptions{
+			SharedContentSlug: opts.SharedContentSlug,
+			Logger:            opts.Logger,
+			Tenant:            opts.Tenant,
+			Dataset:           opts.Dataset,
+			AccessURL:         opts.AccessURL,
+		}),
 	}
 }
 
 func (s *Service) resolvedSiteFlavor(ctx context.Context) database.WoWFlavor {
+	var dataset *servicedataset.Service
 	if s != nil {
-		tenant := servicetenant.TenantFromContext(ctx)
-		if tenant != nil && tenant.DefaultDatasetID.Valid && s.dataset != nil {
-			dataset, err := s.dataset.GetDataset(ctx, tenant.DefaultDatasetID.UUID)
-			if err == nil {
-				flavor := database.FlavorFromStrings(dataset.DefaultFlavor).
-					Merge(database.FlavorFromStrings(tenant.AdditionalFlavor))
-				if len(flavor) > 0 {
-					return flavor
-				}
-			}
+		dataset = s.dataset
+	}
+	return dataset.SiteFlavor(ctx)
+}
+
+// realmOwnerHost returns the host of the tenant that owns realmID, so
+// tenant-owned pages (guilds, characters) are canonical on their owner's host
+// like instances (see serviceseo.Canonical.OwnerHost). It returns fallback
+// when the realm belongs to the root site or the owner cannot be resolved.
+func (s *Service) realmOwnerHost(ctx context.Context, realmID uuid.UUID, fallback string) string {
+	if s.store == nil {
+		return fallback
+	}
+	slug, err := s.store.GetRealmTenantSlug(ctx, realmID)
+	if err != nil {
+		if s.logger != nil {
+			s.logger.DebugContext(ctx, "resolve realm owner for canonical host, keeping the request host", "realm_id", realmID, "host", fallback, "error", err)
 		}
+		return fallback
 	}
-
-	base := database.FlavorVanilla
-	if services.ServerBuild == vsn.V3_3_5a {
-		base = database.FlavorWrath
-	}
-	return database.ServerFlavor(services.ServerName, base)
-}
-
-func canonicalRequestURL(s *Service, r *http.Request) string {
-	path := r.URL.EscapedPath()
-	if path == "" {
-		path = "/"
-	}
-	return canonicalOrigin(s, r) + path
-}
-
-func canonicalOrigin(s *Service, r *http.Request) string {
-	scheme := "https"
-	if s != nil && s.accessURL != nil && s.accessURL.Scheme != "" {
-		scheme = s.accessURL.Scheme
-	}
-	return scheme + "://" + ogHost(r)
+	return s.canonical.OwnerHost(ctx, slug.String, fallback)
 }
 
 // ogCacheWait bounds how long a page waits for a card's first cached fetch.

@@ -21,12 +21,13 @@ func (api *API) OGRoutes() []frontend.OGRoute {
 	var opts serviceog.Options
 	if api != nil && api.Opts != nil {
 		opts = serviceog.Options{
-			Logger:    api.Opts.Logger,
-			Zed:       api.Opts.Zed,
-			Chronicle: api.Opts.Chronicle,
-			Tenant:    api.Opts.Tenant,
-			Dataset:   api.Opts.Dataset,
-			AccessURL: api.Opts.AccessURL,
+			SharedContentSlug: api.Opts.SharedContentSlug,
+			Logger:            api.Opts.Logger,
+			Zed:               api.Opts.Zed,
+			Chronicle:         api.Opts.Chronicle,
+			Tenant:            api.Opts.Tenant,
+			Dataset:           api.Opts.Dataset,
+			AccessURL:         api.Opts.AccessURL,
 		}
 	}
 	return serviceog.New(opts).Routes()

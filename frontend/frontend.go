@@ -42,6 +42,15 @@ type ogResult struct {
 	data *OGData
 }
 
+// PageSummary is crawlable content rendered into an SPA page's first HTML
+// response. The client removes it before mounting the app.
+type PageSummary struct {
+	// Description overrides the page's <meta name="description">.
+	Description string
+	// HTML is trusted, already escaped markup injected beside #root.
+	HTML string
+}
+
 // HTMLBranding carries per-request branding overrides for the HTML template.
 type HTMLBranding struct {
 	Home         *HomeConfig // Public homepage-only rendering inputs.
@@ -55,6 +64,9 @@ type HTMLBranding struct {
 	Favicon      string      // Favicon URL. Empty = default /c/chronicle/favicon.ico.
 	ThemeCSS     string      // Pre-built CSS variable overrides for tenant theming.
 	GA4ID        string      // GA4 measurement ID; empty disables analytics.
+
+	// Summary is the server-rendered page summary; nil renders none.
+	Summary *PageSummary
 }
 
 // BrandingResolver is an optional callback that returns per-request branding
@@ -231,6 +243,10 @@ func (h *handler) ServeHTTP(resp http.ResponseWriter, req *http.Request) {
 			if req.URL.Path == "/" {
 				state.HomeHTML, state.HomeBootstrapJSON = h.home.render(b.Home)
 			}
+			if b.Summary != nil {
+				state.SummaryDescription = b.Summary.Description
+				state.SummaryHTML = b.Summary.HTML
+			}
 		}
 	}
 
@@ -390,6 +406,11 @@ type htmlState struct {
 	// BlogFlavorJSON is injected into pre-rendered blog pages for tenant-aware hydration.
 	BlogFlavorJSON string
 
+	// SummaryHTML is trusted page summary markup injected beside #root.
+	SummaryHTML string
+	// SummaryDescription overrides the meta description for a summarized page.
+	SummaryDescription string
+
 	// OG meta tags (empty = use defaults from index.html).
 	OGTitle       string
 	OGDescription string
@@ -412,6 +433,7 @@ func (s *htmlState) escapeHTMLAttributes() {
 	s.Title = html.EscapeString(s.Title)
 	s.SiteName = html.EscapeString(s.SiteName)
 	s.Description = html.EscapeString(s.Description)
+	s.SummaryDescription = html.EscapeString(s.SummaryDescription)
 	s.CanonicalURL = html.EscapeString(s.CanonicalURL)
 	s.ImageURL = html.EscapeString(s.ImageURL)
 	s.Robots = html.EscapeString(s.Robots)
@@ -459,6 +481,12 @@ func (h *handler) renderHTMLWithState(filePath string, state htmlState) ([]byte,
 		root := `<div id="root"></div>`
 		home := `<script id="home-bootstrap" type="application/json">` + state.HomeBootstrapJSON + `</script><div id="root">` + state.HomeHTML + `</div>`
 		data = bytes.Replace(data, []byte(root), []byte(home), 1)
+	} else if filePath == "index.html" && state.SummaryHTML != "" {
+		// Outside #root so the client never tries to hydrate it, and visually
+		// hidden so it doesn't flash before the app mounts and removes it.
+		root := `<div id="root"></div>`
+		summary := `<div id="seo-summary" style="position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0">` + state.SummaryHTML + `</div>` + root
+		data = bytes.Replace(data, []byte(root), []byte(summary), 1)
 	}
 	return data, nil
 }

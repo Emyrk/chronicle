@@ -397,3 +397,13 @@ func ogArtSlug(instanceName string) string {
 }
 
 var ogNonAlnum = regexp.MustCompile(`[^a-z0-9]+`)
+
+// ProgressionBosses returns an instance's progression boss list and canonical
+// boss count from the site flavor's boss registry, as the raid card uses
+// them. Both are nil when the instance is unknown or Chronicle is not set.
+func (s *Service) ProgressionBosses(ctx context.Context, instanceName string) ([]string, *int) {
+	if s == nil || s.chronicle == nil {
+		return nil, nil
+	}
+	return s.chronicle.RegistryForFlavor(s.resolvedSiteFlavor(ctx)).ProgressionBosses(instanceName)
+}

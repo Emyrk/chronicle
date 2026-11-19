@@ -19,8 +19,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/frontend"
+	"github.com/Emyrk/chronicle/internal/pageload"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 )
 
@@ -32,9 +32,9 @@ func (s *Service) Routes() []frontend.OGRoute {
 		routes = append(routes, frontend.OGRoute{
 			Pattern: pattern,
 			Resolve: func(r *http.Request) *frontend.OGData {
-				og := flavorStaticOG(pattern, seoProductName(s.resolvedSiteFlavor(r.Context())), metadata, canonicalRequestURL(s, r))
+				og := flavorStaticOG(pattern, seoProductName(s.resolvedSiteFlavor(r.Context())), metadata, s.canonical.URL(r))
 				if metadata.Image != "" {
-					og.ImageURL = canonicalOrigin(s, r) + metadata.Image
+					og.ImageURL = s.canonical.Origin(r) + metadata.Image
 				}
 				return og
 			},
@@ -44,13 +44,13 @@ func (s *Service) Routes() []frontend.OGRoute {
 		{
 			Pattern: "/instances/{idOrSlug}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return s.instanceOG(r, ogHost(r), chi.URLParam(r, "idOrSlug"))
+				return s.instanceOG(r, s.ogHost(r), chi.URLParam(r, "idOrSlug"))
 			},
 		},
 		{
 			Pattern: "/s/{code}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return s.shareOG(r, ogHost(r), chi.URLParam(r, "code"))
+				return s.shareOG(r, s.ogHost(r), chi.URLParam(r, "code"))
 			},
 		},
 		{
@@ -72,14 +72,14 @@ func (s *Service) Routes() []frontend.OGRoute {
 		{
 			Pattern: "/talents",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return flavorTalentCalculatorOG(ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), "", "")
+				return flavorTalentCalculatorOG(s.ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), "", "")
 			},
 		},
 		{
 			Pattern: "/talents/{class}",
 			Resolve: func(r *http.Request) *frontend.OGData {
 				class, build := chi.URLParam(r, "class"), r.URL.Query().Get("build")
-				og := flavorTalentCalculatorOG(ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), class, build)
+				og := flavorTalentCalculatorOG(s.ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), class, build)
 				if params := talentOGImageParams(class, build); params != nil {
 					if imageURL := s.ogImageURL(r, "talents", params); imageURL != "" {
 						og.ImageURL = imageURL
@@ -231,22 +231,9 @@ func talentBuildSummary(build string) (summary [3]uint8, total int) {
 	return summary, total
 }
 
-// ogHost returns the request host for og:url construction (keeping tenant
-// subdomains like capy.chronicleclassic.com), falling back to the canonical
-// domain when the Host header contains anything unexpected. The og:url meta
-// is rendered by text/template (no HTML escaping), so the host must be
-// strictly validated before echoing.
-func ogHost(r *http.Request) string {
-	host := strings.ToLower(r.Host)
-	for _, ch := range host {
-		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '-' && ch != ':' {
-			return "chronicleclassic.com"
-		}
-	}
-	if host == "" {
-		return "chronicleclassic.com"
-	}
-	return host
+// ogHost returns the validated request host (see serviceseo.Canonical.RequestHost).
+func (s *Service) ogHost(r *http.Request) string {
+	return s.canonical.RequestHost(r)
 }
 
 // sanitizeBuildParam keeps only the characters valid in a positional build
@@ -352,7 +339,7 @@ func (s *Service) instanceOG(r *http.Request, host, idOrSlug string) *frontend.O
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
 
-	inst, err := resolveInstance(ctx, s.store, idOrSlug)
+	inst, err := pageload.PublicInstance(ctx, s.store, idOrSlug)
 	if err != nil {
 		return nil
 	}
@@ -390,10 +377,8 @@ func (s *Service) shareOG(r *http.Request, host, code string) *frontend.OGData {
 // /s/{code} share payload, nil for the instance page itself: when its view
 // selects one player and one boss kill, the image is the parse card.
 func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host string, inst database.LogInstancesGuild, sharePayload []byte) *frontend.OGData {
-	db := s.store
-
-	encounters, _ := db.EncountersByInstanceID(ctx, inst.ID)
-	players, playersErr := db.InstancePlayersByInstanceID(ctx, inst.ID)
+	encounters, _ := pageload.Encounters(ctx, s.store, inst.ID)
+	players, playersErr := pageload.Players(ctx, s.store, inst.ID)
 
 	var startDate time.Time
 	var endDate time.Time
@@ -437,9 +422,7 @@ func (s *Service) buildInstanceOG(ctx context.Context, r *http.Request, host str
 		identifier = inst.HashedSlug.String
 	}
 
-	if inst.TenantSlug.Valid && inst.TenantSlug.String != "" && s.tenant != nil && s.tenant.PrimaryDomain() != "" {
-		host = inst.TenantSlug.String + "." + s.tenant.PrimaryDomain()
-	}
+	host = s.canonical.OwnerHost(r.Context(), inst.TenantSlug.String, host)
 
 	og := &frontend.OGData{
 		Title:       title.String(),
@@ -524,13 +507,11 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	// The request context carries the tenant, which scopes the lookups.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	host := ogHost(r)
-
-	db := s.store
+	host := s.ogHost(r)
 
 	realmID, err := uuid.Parse(realm)
 	if err != nil {
-		r, dbErr := s.store.GetWoWServerRealmByName(ctx, realm)
+		r, dbErr := pageload.RealmByName(ctx, s.store, realm)
 		if dbErr != nil {
 			return nil
 		}
@@ -539,7 +520,7 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 
 	identifier := parseArmoryPlayerGUID(player)
 
-	p, err := db.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{
+	p, err := pageload.Player(ctx, s.store, database.GetGamePlayerByGUIDParams{
 		RealmID:    realmID,
 		Identifier: identifier,
 		Name:       player,
@@ -589,7 +570,7 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	og := &frontend.OGData{
 		Title:       title.String(),
 		Description: desc.String(),
-		URL:         fmt.Sprintf("https://%s/armory/%s/%s", host, realm, p.ID),
+		URL:         fmt.Sprintf("https://%s/armory/%s/%s", s.realmOwnerHost(ctx, p.RealmID, host), realm, p.ID),
 	}
 	// Skip the stat lookups when there's no OG service to draw the card.
 	if s.imageBaseURL != nil && s.signingKey != "" {
@@ -603,12 +584,4 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 		}
 	}
 	return og
-}
-
-func resolveInstance(ctx context.Context, db *authz.Authz, idOrSlug string) (database.LogInstancesGuild, error) {
-	id, err := uuid.Parse(idOrSlug)
-	if err == nil {
-		return db.PublicInstance(ctx, id)
-	}
-	return db.PublicInstanceBySlug(ctx, pgtype.Text{String: idOrSlug, Valid: true})
 }
