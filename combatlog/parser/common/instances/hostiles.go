@@ -1830,6 +1830,17 @@ func FrostmaneHollowHostiles() map[uint32]Identity {
 	return hostile
 }
 
+// ZulFarrakIdentifier keeps the bonfire in the zone's gameobject namespace.
+func ZulFarrakIdentifier(_ database.WoWFlavor) *identifier.Identifier {
+	id := identifier.NewIdentifier(ZulFarrakHostiles())
+	id.AddObjectEntryId(2066, Identity{
+		Name:        "Bonfire Damage",
+		Category:    unitdb.CategoryEnvironment,
+		Affiliation: types.AffiliationUnknown,
+	})
+	return id
+}
+
 func ZulFarrakHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
@@ -1841,6 +1852,8 @@ func ZulFarrakHostiles() map[uint32]Identity {
 		7268: "Sandfury Guardian",
 		7269: "Scarab",
 		7274: "Sandfury Executioner",
+		7276: "Zul'Farrak Dead Hero",
+		7286: "Zul'Farrak Zombie",
 		7787: "Sandfury Slave",
 		7788: "Sandfury Drudge",
 		7789: "Sandfury Cretin",
@@ -1856,11 +1869,14 @@ func ZulFarrakHostiles() map[uint32]Identity {
 		7607:  "Weegli Blastfuse",
 		7608:  "Murta Grimgut",
 		8130:  "Sul'lithuz Hatchling",
+		8138:  "Sul'lithuz Broodling",
+		10080: "Sandarr Dunereaver",
 		15578: "Elder Wildmane",
 	})
 	LoadBosses(hostile, map[uint32]string{
 		7271: "Witch Doctor Zum'rah",
 		7272: "Theka the Martyr",
+		7273: "Gahzrilla",
 		7275: "Shadowpriest Sezz'ziz",
 		8127: "Antu'sul",
 		7267: "Chief Ukorz Sandscalp",

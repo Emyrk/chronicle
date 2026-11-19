@@ -48,6 +48,11 @@ const (
 )
 
 func init() {
+	// ClassicDB spells 11086 and 11899 summon these NPC wards for 20 and
+	// 30 seconds respectively. Player talent/equipment modifiers do not apply.
+	register("Ward of Zum'rah", 0, variant{id: 7785, duration: 20 * time.Second})
+	register("Greater Healing Ward", 0, variant{id: 8179, duration: 30 * time.Second})
+
 	// ClassicDB spell 24262 summons entry 15112 for 240 seconds. No player
 	// talent or equipment duration modifiers apply to this encounter totem.
 	register("Brain Wash Totem", 0, variant{id: 15112, duration: 240 * time.Second})
