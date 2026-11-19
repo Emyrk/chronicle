@@ -95,8 +95,6 @@ func TestFinalizeForeverCategoriesAndOwnership(t *testing.T) {
 				}
 				if flavor.Has(database.FlavorWoWForever) {
 					switch entry {
-					case 10719, 1938, 4949:
-						want = unitdb.CategoryOrdinary
 					case 268744:
 						want = unitdb.CategoryGuardian
 					}

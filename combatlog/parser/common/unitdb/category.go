@@ -44,9 +44,6 @@ var knownUrsolObjects = map[uint32]Category{
 // knownForeverCreatures provides semantic categories only, not affiliation,
 // ownership, boss roles, or activity/lifetime rules.
 var knownForeverCreatures = map[uint32]Category{
-	10719:  CategoryOrdinary, // Herald of Thrall
-	1938:   CategoryOrdinary, // Dalar Dawnweaver
-	4949:   CategoryOrdinary, // Thrall
 	268744: CategoryGuardian, // Frog Familiar
 }
 
