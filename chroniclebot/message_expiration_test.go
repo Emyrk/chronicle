@@ -101,8 +101,8 @@ func TestDeleteDiscordMessage(t *testing.T) {
 	}{
 		{name: "deleted", status: http.StatusNoContent},
 		{name: "already deleted", status: http.StatusNotFound, body: `{"code":10008,"message":"Unknown Message"}`},
-		{name: "forbidden retries", status: http.StatusForbidden, body: `{"code":50013,"message":"Missing Permissions"}`, wantError: true},
-		{name: "unknown channel retries", status: http.StatusNotFound, body: `{"code":10003,"message":"Unknown Channel"}`, wantError: true},
+		{name: "forbidden errors", status: http.StatusForbidden, body: `{"code":50013,"message":"Missing Permissions"}`, wantError: true},
+		{name: "unknown channel errors", status: http.StatusNotFound, body: `{"code":10003,"message":"Unknown Channel"}`, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -116,7 +116,7 @@ func TestDeleteDiscordMessage(t *testing.T) {
 			args := ArgsDeleteDiscordMessage{ChannelID: "admins", MessageID: "message-id"}
 			require.Equal(t, KindDeleteDiscordMessage, args.Kind())
 			require.Equal(t, riverconst.QueueDiscordAnnouncements, args.InsertOpts().Queue)
-			require.Equal(t, 10, args.InsertOpts().MaxAttempts)
+			require.Equal(t, 1, args.InsertOpts().MaxAttempts)
 			err = bot.NewWorkerDeleteDiscordMessage().Work(context.Background(), &river.Job[ArgsDeleteDiscordMessage]{Args: args})
 			if tc.wantError {
 				require.Error(t, err)
