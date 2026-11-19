@@ -4,6 +4,7 @@ package authztest
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"strconv"
@@ -11,18 +12,22 @@ import (
 	"time"
 
 	"github.com/authzed/gochugaru/client"
+	"github.com/google/uuid"
 	"github.com/ory/dockertest/v3"
 	"github.com/ory/dockertest/v3/docker"
 	"golang.org/x/xerrors"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/coder/retry"
 )
 
 const (
-	spiceDBImage   = "authzed/spicedb"
-	spiceDBVersion = "v1.38.0"
+	spiceDBImage        = "authzed/spicedb"
+	spiceDBVersion      = "v1.38.0"
+	sharedContainerName = "chronicle-test-spicedb-" + spiceDBVersion
 	// DefaultPresharedKey is the preshared key used for testing.
-	// In serve-testing mode, any key works, but we use a consistent one.
+	// Used as the prefix for automatically generated, isolated test tokens.
 	DefaultPresharedKey = "chronicle-test-key"
 )
 
@@ -41,15 +46,26 @@ type SpiceDB struct {
 
 // Options configures the SpiceDB test server.
 type Options struct {
+	// Dedicated starts a separate container that Close removes.
+	Dedicated bool
 	// GRPCPort is the port to use for gRPC. If 0, a random port is allocated.
 	GRPCPort int
 	// HTTPPort is the port to use for HTTP. If 0, a random port is allocated.
 	HTTPPort int
-	// PresharedKey is the key to use for authentication. Defaults to DefaultPresharedKey.
+	// PresharedKey selects the test datastore. By default a unique key is generated.
+	// Explicitly reusing a key shares schemas and relationships between callers.
 	PresharedKey string
 }
 
 type Option func(*Options)
+
+// WithDedicatedContainer opts out of reuse for tests that need their own server
+// lifecycle. Its container is removed by Close.
+func WithDedicatedContainer() Option {
+	return func(o *Options) {
+		o.Dedicated = true
+	}
+}
 
 // WithGRPCPort sets the gRPC port for the SpiceDB server.
 func WithGRPCPort(port int) Option {
@@ -65,23 +81,27 @@ func WithHTTPPort(port int) Option {
 	}
 }
 
-// WithPresharedKey sets the preshared key for authentication.
+// WithPresharedKey selects a datastore explicitly. Callers using the same key
+// on the shared server share data; omit this option for test isolation.
 func WithPresharedKey(key string) Option {
 	return func(o *Options) {
 		o.PresharedKey = key
 	}
 }
 
-// NewSpiceDB starts a new in-memory SpiceDB server using Docker.
+// NewSpiceDB reuses a named in-memory SpiceDB Docker server across test runs.
 // The server runs in "serve-testing" mode which provides isolated datastores
 // per client-supplied auth token.
 //
-// Call Close() when done to clean up the container.
+// Each call gets an isolated datastore via a unique token unless overridden.
+// Custom ports start a dedicated container instead. Call Close() when done;
+// it removes dedicated containers but leaves the shared server running.
+// Remove the shared container manually to reclaim accumulated in-memory data.
 func NewSpiceDB(t testing.TB, opts ...Option) (*SpiceDB, error) {
 	t.Helper()
 
 	o := &Options{
-		PresharedKey: DefaultPresharedKey,
+		PresharedKey: DefaultPresharedKey + "-" + uuid.NewString(),
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -112,10 +132,17 @@ func NewSpiceDB(t testing.TB, opts ...Option) (*SpiceDB, error) {
 		},
 	}
 
-	resource, err := pool.RunWithOptions(&runOptions, func(config *docker.HostConfig) {
-		config.AutoRemove = true
-		config.RestartPolicy = docker.RestartPolicy{Name: "no"}
-	})
+	shared := !o.Dedicated && o.GRPCPort == 0 && o.HTTPPort == 0
+	var resource *dockertest.Resource
+	if shared {
+		runOptions.Name = sharedContainerName
+		resource, err = sharedContainer(pool, &runOptions)
+	} else {
+		resource, err = pool.RunWithOptions(&runOptions, func(config *docker.HostConfig) {
+			config.AutoRemove = true
+			config.RestartPolicy = docker.RestartPolicy{Name: "no"}
+		})
+	}
 	if err != nil {
 		return nil, xerrors.Errorf("start spicedb container: %w", err)
 	}
@@ -126,7 +153,9 @@ func NewSpiceDB(t testing.TB, opts ...Option) (*SpiceDB, error) {
 
 	grpcHost, grpcPort, err := net.SplitHostPort(grpcHostPort)
 	if err != nil {
-		_ = pool.Purge(resource)
+		if !shared {
+			_ = pool.Purge(resource)
+		}
 		return nil, xerrors.Errorf("parse grpc host port: %w", err)
 	}
 
@@ -138,13 +167,59 @@ func NewSpiceDB(t testing.TB, opts ...Option) (*SpiceDB, error) {
 		resource:     resource,
 	}
 
+	// Only dedicated instances own the container lifecycle.
+	if shared {
+		spicedb.pool = nil
+		spicedb.resource = nil
+	}
+
 	// Wait for SpiceDB to be ready
 	if err := spicedb.waitForReady(t); err != nil {
-		_ = pool.Purge(resource)
+		if !shared {
+			_ = pool.Purge(resource)
+		}
 		return nil, xerrors.Errorf("wait for spicedb ready: %w", err)
 	}
 
 	return spicedb, nil
+}
+
+// sharedContainer uses Docker's atomic name reservation to coordinate separate
+// test binaries and concurrent runs. A losing creator waits for the winner to
+// finish starting the container rather than creating an anonymous fallback.
+func sharedContainer(pool *dockertest.Pool, opts *dockertest.RunOptions) (*dockertest.Resource, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	var lastErr error
+	for r := retry.New(100*time.Millisecond, time.Second); r.Wait(ctx); {
+		container, err := pool.Client.InspectContainer(opts.Name)
+		if err == nil {
+			if container.State.Running {
+				resource := &dockertest.Resource{Container: container}
+				if resource.GetPort("50051/tcp") != "" && resource.GetPort("8443/tcp") != "" {
+					return resource, nil
+				}
+			}
+			// A created container may still be starting in another process.
+			if container.State.Status == "exited" {
+				lastErr = pool.Client.StartContainer(container.ID, nil)
+			}
+			continue
+		}
+		if _, missing := err.(*docker.NoSuchContainer); !missing {
+			return nil, xerrors.Errorf("inspect shared spicedb: %w", err)
+		}
+		resource, err := pool.RunWithOptions(opts)
+		if err == nil {
+			return resource, nil
+		}
+		if !errors.Is(err, docker.ErrContainerAlreadyExists) {
+			return nil, err
+		}
+		lastErr = err // Another process reserved the name. Wait for its ports.
+	}
+	return nil, xerrors.Errorf("shared spicedb did not start: %v (last error: %v)", ctx.Err(), lastErr)
 }
 
 // waitForReady waits for SpiceDB to be ready to accept connections.
@@ -154,21 +229,18 @@ func (s *SpiceDB) waitForReady(t testing.TB) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	cli, err := client.NewPlaintext(s.GRPCAddr, s.PresharedKey)
+	if err != nil {
+		return err
+	}
 	var lastErr error
 	for r := retry.New(100*time.Millisecond, 15*time.Second); r.Wait(ctx); {
-		// Try to establish a gRPC connection
-		cli, err := client.NewPlaintext(s.GRPCAddr, s.PresharedKey)
-		if err != nil {
-			lastErr = err
-			t.Logf("waiting for spicedb: connection failed: %v", err)
-			continue
-		}
-
 		// Try a simple operation to verify the server is ready
-		_, err = cli.WriteSchema(ctx, "definition user {}")
-		if err != nil {
+		// Read instead of write so an explicitly shared token is never reset.
+		_, _, err = cli.ReadSchema(ctx)
+		if err != nil && status.Code(err) != codes.NotFound {
 			lastErr = err
-			t.Logf("waiting for spicedb: write schema failed: %v", err)
+			t.Logf("waiting for spicedb: read schema failed: %v", err)
 			continue
 		}
 
@@ -182,7 +254,7 @@ func (s *SpiceDB) waitForReady(t testing.TB) error {
 	return xerrors.Errorf("timeout waiting for spicedb")
 }
 
-// Close stops and removes the SpiceDB container.
+// Close removes dedicated containers. Shared containers stay running for reuse.
 func (s *SpiceDB) Close() error {
 	if s.pool != nil && s.resource != nil {
 		return s.pool.Purge(s.resource)
