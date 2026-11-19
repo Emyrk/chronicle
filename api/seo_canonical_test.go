@@ -114,6 +114,35 @@ func (s canonicalSite) serve(t *testing.T, r *http.Request) (canonical, ogURL st
 	return canonical, ogURL, jsonLD
 }
 
+// The optional OG service's fallback must use the same canonical policy as
+// branding, since its URL replaces the branding canonical during rendering.
+func TestSharedPageCanonicalWithFallbackOG(t *testing.T) {
+	t.Parallel()
+	for _, slug := range []string{"forever", "everlook", ""} {
+		t.Run(slug, func(t *testing.T) {
+			t.Parallel()
+			site := newCanonicalSite(t, true)
+			site.api.Opts.SharedContentSlug = slug
+			require.Nil(t, site.api.Opts.OG)
+			site.siteFS["index.html"] = &fstest.MapFile{Data: []byte(canonicalPostHead)}
+			handler := frontend.Handler(site.siteFS, site.api.OGRoutes(), site.api.brandingResolver, site.api.blogFlavorResolver)
+			for _, path := range []string{"/privacy", "/tools"} {
+				r := site.request(&site.everlook, "https://everlook.chronicleclassic.com"+path)
+				res := httptest.NewRecorder()
+				handler.ServeHTTP(res, r)
+				require.Equal(t, http.StatusOK, res.Code)
+				host := "everlook.chronicleclassic.com"
+				if slug != "" {
+					host = slug + ".chronicleclassic.com"
+				}
+				want := "https://" + host + path
+				require.Contains(t, res.Body.String(), `<link rel="canonical" href="`+want+`"`)
+				require.Contains(t, res.Body.String(), `<meta property="og:url" content="`+want+`"`)
+			}
+		})
+	}
+}
+
 func TestBlogPostCanonicalHost(t *testing.T) {
 	t.Parallel()
 	site := newCanonicalSite(t, true)
