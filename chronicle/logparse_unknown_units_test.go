@@ -54,3 +54,27 @@ func TestUnknownUnitsNotificationOptionalAndBestEffort(t *testing.T) {
 	require.Empty(t, unknownUnitZoneSummaries(nil))
 	require.Empty(t, unknownUnitZoneSummaries([]chroniclesdk.InstanceReport{{UnknownUnits: map[uint32]chroniclesdk.UnknownUnit{42: {Count: 0}}}}))
 }
+
+func TestUnknownUnitsHanAlertsPreserveReports(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	bot, err := chroniclebot.New(ctx, testutil.Logger(t), chroniclebot.Config{Token: "test", AdminNotificationsChannelID: "admins"})
+	require.NoError(t, err)
+	reports := []chroniclesdk.InstanceReport{
+		{Zone: "祖尔法拉克", UnknownUnits: map[uint32]chroniclesdk.UnknownUnit{42: {Name: "未知单位", Count: 2}}},
+		// A missing zone uses the instance name, so that fallback is filtered too.
+		{Name: "熔火之心", UnknownUnits: map[uint32]chroniclesdk.UnknownUnit{43: {Count: 3}}},
+		{Zone: "Höhle", UnknownUnits: map[uint32]chroniclesdk.UnknownUnit{44: {Name: "Unknown summon", Count: 4}}},
+	}
+	zones := unknownUnitZoneSummaries(reports)
+	require.Len(t, zones, 3)
+	queue := &unknownReportQueue{}
+	require.NoError(t, chroniclebot.EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 42, "", zones))
+	require.Len(t, queue.jobs, 1)
+	require.Len(t, queue.jobs[0].Fields, 2)
+	require.Equal(t, "Höhle", queue.jobs[0].Fields[1].Name)
+	require.Contains(t, queue.jobs[0].Fields[0].Value, "1 zones; 4 unknown GUIDs")
+	// Notification suppression neither removes unknowns nor changes summaries.
+	require.ElementsMatch(t, zones, unknownUnitZoneSummaries(reports))
+	require.Equal(t, chroniclesdk.UnknownUnit{Name: "未知单位", Count: 2}, reports[0].UnknownUnits[42])
+}

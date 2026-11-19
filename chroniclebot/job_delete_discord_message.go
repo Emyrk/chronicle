@@ -20,7 +20,7 @@ type ArgsDeleteDiscordMessage struct {
 
 func (ArgsDeleteDiscordMessage) Kind() string { return KindDeleteDiscordMessage }
 func (ArgsDeleteDiscordMessage) InsertOpts() river.InsertOpts {
-	return river.InsertOpts{Queue: riverconst.QueueDiscordAnnouncements, MaxAttempts: 10}
+	return river.InsertOpts{Queue: riverconst.QueueDiscordAnnouncements, MaxAttempts: 1}
 }
 
 type WorkerDeleteDiscordMessage struct {
