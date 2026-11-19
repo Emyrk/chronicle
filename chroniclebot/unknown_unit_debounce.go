@@ -7,7 +7,7 @@ import (
 	"github.com/google/uuid"
 )
 
-const unknownUnitDebounceWindow = 4 * time.Hour
+const unknownUnitDebounceWindow = 72 * time.Hour
 const unknownUnitDebounceCapacity = 4096
 
 type unknownUnitZoneKey struct {
