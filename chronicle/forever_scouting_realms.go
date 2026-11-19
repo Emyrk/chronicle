@@ -14,13 +14,21 @@ import (
 
 var foreverScoutingServerID = uuid.MustParse("2e1868f9-d491-4a64-8622-8ba4785fe5e5")
 
-// These two US2 PvE spellings are confirmed Forever API forms. Do not infer
-// rulesets or regions from partial matches, player names, GUIDs, or upload realm.
-var foreverNormalUSRealm = regexp.MustCompile(`^(CAMWOWUS2Realm[1-9][0-9]*PvE|CAMWOW US2 Realm [1-9][0-9]* PvE)$`)
+// These clusters/rulesets are confirmed Forever API forms. Shard numbers are
+// positive integers, not realm identities. Do not infer unobserved regions or
+// rulesets, or fold AU into US merely because the catalog has no AU realm.
+var foreverNormalUSRealm = regexp.MustCompile(`^(CAMWOWUS[12]Realm[1-9][0-9]*PvE|CAMWOW US2 Realm [1-9][0-9]* PvE)$`)
+var foreverPvPUSRealm = regexp.MustCompile(`^CAMWOWUS[12]Realm[1-9][0-9]*PvP$`)
+var foreverRoleplayPvPUSRealm = regexp.MustCompile(`^CAMWOWUS2Realm[1-9][0-9]*RPPvP$`)
 
 func canonicalScoutingRealm(raw string) string {
-	if foreverNormalUSRealm.MatchString(raw) {
+	switch {
+	case foreverNormalUSRealm.MatchString(raw):
 		return "Normal-US"
+	case foreverPvPUSRealm.MatchString(raw):
+		return "PvP-US"
+	case foreverRoleplayPvPUSRealm.MatchString(raw):
+		return "Roleplay PvP-US"
 	}
 	return raw // Only an exact server-scoped DB name can match anything else.
 }
