@@ -46,6 +46,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewCoreRager,
 		NewGolemaggCharacter(flavor),
 		// Blackwing Lair
+		NewBWLPassiveController,
 		NewBroodlordLashlayer,
 		NewBroodlordWhelp,
 		NewRazorgore(flavor),

@@ -75,7 +75,6 @@ func TestFinalizeZulGurubUrsolIdentities(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, want, result.UnitCategories)
 	require.Len(t, result.PersistedUnits, len(want))
-	require.Len(t, result.UnknownUnits, 1)
-	require.Equal(t, 1, result.UnknownUnits[0].Count)
-	require.Equal(t, []guid.GUID{creatureGUID(0, 1)}, result.UnknownUnits[0].Samples)
+	require.Empty(t, result.UnknownUnits)
+	require.Equal(t, unitdb.CategoryUnknown, result.UnitCategories[creatureGUID(0, 1)])
 }

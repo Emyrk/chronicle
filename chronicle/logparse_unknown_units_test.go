@@ -31,13 +31,13 @@ func TestUnknownUnitsAcrossInstancesOneNotification(t *testing.T) {
 		{Name: "Empty"},
 	}
 	zones := unknownUnitZoneSummaries(reports)
-	require.ElementsMatch(t, []chroniclebot.UnknownUnitZoneSummary{{Zone: "Zone A", Entries: 2, GUIDs: 9}, {Zone: "Zone B", Entries: 2, GUIDs: 2}}, zones)
+	require.ElementsMatch(t, []chroniclebot.UnknownUnitZoneSummary{{Zone: "Zone A", Entries: 2, GUIDs: 9}, {Zone: "Zone B", Entries: 1, GUIDs: 1}}, zones)
 	bot, err := chroniclebot.New(context.Background(), testutil.Logger(t), chroniclebot.Config{Token: "test", AdminNotificationsChannelID: "admins"})
 	require.NoError(t, err)
 	queue := &unknownReportQueue{}
 	require.NoError(t, chroniclebot.EnqueueUnknownUnitNotification(context.Background(), queue, bot, uuid.Nil, 42, "https://chronicle.example/logs/test", zones))
 	require.Len(t, queue.jobs, 1)
-	require.Contains(t, queue.jobs[0].Fields[0].Value, "2 zones; 11 unknown GUIDs")
+	require.Contains(t, queue.jobs[0].Fields[0].Value, "2 zones; 10 unknown GUIDs")
 }
 
 func TestUnknownUnitsNotificationOptionalAndBestEffort(t *testing.T) {

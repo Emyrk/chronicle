@@ -74,3 +74,20 @@ func TestIdentityReportPreservesRegisteredBoss(t *testing.T) {
 	report := buildIdentityInstance("Raid", "Zone", finalized, unitdb.New(database.WoWFlavor{}), idf)
 	require.True(t, report.Units[0].Boss)
 }
+
+func TestIdentityReportOmitsUnresolvedUnknownEntries(t *testing.T) {
+	t.Parallel()
+	units := unitdb.New(database.WoWFlavor{})
+	valid := guid.GUID(0xF130000844003FB5)
+	ids := []guid.GUID{0x30930149A4DF0002, 0x32DC014A20DF0002, 0xF130000000000001, valid}
+	finalized := &instances.FinalizedInstance{PersistedUnits: ids, UnitCategories: make(map[guid.GUID]unitdb.Category)}
+	for _, id := range ids {
+		finalized.UnitCategories[id] = unitdb.CategoryUnknown
+	}
+	report := buildIdentityInstance("Raid", "Zone", finalized, units, nil)
+	require.Len(t, report.Units, 1)
+	require.Equal(t, uint32(0x844), report.Units[0].EntryID)
+	require.Equal(t, []string{valid.String()}, report.Units[0].Samples)
+	require.Equal(t, ids, finalized.PersistedUnits)
+	require.Len(t, finalized.UnitCategories, 4)
+}
