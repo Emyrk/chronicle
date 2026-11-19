@@ -2,6 +2,7 @@ package chroniclebot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"time"
@@ -19,7 +20,7 @@ type UnknownUnitZoneSummary struct {
 }
 
 // EnqueueUnknownUnitNotification sends one bounded summary per parse job after
-// successful persistence. Job identity, not evidence, determines uniqueness.
+// successful persistence, subject to local zone and deployment-wide cooldowns.
 func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotificationInserter, bot *Bot, tenantID uuid.UUID, jobID int64, reportURL string, zones []UnknownUnitZoneSummary) error {
 	if bot == nil || bot.Disabled() || bot.AdminNotificationsChannelID() == "" {
 		return nil
@@ -61,14 +62,20 @@ func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotification
 	if len(zones) > maxZones {
 		fields = append(fields, AdminNotificationField{Name: "More zones", Value: fmt.Sprintf("%d more zones. See the parse report for all details.", len(zones)-maxZones)})
 	}
-	err := EnqueueAdminNotification(ctx, queue, bot, ArgsNotifyAdmin{
-		Title: "Unknown unit categories in parse job", URL: reportURL, Fields: fields,
+	if queue == nil {
+		return errors.New("unknown unit notification queue unavailable")
+	}
+	result, err := queue.Insert(ctx, ArgsNotifyUnknownUnits{Notification: ArgsNotifyAdmin{
+		ChannelID: bot.AdminNotificationsChannelID(),
+		Title:     "Unknown unit categories in parse job", URL: reportURL, Fields: fields,
 		// No rolling time bucket: retries of this parse job retain the same key.
 		UniqueKey:   fmt.Sprintf("unknown-unit-parse-job:%d", jobID),
 		MaxAttempts: 2,
 		ExpireAfter: 24 * time.Hour,
-	})
-	succeeded = err == nil
+	}}, nil)
+	// A globally suppressed zone was never announced and must not consume its
+	// local 72-hour window. Another report may try it after the global cooldown.
+	succeeded = err == nil && (result == nil || !result.UniqueSkippedAsDuplicate)
 	return err
 }
 
