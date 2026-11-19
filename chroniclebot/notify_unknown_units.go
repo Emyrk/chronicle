@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
+	"unicode"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -25,7 +27,11 @@ func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotification
 	if bot == nil || bot.Disabled() || bot.AdminNotificationsChannelID() == "" {
 		return nil
 	}
-	zones = slices.DeleteFunc(slices.Clone(zones), func(z UnknownUnitZoneSummary) bool { return z.GUIDs <= 0 })
+	// Suppress Han-named zones only at the alert boundary, preserving parse
+	// reports. Filter before reserving either the local or global cooldown.
+	zones = slices.DeleteFunc(slices.Clone(zones), func(z UnknownUnitZoneSummary) bool {
+		return z.GUIDs <= 0 || strings.ContainsFunc(z.Zone, func(r rune) bool { return unicode.Is(unicode.Han, r) })
+	})
 	if len(zones) == 0 {
 		return nil
 	}

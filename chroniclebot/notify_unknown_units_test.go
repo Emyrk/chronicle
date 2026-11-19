@@ -90,7 +90,7 @@ func TestUnknownUnitNotificationBounds(t *testing.T) {
 	require.NoError(t, err)
 	zones := make([]UnknownUnitZoneSummary, 100)
 	for i := range zones {
-		zones[i] = UnknownUnitZoneSummary{Zone: fmt.Sprintf("%03d%s", i, strings.Repeat("界", 1000)), Entries: 123456, GUIDs: 1234567}
+		zones[i] = UnknownUnitZoneSummary{Zone: fmt.Sprintf("%03d%s", i, strings.Repeat("é", 1000)), Entries: 123456, GUIDs: 1234567}
 	}
 	queue := &unknownUnitQueue{}
 	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 1, "", zones))
@@ -114,4 +114,41 @@ func TestUnknownUnitReportURL(t *testing.T) {
 	logID := uuid.New()
 	require.Equal(t, "https://chronicle.example/logs/"+logID.String(), bot.UnknownUnitReportURL(logID, pgtype.Text{}))
 	require.Equal(t, "https://forever.chronicle.example/logs/"+logID.String(), bot.UnknownUnitReportURL(logID, pgtype.Text{String: "forever", Valid: true}))
+}
+
+func TestUnknownUnitNotificationSkipsHanBeforeCooldowns(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	bot, err := New(ctx, testutil.Logger(t), Config{Token: "test", AdminNotificationsChannelID: "admins"})
+	require.NoError(t, err)
+	// A Han-only report must not even consult the local debounce clock.
+	bot.unknownUnitDebounce.now = func() time.Time {
+		t.Fatal("Han-only report reached debounce reservation")
+		return time.Time{}
+	}
+	queue := &unknownUnitQueue{}
+	zones := []UnknownUnitZoneSummary{{Zone: "祖尔法拉克", Entries: 2, GUIDs: 3}, {Zone: "Zone 界", Entries: 1, GUIDs: 4}}
+	original := append([]UnknownUnitZoneSummary(nil), zones...)
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 1, "", zones))
+	require.Empty(t, queue.jobs) // No River insertion means no global unique slot.
+	require.Empty(t, bot.unknownUnitDebounce.entries)
+	require.Equal(t, original, zones)
+	// Filtering happens before needing a queue, too.
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, nil, bot, uuid.Nil, 1, "", zones))
+
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	bot.unknownUnitDebounce.now = func() time.Time { return now }
+	zones = append(zones, UnknownUnitZoneSummary{Zone: "Höhle éclair", Entries: 3, GUIDs: 5})
+	original = append([]UnknownUnitZoneSummary(nil), zones...)
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 2, "", zones))
+	require.Len(t, queue.jobs, 1)
+	require.Len(t, queue.jobs[0].Fields, 2)
+	require.Contains(t, queue.jobs[0].Fields[0].Value, "1 zones; 5 unknown GUIDs")
+	require.Equal(t, "Höhle éclair", queue.jobs[0].Fields[1].Name)
+	require.Equal(t, original, zones)
+	require.Len(t, bot.unknownUnitDebounce.entries, 1)
+	require.Contains(t, bot.unknownUnitDebounce.entries, unknownUnitZoneKey{tenant: uuid.Nil, zone: "Höhle éclair"})
+	// Eligible zones still consume their normal local window.
+	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 3, "", zones))
+	require.Len(t, queue.jobs, 1)
 }
