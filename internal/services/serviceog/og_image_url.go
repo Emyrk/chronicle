@@ -17,7 +17,7 @@ const ogImageVersion = "1"
 // ogImageURL returns a signed OG service image URL for template, or "" when the
 // OG service URL or signing key is not configured (callers then keep their
 // existing image). params may carry an explicit "host" (e.g. a tenant host that
-// differs from the request host) and "v"; otherwise they default to ogHost(r)
+// differs from the request host) and "v"; otherwise they default to s.ogHost(r)
 // and ogImageVersion. "product" is the site flavor's product name; a caller's
 // "product" is kept only when that name is empty. Every value goes through
 // sanitizeOGParam before signing. params is not modified.
@@ -35,7 +35,7 @@ func (s *Service) ogImageURLForProduct(r *http.Request, template, product string
 	}
 	host := params.Get("host")
 	if host == "" {
-		host = ogHost(r)
+		host = s.ogHost(r)
 	}
 	return signedOGImageURL(s.imageBaseURL, s.signingKey, template, host, product, params)
 }

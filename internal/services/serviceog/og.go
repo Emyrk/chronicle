@@ -21,7 +21,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/pageload"
-	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/wowspec"
 )
 
@@ -45,13 +44,13 @@ func (s *Service) Routes() []frontend.OGRoute {
 		{
 			Pattern: "/instances/{idOrSlug}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return s.instanceOG(r, ogHost(r), chi.URLParam(r, "idOrSlug"))
+				return s.instanceOG(r, s.ogHost(r), chi.URLParam(r, "idOrSlug"))
 			},
 		},
 		{
 			Pattern: "/s/{code}",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return s.shareOG(r, ogHost(r), chi.URLParam(r, "code"))
+				return s.shareOG(r, s.ogHost(r), chi.URLParam(r, "code"))
 			},
 		},
 		{
@@ -73,14 +72,14 @@ func (s *Service) Routes() []frontend.OGRoute {
 		{
 			Pattern: "/talents",
 			Resolve: func(r *http.Request) *frontend.OGData {
-				return flavorTalentCalculatorOG(ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), "", "")
+				return flavorTalentCalculatorOG(s.ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), "", "")
 			},
 		},
 		{
 			Pattern: "/talents/{class}",
 			Resolve: func(r *http.Request) *frontend.OGData {
 				class, build := chi.URLParam(r, "class"), r.URL.Query().Get("build")
-				og := flavorTalentCalculatorOG(ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), class, build)
+				og := flavorTalentCalculatorOG(s.ogHost(r), seoProductName(s.resolvedSiteFlavor(r.Context())), class, build)
 				if params := talentOGImageParams(class, build); params != nil {
 					if imageURL := s.ogImageURL(r, "talents", params); imageURL != "" {
 						og.ImageURL = imageURL
@@ -232,9 +231,9 @@ func talentBuildSummary(build string) (summary [3]uint8, total int) {
 	return summary, total
 }
 
-// ogHost returns the validated request host (see serviceseo.RequestHost).
-func ogHost(r *http.Request) string {
-	return serviceseo.RequestHost(r)
+// ogHost returns the validated request host (see serviceseo.Canonical.RequestHost).
+func (s *Service) ogHost(r *http.Request) string {
+	return s.canonical.RequestHost(r)
 }
 
 // sanitizeBuildParam keeps only the characters valid in a positional build
@@ -508,7 +507,7 @@ func (s *Service) armoryOG(r *http.Request, realm, player string) *frontend.OGDa
 	// The request context carries the tenant, which scopes the lookups.
 	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
 	defer cancel()
-	host := ogHost(r)
+	host := s.ogHost(r)
 
 	realmID, err := uuid.Parse(realm)
 	if err != nil {

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
+	"github.com/Emyrk/chronicle/api/httpapi"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/pageload"
@@ -131,11 +132,12 @@ func (api *API) isUnlistedInstancePath(r *http.Request) bool {
 // canonical returns the canonical URL policy for the API's options.
 func (api *API) canonical() *serviceseo.Canonical {
 	return serviceseo.NewCanonical(serviceseo.CanonicalOptions{
-		Logger:    api.Opts.Logger,
-		Tenant:    api.Opts.Tenant,
-		Dataset:   api.Opts.Dataset,
-		AccessURL: api.Opts.AccessURL,
-		BlogFS:    api.sitemapBlogFS,
+		SharedContentSlug: api.Opts.SharedContentSlug,
+		Logger:            api.Opts.Logger,
+		Tenant:            api.Opts.Tenant,
+		Dataset:           api.Opts.Dataset,
+		AccessURL:         api.Opts.AccessURL,
+		BlogFS:            api.sitemapBlogFS,
 	})
 }
 
@@ -391,6 +393,10 @@ func (api *API) sitemapXML(w http.ResponseWriter, r *http.Request) {
 	}
 
 	host := api.sitemapHost(r)
+	if host == "" {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, map[string]string{"error": "no valid sitemap host"})
+		return
+	}
 	key := sitemapRenderKey{tenant: servicetenant.TenantIDFromContext(ctx), host: host}
 	rendered, err := api.sitemapRendered.get(key, dynamic, func() ([]byte, error) {
 		return api.renderSitemap(r, api.canonical().Scheme()+"://"+host, dynamic)
@@ -460,16 +466,19 @@ func (api *API) renderSitemap(r *http.Request, base string, dynamic *sitemapDyna
 // host. Arbitrary Host headers therefore never reach the render cache key.
 func (api *API) sitemapHost(r *http.Request) string {
 	hosts := api.canonicalHosts(r)
-	requested := serviceseo.RequestHost(r)
+	requested := api.canonical().RequestHost(r)
 	if slices.Contains(hosts, requested) {
 		return requested
 	}
-	return hosts[0]
+	if len(hosts) > 0 {
+		return hosts[0]
+	}
+	return ""
 }
 
 // canonicalHosts lists the hosts the request's site is served on: the
 // tenant's subdomain for a tenant, the access URL and primary domain for the
-// site itself. It is never empty.
+// site itself. With no tenant host, it falls back to the configured access URL.
 func (api *API) canonicalHosts(r *http.Request) []string {
 	primary := ""
 	if api.Opts.Tenant != nil {
@@ -488,8 +497,8 @@ func (api *API) canonicalHosts(r *http.Request) []string {
 			hosts = append(hosts, primary)
 		}
 	}
-	if len(hosts) == 0 {
-		hosts = append(hosts, "chronicleclassic.com")
+	if len(hosts) == 0 && api.Opts.AccessURL != nil && api.Opts.AccessURL.Host != "" {
+		hosts = append(hosts, strings.ToLower(api.Opts.AccessURL.Host))
 	}
 	return hosts
 }

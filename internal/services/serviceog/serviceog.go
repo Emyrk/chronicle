@@ -38,14 +38,16 @@ func parseArmoryPlayerGUID(player string) guid.GUID {
 // card URLs. OGServiceURL and OGSigningKey are both required to enable generated
 // cards; without them, Routes preserves Chronicle's existing static metadata.
 type Options struct {
-	Logger       *slog.Logger
-	Zed          *authz.Authz
-	Chronicle    *chronicle.Chronicle
-	Tenant       *servicetenant.Service
-	Dataset      *servicedataset.Service
-	AccessURL    *url.URL
-	OGServiceURL *url.URL
-	OGSigningKey string
+	// SharedContentSlug selects the canonical tenant for shared content; empty keeps the request host.
+	SharedContentSlug string
+	Logger            *slog.Logger
+	Zed               *authz.Authz
+	Chronicle         *chronicle.Chronicle
+	Tenant            *servicetenant.Service
+	Dataset           *servicedataset.Service
+	AccessURL         *url.URL
+	OGServiceURL      *url.URL
+	OGSigningKey      string
 	// PlayerCareer is optional; without it character cards show history only.
 	PlayerCareer PlayerCareerReader
 	// CareerLeaders is optional; without it /leaderboards/career keeps the brand card.
@@ -85,10 +87,11 @@ func New(opts Options) *Service {
 		playerCareer:  opts.PlayerCareer,
 		careerLeaders: opts.CareerLeaders,
 		canonical: serviceseo.NewCanonical(serviceseo.CanonicalOptions{
-			Logger:    opts.Logger,
-			Tenant:    opts.Tenant,
-			Dataset:   opts.Dataset,
-			AccessURL: opts.AccessURL,
+			SharedContentSlug: opts.SharedContentSlug,
+			Logger:            opts.Logger,
+			Tenant:            opts.Tenant,
+			Dataset:           opts.Dataset,
+			AccessURL:         opts.AccessURL,
 		}),
 	}
 }

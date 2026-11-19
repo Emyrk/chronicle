@@ -15,12 +15,6 @@ import (
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
-// SharedContentSlug is the tenant whose host is canonical for pages that are
-// identical on every host (SharedPagePaths and blog posts it serves).
-// Tenant-owned pages (instances, guilds, characters) are canonical on their
-// owning tenant's host instead (see Canonical.OwnerHost).
-const SharedContentSlug = "forever"
-
 // SharedPagePaths are pages whose content does not vary by tenant or flavor,
 // so every host serves the same page. Paths match exactly: /tools is shared,
 // but its child pages such as /tools/developer-panels stay canonical on the
@@ -28,25 +22,28 @@ const SharedContentSlug = "forever"
 // shared too, but only when the shared-content tenant's flavor serves them.
 var SharedPagePaths = []string{"/tools", "/contact", "/privacy", "/terms", "/disclaimer", "/refund-policy"}
 
-// defaultHost replaces a missing or malformed request host.
-const defaultHost = "chronicleclassic.com"
-
-// RequestHost returns the request host for canonical and og:url construction
-// (keeping tenant subdomains like capy.chronicleclassic.com), falling back to
-// chronicleclassic.com when the Host header is empty or contains anything
-// unexpected. og:url is rendered by text/template (no HTML escaping), so the
-// host must be strictly validated before echoing.
-func RequestHost(r *http.Request) string {
-	host := strings.ToLower(r.Host)
+// validHost validates hosts before they are rendered by text/template.
+func validHost(host string) string {
+	host = strings.ToLower(host)
 	for _, ch := range host {
 		if (ch < 'a' || ch > 'z') && (ch < '0' || ch > '9') && ch != '.' && ch != '-' && ch != ':' {
-			return defaultHost
+			return ""
 		}
 	}
-	if host == "" {
-		return defaultHost
-	}
 	return host
+}
+
+// RequestHost returns the validated request host, or the configured access
+// URL host when the request host is missing or malformed. It returns empty
+// when neither supplies a valid host.
+func (c *Canonical) RequestHost(r *http.Request) string {
+	if host := validHost(r.Host); host != "" {
+		return host
+	}
+	if c != nil {
+		return c.fallbackHost
+	}
+	return ""
 }
 
 // CanonicalOptions are the dependencies of the canonical URL policy. Every
@@ -58,7 +55,10 @@ type CanonicalOptions struct {
 	Tenant *servicetenant.Service
 	// Dataset resolves the shared-content tenant's flavor for blog posts.
 	Dataset *servicedataset.Service
-	// AccessURL supplies the canonical scheme; https when unset.
+	// SharedContentSlug selects the tenant canonical for shared pages and blog
+	// posts it serves. Empty keeps shared content on the request host.
+	SharedContentSlug string
+	// AccessURL supplies the fallback host and canonical scheme; https when unset.
 	AccessURL *url.URL
 	// BlogFS holds blog-manifest.json; nil reads the embedded frontend.
 	BlogFS fs.FS
@@ -74,11 +74,13 @@ type CanonicalOptions struct {
 // Either exception applies only when the target tenant is discoverable, so a
 // canonical never points at a host search engines are told not to index.
 type Canonical struct {
-	logger  *slog.Logger
-	tenant  *servicetenant.Service
-	dataset *servicedataset.Service
-	scheme  string
-	blogFS  fs.FS
+	sharedContentSlug string
+	fallbackHost      string
+	logger            *slog.Logger
+	tenant            *servicetenant.Service
+	dataset           *servicedataset.Service
+	scheme            string
+	blogFS            fs.FS
 }
 
 // NewCanonical returns the canonical URL policy for opts.
@@ -87,12 +89,18 @@ func NewCanonical(opts CanonicalOptions) *Canonical {
 	if opts.AccessURL != nil && opts.AccessURL.Scheme != "" {
 		scheme = opts.AccessURL.Scheme
 	}
+	fallbackHost := ""
+	if opts.AccessURL != nil {
+		fallbackHost = validHost(opts.AccessURL.Host)
+	}
 	return &Canonical{
-		logger:  opts.Logger,
-		tenant:  opts.Tenant,
-		dataset: opts.Dataset,
-		scheme:  scheme,
-		blogFS:  opts.BlogFS,
+		sharedContentSlug: opts.SharedContentSlug,
+		fallbackHost:      fallbackHost,
+		logger:            opts.Logger,
+		tenant:            opts.Tenant,
+		dataset:           opts.Dataset,
+		scheme:            scheme,
+		blogFS:            opts.BlogFS,
 	}
 }
 
@@ -106,7 +114,11 @@ func (c *Canonical) Scheme() string {
 
 // Origin returns the canonical scheme and the request's (validated) host.
 func (c *Canonical) Origin(r *http.Request) string {
-	return c.Scheme() + "://" + RequestHost(r)
+	host := c.RequestHost(r)
+	if host == "" {
+		return ""
+	}
+	return c.Scheme() + "://" + host
 }
 
 // URL returns the request's canonical URL: the shared-content tenant's host
@@ -120,7 +132,10 @@ func (c *Canonical) URL(r *http.Request) string {
 	if host := shared.Host(r.URL.Path); host != "" {
 		return c.Scheme() + "://" + host + path
 	}
-	return c.Origin(r) + path
+	if origin := c.Origin(r); origin != "" {
+		return origin + path
+	}
+	return ""
 }
 
 // SharedPages resolves the shared-content tenant and the blog posts it serves
@@ -183,13 +198,13 @@ func (s SharedPages) IsCanonicalOn(host, path string) bool {
 // shared resolves the shared-content tenant and, when withBlog is set, the
 // blog posts its flavor serves (by the same rule as the blog route).
 func (c *Canonical) shared(r *http.Request, withBlog bool) SharedPages {
-	if c == nil || c.tenant == nil {
+	if c == nil || c.tenant == nil || c.sharedContentSlug == "" {
 		return SharedPages{}
 	}
-	home, ok := c.tenant.GetTenantBySlug(SharedContentSlug)
+	home, ok := c.tenant.GetTenantBySlug(c.sharedContentSlug)
 	host := c.tenant.TenantHost(home.Slug.String)
 	if !ok || !home.Discoverable || host == "" {
-		c.debug(r.Context(), "no discoverable shared-content tenant host, shared pages stay on the request host", "slug", SharedContentSlug)
+		c.debug(r.Context(), "no discoverable shared-content tenant host, shared pages stay on the request host", "slug", c.sharedContentSlug)
 		return SharedPages{}
 	}
 	pages := SharedPages{host: host}

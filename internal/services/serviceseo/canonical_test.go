@@ -26,8 +26,9 @@ func TestCanonicalOwnerHost(t *testing.T) {
 	accessURL, err := url.Parse("https://legacy.chronicleclassic.com")
 	require.NoError(t, err)
 	canonical := serviceseo.NewCanonical(serviceseo.CanonicalOptions{
-		AccessURL: accessURL,
-		Tenant:    servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", tenant("open", true), tenant("hidden", false)),
+		SharedContentSlug: "forever",
+		AccessURL:         accessURL,
+		Tenant:            servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", tenant("open", true), tenant("hidden", false)),
 	})
 	ctx := context.Background()
 	const requestHost = "legacy.chronicleclassic.com"
@@ -46,8 +47,9 @@ func TestCanonicalSharedPages(t *testing.T) {
 	accessURL, err := url.Parse("http://legacy.chronicleclassic.com")
 	require.NoError(t, err)
 	canonical := serviceseo.NewCanonical(serviceseo.CanonicalOptions{
-		AccessURL: accessURL,
-		Tenant:    servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", tenant(serviceseo.SharedContentSlug, true)),
+		SharedContentSlug: "forever",
+		AccessURL:         accessURL,
+		Tenant:            servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", tenant("forever", true)),
 	})
 	r := httptest.NewRequest(http.MethodGet, "http://legacy.chronicleclassic.com/privacy", nil)
 	require.Equal(t, "http://forever.chronicleclassic.com/privacy", canonical.URL(r), "the scheme follows the access URL")
@@ -59,5 +61,49 @@ func TestCanonicalSharedPages(t *testing.T) {
 	require.True(t, shared.IsCanonicalOn("legacy.chronicleclassic.com", "/recent"))
 
 	r.Host = "bad host<"
-	require.Equal(t, "chronicleclassic.com", serviceseo.RequestHost(r))
+	require.Equal(t, "legacy.chronicleclassic.com", canonical.RequestHost(r))
+}
+
+func TestCanonicalConfiguredHost(t *testing.T) {
+	t.Parallel()
+	accessURL, err := url.Parse("https://legacy.example.org")
+	require.NoError(t, err)
+	canonical := serviceseo.NewCanonical(serviceseo.CanonicalOptions{AccessURL: accessURL})
+	for _, host := range []string{"", "bad host<", "host\"injection"} {
+		t.Run(host, func(t *testing.T) {
+			t.Parallel()
+			r := httptest.NewRequest(http.MethodGet, "https://tenant.example.org/recent", nil)
+			r.Host = host
+			require.Equal(t, "legacy.example.org", canonical.RequestHost(r))
+			require.Equal(t, "https://legacy.example.org/recent", canonical.URL(r))
+			bare := serviceseo.NewCanonical(serviceseo.CanonicalOptions{})
+			require.Empty(t, bare.RequestHost(r))
+			require.Empty(t, bare.Origin(r))
+			require.Empty(t, bare.URL(r))
+		})
+	}
+	r := httptest.NewRequest(http.MethodGet, "https://tenant.example.org/recent", nil)
+	require.Equal(t, "https://tenant.example.org/recent", canonical.URL(r))
+}
+
+func TestCanonicalSharedTenantConfiguration(t *testing.T) {
+	t.Parallel()
+	accessURL, err := url.Parse("https://legacy.example.org")
+	require.NoError(t, err)
+	tenants := servicetenant.NewTestWithTenants(*accessURL, "example.org", tenant("community", true), tenant("hidden", false))
+	for _, slug := range []string{"community", "", "missing", "hidden"} {
+		t.Run(slug, func(t *testing.T) {
+			t.Parallel()
+			canonical := serviceseo.NewCanonical(serviceseo.CanonicalOptions{
+				AccessURL: accessURL, Tenant: tenants, SharedContentSlug: slug,
+			})
+			r := httptest.NewRequest(http.MethodGet, "https://legacy.example.org/privacy", nil)
+			want := "https://legacy.example.org/privacy"
+			if slug == "community" {
+				want = "https://community.example.org/privacy"
+				require.False(t, canonical.SharedPages(r).IsCanonicalOn("legacy.example.org", "/privacy"))
+			}
+			require.Equal(t, want, canonical.URL(r))
+		})
+	}
 }

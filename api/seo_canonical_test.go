@@ -19,7 +19,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/frontend"
 	"github.com/Emyrk/chronicle/internal/services/servicedataset"
-	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 )
 
@@ -56,7 +55,7 @@ func newCanonicalSite(t *testing.T, foreverDiscoverable bool) canonicalSite {
 	t.Helper()
 	vanilla, turtle := uuid.New(), uuid.New()
 	forever := database.Tenant{
-		ID: uuid.New(), Slug: pgtype.Text{String: serviceseo.SharedContentSlug, Valid: true},
+		ID: uuid.New(), Slug: pgtype.Text{String: "forever", Valid: true},
 		Discoverable: foreverDiscoverable, DefaultDatasetID: uuid.NullUUID{UUID: vanilla, Valid: true},
 	}
 	everlook := database.Tenant{
@@ -79,8 +78,9 @@ func newCanonicalSite(t *testing.T, foreverDiscoverable bool) canonicalSite {
 	}
 
 	api := &API{Opts: &Options{
-		AccessURL: accessURL,
-		Tenant:    servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", forever, everlook),
+		SharedContentSlug: "forever",
+		AccessURL:         accessURL,
+		Tenant:            servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", forever, everlook),
 		Dataset: servicedataset.NewTest(canonicalDatasets{byID: map[uuid.UUID]database.Dataset{
 			vanilla: {ID: vanilla, DefaultFlavor: []string{"vanilla"}},
 			turtle:  {ID: turtle, DefaultFlavor: []string{"vanilla", "turtle"}},
@@ -240,4 +240,23 @@ func TestSitemapResolvesSharedContentOnce(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, datasets.calls[home], "the shared-content tenant's flavor")
 	require.Equal(t, 1, datasets.calls[own], "the serving site's flavor, for its blog posts")
+}
+
+func TestCanonicalSharedTenantOverride(t *testing.T) {
+	t.Parallel()
+	site := newCanonicalSite(t, true)
+	site.api.Opts.SharedContentSlug = "everlook"
+	r := site.request(nil, "https://legacy.chronicleclassic.com/blog/turtle-only")
+	require.Equal(t, "https://everlook.chronicleclassic.com/blog/turtle-only", site.api.canonical().URL(r))
+	require.False(t, site.api.canonical().SharedPages(r).IsCanonicalOn("legacy.chronicleclassic.com", "/blog/turtle-only"))
+	site.api.Opts.SharedContentSlug = ""
+	require.Equal(t, "https://legacy.chronicleclassic.com/blog/turtle-only", site.api.canonical().URL(r))
+}
+
+func TestSitemapHostWithoutConfiguration(t *testing.T) {
+	t.Parallel()
+	api := &API{Opts: &Options{}}
+	r := httptest.NewRequest(http.MethodGet, "https://arbitrary.example.org/sitemap.xml", nil)
+	require.Empty(t, api.canonicalHosts(r), "unconfigured request hosts must not expand the sitemap cache key space")
+	require.Empty(t, api.sitemapHost(r))
 }

@@ -89,6 +89,8 @@ func browserOnlyMiddleware(accessURL *url.URL) func(http.Handler) http.Handler {
 }
 
 type Options struct {
+	// SharedContentSlug selects the canonical tenant for shared content; empty keeps the request host.
+	SharedContentSlug string
 	// Blog overrides the constructed interaction service, primarily for tests.
 	Blog                  *serviceblog.Service
 	Logger                *slog.Logger

@@ -14,7 +14,6 @@ import (
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
-	"github.com/Emyrk/chronicle/internal/services/serviceseo"
 	"github.com/Emyrk/chronicle/internal/services/servicetenant"
 	"github.com/Emyrk/chronicle/internal/testutil"
 )
@@ -111,8 +110,8 @@ func TestSharedStaticPageCanonical(t *testing.T) {
 	t.Parallel()
 	accessURL, err := url.Parse("https://legacy.chronicleclassic.com")
 	require.NoError(t, err)
-	forever := database.Tenant{Slug: pgtype.Text{String: serviceseo.SharedContentSlug, Valid: true}, Discoverable: true}
-	svc := New(Options{AccessURL: accessURL, Tenant: servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", forever)})
+	forever := database.Tenant{Slug: pgtype.Text{String: "forever", Valid: true}, Discoverable: true}
+	svc := New(Options{SharedContentSlug: "forever", AccessURL: accessURL, Tenant: servicetenant.NewTestWithTenants(*accessURL, "chronicleclassic.com", forever)})
 
 	resolve := func(path string) string {
 		for _, route := range svc.Routes() {
@@ -127,4 +126,21 @@ func TestSharedStaticPageCanonical(t *testing.T) {
 	require.Equal(t, "https://forever.chronicleclassic.com/privacy", resolve("/privacy"))
 	require.Equal(t, "https://forever.chronicleclassic.com/tools", resolve("/tools"))
 	require.Equal(t, "https://legacy.chronicleclassic.com/recent", resolve("/recent"))
+}
+
+func TestConfiguredOGHostFallback(t *testing.T) {
+	t.Parallel()
+	accessURL, err := url.Parse("https://legacy.example.org")
+	require.NoError(t, err)
+	svc := New(Options{AccessURL: accessURL})
+	r := httptest.NewRequest(http.MethodGet, "https://tenant.example.org/privacy", nil)
+	r.Host = "bad host<"
+	require.Equal(t, "legacy.example.org", svc.ogHost(r))
+	for _, route := range svc.Routes() {
+		if route.Pattern == "/privacy" {
+			require.Equal(t, "https://legacy.example.org/privacy", route.Resolve(r).URL)
+			return
+		}
+	}
+	t.Fatal("privacy route missing")
 }

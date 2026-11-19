@@ -16,10 +16,10 @@ import (
 	"github.com/Emyrk/chronicle/api/chronauth/authkeys"
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpmw"
-	"github.com/Emyrk/chronicle/internal/itempricing"
-	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/internal/itempricing"
 	"github.com/Emyrk/chronicle/internal/leaderboardconfig"
+	"github.com/Emyrk/chronicle/internal/services"
 	"github.com/Emyrk/chronicle/internal/services/serviceaccessurl"
 	"github.com/Emyrk/chronicle/internal/services/serviceapplication"
 	"github.com/Emyrk/chronicle/internal/services/serviceassets"
@@ -99,6 +99,7 @@ type Service struct {
 	shortLinkDomain          string
 	ogServiceURL             *url.URL
 	ogSigningKey             string
+	seoSharedContentSlug     string
 	landingFeaturedID        string
 	clientUploadsDisabled    bool
 	zugzugURL                string
@@ -270,14 +271,15 @@ func (s *Service) Start(ctx context.Context) error {
 	billingService.SetAccessURL(au)
 
 	ogSvc := serviceog.New(serviceog.Options{
-		Logger:       logger,
-		Zed:          zed,
-		Chronicle:    chron,
-		Tenant:       tenantSvc,
-		Dataset:      datasetSvc,
-		AccessURL:    au,
-		OGServiceURL: ogServiceURL,
-		OGSigningKey: s.ogSigningKey,
+		SharedContentSlug: s.seoSharedContentSlug,
+		Logger:            logger,
+		Zed:               zed,
+		Chronicle:         chron,
+		Tenant:            tenantSvc,
+		Dataset:           datasetSvc,
+		AccessURL:         au,
+		OGServiceURL:      ogServiceURL,
+		OGSigningKey:      s.ogSigningKey,
 		PlayerCareer: func(ctx context.Context, tenant, realm uuid.UUID, guid string) (serviceratings.PlayerCareerResult, error) {
 			return serviceratings.ReadPlayerCareer(ctx, database.New(pool), tenant, realm, guid)
 		},
@@ -289,6 +291,7 @@ func (s *Service) Start(ctx context.Context) error {
 	servicechoose.Choose(s.broker).SetOGImager(ogSvc)
 
 	handler, err := api.New(ctx, api.Options{
+		SharedContentSlug:     s.seoSharedContentSlug,
 		Logger:                logger,
 		Storage:               st,
 		Chronicle:             chron,
@@ -480,6 +483,13 @@ func (s *Service) Options() serpent.OptionSet {
 			Env:         "CHRONICLE_SHORT_LINK_DOMAIN",
 			Default:     "",
 			Value:       serpent.StringOf(&s.shortLinkDomain),
+		},
+		{
+			Name:        "SEO Shared Content Tenant",
+			Description: "Tenant slug canonical for shared pages and blog posts it serves. Empty keeps shared content on the request host.",
+			Flag:        "seo-shared-content-tenant",
+			Env:         "CHRONICLE_SEO_SHARED_CONTENT_TENANT",
+			Value:       serpent.StringOf(&s.seoSharedContentSlug),
 		},
 		{
 			Name:        "OG Service URL",
