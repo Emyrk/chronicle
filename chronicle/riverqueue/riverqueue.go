@@ -122,9 +122,10 @@ func (q *Queues) Start(ctx context.Context) error {
 		Middleware:   WorkerMiddleware(q.opts.Logger),
 		Hooks:        []rivertype.Hook{q.metrics.hook()},
 		PeriodicJobs: q.periodicJobs,
-		// Retain all jobs
-		// TODO: Create our own reaper to clean up old jobs after a certain period
-		CompletedJobRetentionPeriod: time.Hour * 24 * 30, // 30 days
+		// Use River's built-in cleaner, keeping failed jobs longer for investigation.
+		CompletedJobRetentionPeriod: time.Hour * 24 * 7,  // 7 days
+		CancelledJobRetentionPeriod: time.Hour * 24 * 7,  // 7 days
+		DiscardedJobRetentionPeriod: time.Hour * 24 * 30, // 30 days
 		RescueStuckJobsAfter:        time.Minute * 60,
 		JobTimeout:                  time.Minute * 30,
 	})
