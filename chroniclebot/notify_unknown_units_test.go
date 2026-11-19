@@ -51,11 +51,11 @@ func TestUnknownUnitNotificationOnePerJob(t *testing.T) {
 	require.True(t, job.InsertOpts().UniqueOpts.ByArgs)
 	require.Zero(t, job.InsertOpts().UniqueOpts.ByPeriod)
 	// Even after the local window expires, retry evidence keeps the River key.
-	now = now.Add(4 * time.Hour)
+	now = now.Add(72 * time.Hour)
 	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 123, reportURL, zones[:1]))
 	require.Equal(t, job.UniqueKey, queue.jobs[1].UniqueKey)
 	require.Equal(t, job.ChannelID, queue.jobs[1].ChannelID)
-	now = now.Add(4 * time.Hour)
+	now = now.Add(72 * time.Hour)
 	require.NoError(t, EnqueueUnknownUnitNotification(ctx, queue, bot, uuid.Nil, 124, reportURL, zones))
 	require.NotEqual(t, job.UniqueKey, queue.jobs[2].UniqueKey)
 	require.False(t, ArgsNotifyAdmin{}.InsertOpts().UniqueOpts.ByArgs)
