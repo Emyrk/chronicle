@@ -41,6 +41,15 @@ var knownUrsolObjects = map[uint32]Category{
 	181102: CategoryObject, // Lightwell
 }
 
+// knownForeverCreatures provides semantic categories only, not affiliation,
+// ownership, boss roles, or activity/lifetime rules.
+var knownForeverCreatures = map[uint32]Category{
+	10719:  CategoryOrdinary, // Herald of Thrall
+	1938:   CategoryOrdinary, // Dalar Dawnweaver
+	4949:   CategoryOrdinary, // Thrall
+	268744: CategoryGuardian, // Frog Familiar
+}
+
 // CategoryIdentifier supplies zone definitions without coupling the shared unit
 // database to an instance or retaining zone classifications across instances.
 type CategoryIdentifier interface {
@@ -77,6 +86,12 @@ func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Catego
 			}
 		}
 		if category, ok := knownObjects[entry]; ok {
+			return category
+		}
+	}
+	if (g.IsCreature() || g.IsVehicle()) && us.flavor.Has(database.FlavorWoWForever) {
+		entry, _ := g.GetEntry()
+		if category, ok := knownForeverCreatures[entry]; ok {
 			return category
 		}
 	}

@@ -589,6 +589,14 @@ func OnyxiaHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	return idf
 }
 
+func RagefireChasmIdentifier(fl database.WoWFlavor) *identifier.Identifier {
+	hostile := RagefireChasmHostiles()
+	if fl.Has(database.FlavorWoWForever) {
+		LoadAdds(hostile, map[uint32]string{8996: "Voidwalker Minion"})
+	}
+	return identifier.NewIdentifier(hostile)
+}
+
 func RagefireChasmHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
@@ -2088,6 +2096,18 @@ func MaraudonHostiles() map[uint32]Identity {
 		13601: "Tinkerer Gizlock",
 	})
 	return hostile
+}
+
+func RuinsOfLordaeronIdentifier(fl database.WoWFlavor) *identifier.Identifier {
+	hostile := RuinsOfLordaeronHostiles()
+	if fl.Has(database.FlavorWoWForever) {
+		LoadAdds(hostile, map[uint32]string{
+			250619: "Broodwidow",
+			250623: "Mangled Cadaver",
+			250650: "Wailing Banshee",
+		})
+	}
+	return identifier.NewIdentifier(hostile)
 }
 
 func RuinsOfLordaeronHostiles() map[uint32]Identity {

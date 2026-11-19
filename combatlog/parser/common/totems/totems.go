@@ -55,6 +55,7 @@ func init() {
 	// Verified ranks only: spells 10408, 25908 and 10627 have duration index 4
 	// (120 seconds) in Turtle Spell.dbc, matching ClassicDB's two-minute duration.
 	register("Stoneskin Totem", modifierTotemicMastery,
+		variant{id: 5873, duration: 120 * time.Second}, // Rank I, spell 8071
 		variant{id: 7368, duration: 120 * time.Second}) // Rank VI
 	register("Tranquil Air Totem", modifierTotemicMastery,
 		variant{id: 15803, duration: 120 * time.Second})

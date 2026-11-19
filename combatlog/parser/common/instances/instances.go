@@ -228,7 +228,7 @@ var (
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"ragefire chasm", "怒焰裂谷"},
 		MapIDs:    []uint32{389},
-		Hostiles:  FromMap(RagefireChasmHostiles()),
+		Hostiles:  RagefireChasmIdentifier,
 		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
 			return RagefireChasmSpeedrunRequirements()
 		},
@@ -501,7 +501,7 @@ var (
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"ruins of lordaeron"},
 		MapIDs:    []uint32{2999},
-		Hostiles:  FromMap(RuinsOfLordaeronHostiles()),
+		Hostiles:  RuinsOfLordaeronIdentifier,
 	}
 )
 
