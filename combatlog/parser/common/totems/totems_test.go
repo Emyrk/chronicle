@@ -61,3 +61,16 @@ func TestVerifiedMCTotems(t *testing.T) {
 		}
 	}
 }
+
+func TestBrainWashTotem(t *testing.T) {
+	t.Parallel()
+	want := Totem{ID: 15112, Name: "Brain Wash Totem", NormalDuration: 240 * time.Second}
+	for _, high := range []uint64{0xF130000000000000, 0xF110000000000000, 0xF140000000000000, 0xF150000000000000} {
+		got, ok := IsTotem(totemEntryGUID(high, 15112))
+		require.Equal(t, high == 0xF130000000000000, ok)
+		if ok {
+			require.Equal(t, want, got)
+			require.Equal(t, 240*time.Second, got.MaxDuration())
+		}
+	}
+}

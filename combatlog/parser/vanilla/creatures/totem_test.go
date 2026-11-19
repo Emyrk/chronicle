@@ -84,3 +84,33 @@ func TestSuperiorHealingWardFactoryAndLifetime(t *testing.T) {
 		require.Nil(t, c)
 	}
 }
+
+func TestBrainWashTotemGlobalFactoryAndLifetime(t *testing.T) {
+	t.Parallel()
+	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla}, {database.FlavorTurtle}, {database.FlavorVanilla, database.FlavorOctoWoW, database.FlavorNightmareOfUrsol}, {database.FlavorWrath}} {
+		units := unitdb.New(flavor)
+		all := characters.NewCharacters(units, creatures.VanillaCharacterFactories(flavor), identifier.NewIdentifier(nil))
+		id := guid.GUID(0xF130003B08000001)
+		now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		char, _ := all.Add(id, now)
+		require.IsType(t, &creatures.Totem{}, char)
+		require.Equal(t, unitdb.CategoryTotem, units.Category(id))
+		totem := char.(*creatures.Totem)
+		require.Equal(t, 240*time.Second, totem.Self.MaxDuration())
+		totem.Start("summon", &messages.SpellGo{MessageBase: messages.Base(now), Caster: id})
+		current, ok := totem.Activity.Current()
+		require.True(t, ok)
+		require.Equal(t, now.Add(240*time.Second), current.Meta.MaxLifetime)
+		// Regular bumps keep inactivity from expiring before the fixed lifetime.
+		for seconds := 10; seconds < 240; seconds += 10 {
+			at := now.Add(time.Duration(seconds) * time.Second)
+			totem.Bump("pulse", &messages.SpellGo{MessageBase: messages.Base(at), Caster: id})
+			current.HandleTimeout(at)
+			require.True(t, totem.IsActive())
+		}
+		current.HandleTimeout(now.Add(239 * time.Second))
+		require.True(t, totem.IsActive())
+		current.HandleTimeout(now.Add(240*time.Second + time.Nanosecond))
+		require.False(t, totem.IsActive())
+	}
+}

@@ -691,12 +691,11 @@ func ZulGurubHostiles(fl database.WoWFlavor) *identifier.Identifier {
 		15082: "Gri'lek",
 	})
 
+	if fl.Has(database.FlavorVanillaPlus, database.FlavorNightmareOfUrsol) {
+		LoadAdds(hostile, map[uint32]string{15111: "Mad Servant", 15146: "Mad Voidwalker"})
+	}
 	if fl.Has(database.FlavorVanillaPlus) {
-		LoadAdds(hostile, map[uint32]string{
-			15111: "Mad Servant",
-			15146: "Mad Voidwalker",
-			25040: "Caverngloom Crocolisk",
-		})
+		LoadAdds(hostile, map[uint32]string{25040: "Caverngloom Crocolisk"})
 		LoadBosses(hostile, map[uint32]string{
 			25031: "Azus the Bloodseeker",
 			25030: "The Nameless Hermit",
@@ -704,6 +703,10 @@ func ZulGurubHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	}
 
 	id := identifier.NewIdentifier(hostile)
+	if fl.Has(database.FlavorNightmareOfUrsol) {
+		id.AddEntryId(15141, Identity{Name: "Portal of Madness", Category: unitdb.CategoryScriptedObject, Affiliation: types.AffiliationUnknown})
+		id.AddObjectEntryId(177764, Identity{Name: "Inferno", Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
+	}
 	if fl.Has(database.FlavorTurtle) {
 		// Category-only identities verified in Turtle Zul'Gurub logs. Do not
 		// infer hostility or activity behavior from their semantic category.

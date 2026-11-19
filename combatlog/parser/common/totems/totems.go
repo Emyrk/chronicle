@@ -48,6 +48,10 @@ const (
 )
 
 func init() {
+	// ClassicDB spell 24262 summons entry 15112 for 240 seconds. No player
+	// talent or equipment duration modifiers apply to this encounter totem.
+	register("Brain Wash Totem", 0, variant{id: 15112, duration: 240 * time.Second})
+
 	// Verified ranks only: spells 10408, 25908 and 10627 have duration index 4
 	// (120 seconds) in Turtle Spell.dbc, matching ClassicDB's two-minute duration.
 	register("Stoneskin Totem", modifierTotemicMastery,
