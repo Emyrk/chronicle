@@ -77,7 +77,7 @@ function loadPlayerLifeState(
         },
         streams,
       };
-      const response = await executeRequest(request);
+      const response = await executeRequest(request, context.instance.id);
       if (response.error) throw new Error(response.error);
       const result = response.result as Pick<PlayerLifeStateResult, "transitions">;
       publish(entry, {

@@ -7,8 +7,11 @@
  */
 
 import { processWorkerRequest } from "./panelRequestProcessor";
-import type { WorkerRequest } from "./processorTypes";
+import { resolveWorkerRequest, type WorkerTransportRequest } from "./workerStreamCache";
 
-self.onmessage = (e: MessageEvent<WorkerRequest>) => {
-  self.postMessage(processWorkerRequest(e.data));
+const streamCache = new Map<number, Uint8Array>();
+
+self.onmessage = (e: MessageEvent<WorkerTransportRequest>) => {
+  const request = resolveWorkerRequest(e.data, streamCache);
+  self.postMessage(processWorkerRequest(request));
 };
