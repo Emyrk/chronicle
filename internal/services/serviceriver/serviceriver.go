@@ -131,6 +131,7 @@ func (s *Service) Start(ctx context.Context) error {
 		// moved to the shared worker.
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyCharacterLinkDecision())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyAdmin())
+		riverqueue.AddWorker(q, bot.NewWorkerDeleteDiscordMessage())
 		riverqueue.AddWorker(q, bot.NewWorkerAnnounceRaidLog())
 		riverqueue.AddWorker(q, bot.NewWorkerNotifyUploadProcessed())
 		riverqueue.AddWorker(q, bot.NewWorkerDispatchDiscordMembershipGrantChecks())

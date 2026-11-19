@@ -46,6 +46,7 @@ func TestUnknownUnitNotificationOnePerJob(t *testing.T) {
 	require.Contains(t, job.Fields[0].Value, "2 zones; 27 unknown GUIDs")
 	require.Equal(t, AdminNotificationField{Name: "Zone A", Value: "2 distinct entries; 7 GUIDs (per-instance sum)"}, job.Fields[1])
 	require.Equal(t, AdminNotificationField{Name: "Zone B", Value: "4 distinct entries; 20 GUIDs (per-instance sum)"}, job.Fields[2])
+	require.Equal(t, 24*time.Hour, job.ExpireAfter)
 	require.Equal(t, 2, job.InsertOpts().MaxAttempts)
 	require.Equal(t, 3, ArgsNotifyAdmin{}.InsertOpts().MaxAttempts)
 	require.True(t, job.InsertOpts().UniqueOpts.ByArgs)

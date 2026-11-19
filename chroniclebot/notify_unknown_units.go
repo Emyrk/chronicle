@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -65,6 +66,7 @@ func EnqueueUnknownUnitNotification(ctx context.Context, queue AdminNotification
 		// No rolling time bucket: retries of this parse job retain the same key.
 		UniqueKey:   fmt.Sprintf("unknown-unit-parse-job:%d", jobID),
 		MaxAttempts: 2,
+		ExpireAfter: 24 * time.Hour,
 	})
 	succeeded = err == nil
 	return err

@@ -34,6 +34,8 @@ type ArgsNotifyAdmin struct {
 	DeduplicateFor time.Duration `json:"-"`
 	// MaxAttempts overrides the default only at insertion; River persists the limit.
 	MaxAttempts int `json:"-"`
+	// ExpireAfter opts into durable deletion after successful delivery. Zero keeps the message.
+	ExpireAfter time.Duration `json:"expire_after,omitempty"`
 }
 
 func (ArgsNotifyAdmin) Kind() string { return KindNotifyAdmin }
@@ -70,11 +72,12 @@ func EnqueueAdminNotification(ctx context.Context, queue AdminNotificationInsert
 
 type WorkerNotifyAdmin struct {
 	river.WorkerDefaults[ArgsNotifyAdmin]
-	bot *Bot
+	bot   *Bot
+	queue AdminNotificationInserter
 }
 
 func (b *Bot) NewWorkerNotifyAdmin() river.Worker[ArgsNotifyAdmin] {
-	return &WorkerNotifyAdmin{bot: b}
+	return &WorkerNotifyAdmin{bot: b, queue: b.queue}
 }
 
 func adminNotificationMessage(args ArgsNotifyAdmin) *discordgo.MessageSend {
@@ -98,9 +101,23 @@ func (w *WorkerNotifyAdmin) Work(ctx context.Context, job *river.Job[ArgsNotifyA
 		return errors.New("discord bot session unavailable")
 	}
 	args := job.Args
-	_, err := w.bot.session.ChannelMessageSendComplex(args.ChannelID, adminNotificationMessage(args), discordRequestOption(ctx, "admin_notification"))
+	if args.ExpireAfter > 0 && w.queue == nil {
+		return errors.New("admin notification expiration queue unavailable")
+	}
+	message, err := w.bot.session.ChannelMessageSendComplex(args.ChannelID, adminNotificationMessage(args), discordRequestOption(ctx, "admin_notification"))
 	if err != nil {
 		return fmt.Errorf("send admin notification to channel %s: %w", args.ChannelID, err)
+	}
+	if args.ExpireAfter > 0 {
+		_, err := w.queue.Insert(ctx, ArgsDeleteDiscordMessage{ChannelID: args.ChannelID, MessageID: message.ID}, &river.InsertOpts{
+			ScheduledAt: time.Now().Add(args.ExpireAfter),
+		})
+		if err != nil {
+			// Do not leave a permanent message when scheduling fails. Delivery can
+			// retry after removing this attempt, as with other Discord send failures.
+			deleteErr := deleteDiscordMessage(ctx, w.bot.session, args.ChannelID, message.ID)
+			return errors.Join(fmt.Errorf("schedule admin notification expiration: %w", err), deleteErr)
+		}
 	}
 	return nil
 }
