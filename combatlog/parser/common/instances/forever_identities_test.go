@@ -83,6 +83,12 @@ func TestFinalizeForeverCategoriesAndOwnership(t *testing.T) {
 			require.NoError(t, err)
 			for _, entry := range entries {
 				id := creatureGUID(entry, 1)
+				if entry == 10719 || entry == 1938 || entry == 4949 {
+					require.NotContains(t, result.PersistedUnits, id)
+					require.NotContains(t, result.UnitCategories, id)
+					require.NotContains(t, result.UnknownUnits, entry)
+					continue
+				}
 				want := unitdb.CategoryUnknown
 				if entry == 5873 {
 					want = unitdb.CategoryTotem

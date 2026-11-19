@@ -2,6 +2,15 @@ package messages
 
 import "github.com/Emyrk/chronicle/combatlog/parser/guid"
 
+// ignoredObservedCreatures are remote world-buff NPCs whose references do not
+// establish instance presence, regardless of server flavor. Keep their events
+// intact for buff attribution; only catalogue membership is filtered.
+var ignoredObservedCreatures = map[uint32]string{
+	10719: "Herald of Thrall",
+	1938:  "Dalar Dawnweaver",
+	4949:  "Thrall",
+}
+
 // ObservedGUIDs is metadata membership, not combat activity. Affects deliberately
 // omits some passive references, so never use it alone to catalogue an instance.
 func ObservedGUIDs(m Message) []guid.GUID {
@@ -42,6 +51,13 @@ func ObservedGUIDs(m Message) []guid.GUID {
 	for _, id := range ids {
 		if id.IsZero() {
 			continue
+		}
+		if id.IsCreature() || id.IsVehicle() {
+			if entry, ok := id.GetEntry(); ok {
+				if _, ignored := ignoredObservedCreatures[entry]; ignored {
+					continue
+				}
+			}
 		}
 		if _, exists := seen[id]; exists {
 			continue
