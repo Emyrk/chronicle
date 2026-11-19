@@ -46,6 +46,7 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 		NewCoreRager,
 		NewGolemaggCharacter(flavor),
 		// Blackwing Lair
+		NewBWLPassiveController,
 		NewBroodlordLashlayer,
 		NewBroodlordWhelp,
 		NewRazorgore(flavor),
@@ -107,8 +108,6 @@ func VanillaCharacterFactories(flavor database.WoWFlavor) []characters.Character
 	// ── Nightmare of Ursol content (Turtle, OctoWoW) ───────────────
 	if flavor.Has(database.FlavorNightmareOfUrsol) {
 		cres = append(cres, characters.CreatureFactories(
-			// Blackwing Lair
-			NewBWLPassiveController,
 			// Zul'Gurub
 			NewPortalOfMadness,
 			// Timbermaw Hold

@@ -21,12 +21,7 @@ func TestBWLPassiveControllersNeverActive(t *testing.T) {
 			all := characters.NewCharacters(unitdb.New(flavor), VanillaCharacterFactories(flavor), identifier.NewIdentifier(nil))
 			id := creatureEntryGUID(0xF130000000000000, entry)
 			char, _ := all.Add(id, now)
-			ignored := flavor.Has(database.FlavorNightmareOfUrsol)
-			if ignored {
-				require.IsType(t, characters.NeverActive{}, char)
-			} else {
-				require.IsType(t, &characters.Common{}, char)
-			}
+			require.IsType(t, characters.NeverActive{}, char)
 			player := guid.GUID(1)
 			for _, msg := range []messages.Message{
 				&messages.UnitCombatState{MessageBase: messages.Base(now), Unit: id, InCombat: true},
@@ -37,13 +32,8 @@ func TestBWLPassiveControllersNeverActive(t *testing.T) {
 				&messages.Damage{MessageBase: messages.Base(now), Caster: &player, Target: id, Amount: 1},
 			} {
 				require.NoError(t, char.Process(msg))
-				if ignored {
-					require.False(t, char.IsActive())
-					require.Empty(t, char.Periods())
-				}
-			}
-			if !ignored {
-				require.True(t, char.IsActive())
+				require.False(t, char.IsActive())
+				require.Empty(t, char.Periods())
 			}
 			for _, high := range []uint64{0xF110000000000000, 0xF140000000000000, 0xF150000000000000} {
 				c, ok := NewBWLPassiveController(creatureEntryGUID(high, entry), all)

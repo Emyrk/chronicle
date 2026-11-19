@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestBWLUrsolPassiveIdentities(t *testing.T) {
+func TestBWLPassiveIdentities(t *testing.T) {
 	t.Parallel()
 	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla, database.FlavorNightmareOfUrsol}, {database.FlavorTurtle}, {database.FlavorVanilla}, {database.FlavorVanillaPlus}, {database.FlavorWoWForever}} {
 		db := unitdb.New(flavor)
@@ -27,7 +27,7 @@ func TestBWLUrsolPassiveIdentities(t *testing.T) {
 				id := guid.GUID(high | uint64(tc.entry)<<24 | 1)
 				want := unitdb.CategoryUnknown
 				identity := Identity{Affiliation: types.AffiliationUnknown}
-				if flavor.Has(database.FlavorNightmareOfUrsol) && (id.IsCreature() || id.IsVehicle()) {
+				if id.IsCreature() || id.IsVehicle() {
 					want = tc.category
 					identity = Identity{Name: tc.name, Category: want, Affiliation: types.AffiliationUnknown}
 				}
@@ -49,12 +49,8 @@ func TestBWLUrsolPassiveIdentities(t *testing.T) {
 		result, err := h.Finalize(t.Context())
 		require.NoError(t, err)
 		require.Len(t, result.PersistedUnits, 2)
-		if flavor.Has(database.FlavorNightmareOfUrsol) {
-			require.Empty(t, result.UnknownUnits)
-			require.Equal(t, unitdb.CategoryOrdinary, result.UnitCategories[creatureGUID(10162, 1)])
-			require.Equal(t, unitdb.CategoryScriptedObject, result.UnitCategories[creatureGUID(14453, 1)])
-		} else {
-			require.Len(t, result.UnknownUnits, 2)
-		}
+		require.Empty(t, result.UnknownUnits)
+		require.Equal(t, unitdb.CategoryOrdinary, result.UnitCategories[creatureGUID(10162, 1)])
+		require.Equal(t, unitdb.CategoryScriptedObject, result.UnitCategories[creatureGUID(14453, 1)])
 	}
 }

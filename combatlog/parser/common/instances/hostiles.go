@@ -1344,10 +1344,8 @@ func BlackwingLairHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	}
 
 	id := identifier.NewIdentifier(hostile)
-	if fl.Has(database.FlavorNightmareOfUrsol) {
-		id.AddEntryId(10162, Identity{Name: "Lord Victor Nefarius", Category: unitdb.CategoryOrdinary, Affiliation: types.AffiliationUnknown})
-		id.AddEntryId(14453, Identity{Name: "Orb of Domination", Category: unitdb.CategoryScriptedObject, Affiliation: types.AffiliationUnknown})
-	}
+	id.AddEntryId(10162, Identity{Name: "Lord Victor Nefarius", Category: unitdb.CategoryOrdinary, Affiliation: types.AffiliationUnknown})
+	id.AddEntryId(14453, Identity{Name: "Orb of Domination", Category: unitdb.CategoryScriptedObject, Affiliation: types.AffiliationUnknown})
 	return id
 }
 
