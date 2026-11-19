@@ -29,7 +29,7 @@ func TestForeverDungeonAddIdentities(t *testing.T) {
 					id := guid.GUID(high | uint64(entry)<<24 | 1)
 					want := unitdb.CategoryUnknown
 					identity := Identity{Affiliation: types.AffiliationUnknown}
-					if (tc.factory == RagefireChasmFactory || flavor.Has(database.FlavorWoWForever)) && (id.IsCreature() || id.IsVehicle()) {
+					if id.IsCreature() || id.IsVehicle() {
 						want = unitdb.CategoryOrdinary
 						identity = Identity{Name: name, Affiliation: types.AffiliationHostile}
 					}
@@ -47,10 +47,10 @@ func TestForeverDungeonAddIdentities(t *testing.T) {
 			}
 		}
 	}
-	// Voidwalker Minion is shared vanilla RFC content; Ruins additions remain scoped.
+	// Dungeon-specific lists contain their adds without redundant flavor gates.
 	require.Contains(t, RagefireChasmHostiles(), uint32(8996))
 	for _, entry := range []uint32{250619, 250623, 250650} {
-		require.NotContains(t, RuinsOfLordaeronHostiles(), entry)
+		require.Contains(t, RuinsOfLordaeronHostiles(), entry)
 	}
 }
 
@@ -90,16 +90,15 @@ func TestFinalizeForeverCategoriesAndOwnership(t *testing.T) {
 				if entry == 8996 && factory == RagefireChasmFactory {
 					want = unitdb.CategoryOrdinary
 				}
+				if factory == RuinsOfLordaeronFactory && (entry == 250619 || entry == 250623 || entry == 250650) {
+					want = unitdb.CategoryOrdinary
+				}
 				if flavor.Has(database.FlavorWoWForever) {
 					switch entry {
 					case 10719, 1938, 4949:
 						want = unitdb.CategoryOrdinary
 					case 268744:
 						want = unitdb.CategoryGuardian
-					case 250619, 250623, 250650:
-						if factory == RuinsOfLordaeronFactory {
-							want = unitdb.CategoryOrdinary
-						}
 					}
 				}
 				require.Contains(t, result.PersistedUnits, id)

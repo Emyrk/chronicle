@@ -501,7 +501,7 @@ var (
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"ruins of lordaeron"},
 		MapIDs:    []uint32{2999},
-		Hostiles:  RuinsOfLordaeronIdentifier,
+		Hostiles:  FromMap(RuinsOfLordaeronHostiles()),
 	}
 )
 

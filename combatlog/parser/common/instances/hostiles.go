@@ -2091,21 +2091,12 @@ func MaraudonHostiles() map[uint32]Identity {
 	return hostile
 }
 
-func RuinsOfLordaeronIdentifier(fl database.WoWFlavor) *identifier.Identifier {
-	hostile := RuinsOfLordaeronHostiles()
-	if fl.Has(database.FlavorWoWForever) {
-		LoadAdds(hostile, map[uint32]string{
-			250619: "Broodwidow",
-			250623: "Mangled Cadaver",
-			250650: "Wailing Banshee",
-		})
-	}
-	return identifier.NewIdentifier(hostile)
-}
-
 func RuinsOfLordaeronHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		250619: "Broodwidow",
+		250623: "Mangled Cadaver",
+		250650: "Wailing Banshee",
 		250484: "Spider",
 		250618: "Skeleton",
 		250620: "Shrieking Banshee",
