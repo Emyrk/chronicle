@@ -42,3 +42,48 @@ func TestObservedGUIDsExcludesRaidMarkers(t *testing.T) {
 	}
 	require.Equal(t, []guid.GUID{id}, ObservedGUIDs(&Unit{Info: unitinfo.Info{Guid: id}}))
 }
+
+func TestObservedGUIDsIgnoresRemoteBuffNPCs(t *testing.T) {
+	t.Parallel()
+	player := guid.GUID(1)
+	for _, entry := range []uint32{10719, 1938, 4949} {
+		for _, high := range []uint64{0xF130000000000000, 0xF150000000000000, 0xF110000000000000, 0xF140000000000000, 0} {
+			id := guid.GUID(high | uint64(entry)<<24 | 2)
+			ignored := id.IsCreature() || id.IsVehicle()
+			for _, msg := range []Message{
+				&Aura{Source: &id, Target: player, SpellName: "World buff", Amount: 1},
+				&Aura{Source: &player, Target: id, SpellName: "World buff", Amount: 1},
+				&Damage{Caster: &id, Target: player, Amount: 5},
+				&Unit{Info: unitinfo.Info{Guid: player, Owner: &id, Charm: &id}},
+				&UnitClassificationEvent{Target: player, Owner: &id, Controller: &id},
+				&ThreatTank{Entries: []ThreatTankEntry{{ServerGUID: id.String()}}},
+				&PlayerPosition{PlayerPosition: playerposition.PlayerPosition{Guid: id.String()}},
+				&Versions{Player: &id},
+			} {
+				before := append([]guid.GUID(nil), msg.Affects()...)
+				observed := ObservedGUIDs(msg)
+				require.Equal(t, before, append([]guid.GUID(nil), msg.Affects()...), "must not alter event participants")
+				if ignored {
+					require.NotContains(t, observed, id)
+				} else {
+					require.Contains(t, observed, id)
+				}
+				for _, affected := range before {
+					if affected == player {
+						require.Contains(t, observed, player)
+					}
+				}
+				if aura, ok := msg.(*Aura); ok {
+					require.Equal(t, "World buff", aura.SpellName)
+					require.Equal(t, int32(1), aura.Amount)
+					if aura.Target == player {
+						require.Equal(t, id, *aura.Source)
+					} else {
+						require.Equal(t, player, *aura.Source)
+						require.Equal(t, id, aura.Target)
+					}
+				}
+			}
+		}
+	}
+}

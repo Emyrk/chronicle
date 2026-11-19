@@ -592,6 +592,7 @@ func OnyxiaHostiles(fl database.WoWFlavor) *identifier.Identifier {
 func RagefireChasmHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		8996:  "Voidwalker Minion",
 		11323: "Searing Blade Enforcer",
 		11322: "Searing Blade Cultist",
 		11320: "Earthborer",
@@ -2093,6 +2094,9 @@ func MaraudonHostiles() map[uint32]Identity {
 func RuinsOfLordaeronHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		250619: "Broodwidow",
+		250623: "Mangled Cadaver",
+		250650: "Wailing Banshee",
 		250484: "Spider",
 		250618: "Skeleton",
 		250620: "Shrieking Banshee",
