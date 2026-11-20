@@ -71,29 +71,31 @@ export function WorkshopAgentControl() {
       {mcp.busy && <LoaderCircle aria-label="Agent tool running" className="size-3.5 shrink-0 animate-spin" />}
       <ChevronDown className="size-3.5 shrink-0 opacity-60" />
     </button>}
-    {showPopover && <div role="dialog" aria-label="Coding agent" className="absolute right-0 top-full z-40 mt-1.5 w-96 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-background p-3 text-xs shadow-xl">
-      <div className="flex items-start gap-2.5">
-        <span className={`flex size-7 shrink-0 items-center justify-center rounded-md ${state.badge}`}><Bot className="size-4" /></span>
+    {showPopover && <div role="dialog" aria-label="Coding agent" className="absolute right-0 top-full z-40 mt-1.5 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-background text-xs shadow-xl">
+      <div className="flex items-start gap-3 p-3">
+        <span className={`flex size-8 shrink-0 items-center justify-center rounded-md ${state.badge}`}><Bot className="size-4" /></span>
         <div className="min-w-0 flex-1">
-          <p role="status" className="text-sm font-medium">{state.title}</p>
-          {state.detail && <p className="mt-0.5 text-muted-foreground">{state.detail}</p>}
-          {mcp.active && mcp.lastCall && !mcp.error && <p className="mt-1 text-muted-foreground">
-            Last call <code className="font-mono text-foreground">{mcp.lastCall.toolName}</code>
-            {" · "}{mcp.lastCall.state === "running" ? "running…" : <>{mcp.lastCall.state === "error" && <span className="text-destructive">failed · </span>}{ago(mcp.lastCall.at, now)}</>}
-          </p>}
+          <p role="status" className="text-sm font-medium leading-tight">{state.title}</p>
+          {state.detail && <p className="mt-1 leading-relaxed text-muted-foreground">{state.detail}</p>}
         </div>
       </div>
-      {mcp.error && <p role="alert" className="mt-2 text-destructive">{mcp.error}. Start chronicle-mcp in your agent, check its allowed origins and the browser's local-network permission, then disconnect and retry.</p>}
-      {mcp.actionError && <p role="alert" className="mt-2 text-destructive">{mcp.actionError}</p>}
+      {mcp.active && mcp.lastCall && !mcp.error && <div className="mx-3 mb-3 flex items-center gap-2 rounded-md bg-muted/40 px-2.5 py-1.5">
+        <span className="text-muted-foreground">Last call</span>
+        <code className="min-w-0 truncate font-mono">{mcp.lastCall.toolName}</code>
+        <span className={`ml-auto shrink-0 ${mcp.lastCall.state === "error" ? "text-destructive" : "text-muted-foreground"}`}>
+          {mcp.lastCall.state === "running" ? "running…" : `${mcp.lastCall.state === "error" ? "failed · " : ""}${ago(mcp.lastCall.at, now)}`}</span>
+      </div>}
+      {mcp.error && <p role="alert" className="mx-3 mb-3 rounded-md bg-destructive/10 px-2.5 py-2 leading-relaxed text-destructive">{mcp.error}. Start chronicle-mcp in your agent, check its allowed origins and the browser's local-network permission, then disconnect and retry.</p>}
+      {mcp.actionError && <p role="alert" className="mx-3 mb-3 rounded-md bg-destructive/10 px-2.5 py-2 text-destructive">{mcp.actionError}</p>}
       {mcp.active && <ConnectionDetails mcp={mcp} />}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
+      <div className="flex items-center gap-2 border-t border-border bg-muted/20 px-3 py-2">
+        <p className="min-w-0 flex-1 text-[11px] leading-snug text-muted-foreground" title="Tool output, page URL, player names and encounter data from this tab are sent to your local agent.">Tab data is shared with your agent.</p>
         {mcp.active ? <>
           {mcp.connection?.owner && <button type="button" className={popoverButton} disabled={mcp.revoking || !!mcp.error} onClick={() => void mcp.revoke()}
-            title="Cancel the agent's work and make it select this tab again">{mcp.revoking ? "Revoking…" : "Revoke agent"}</button>}
-          <button type="button" className={popoverButton} onClick={() => { mcp.disconnect(); setOpen(false) }}><Unplug className="size-3.5" /> Disconnect</button>
+            title="Cancel the agent's work and make it select this tab again">{mcp.revoking ? "Revoking…" : "Revoke"}</button>}
+          <button type="button" className={`${popoverButton} hover:border-destructive/50 hover:text-destructive`} onClick={() => { mcp.disconnect(); setOpen(false) }}><Unplug className="size-3.5" /> Disconnect</button>
         </> : <a className={popoverButton} href={MCP_SETUP_URL} target="_blank" rel="noreferrer">Setup guide <ExternalLink className="size-3" /></a>}
       </div>
-      <p className="mt-3 text-muted-foreground">Tool output, player names and encounter data from this tab are sent to your local agent.</p>
     </div>}
   </div>
 }
@@ -120,23 +122,29 @@ function ConnectionDetails({ mcp }: { mcp: LocalMcpContextValue }) {
   const [draft, setDraft] = useState(mcp.name)
   const [copied, setCopied] = useState(false)
   const trimmed = draft.trim()
+  const renamed = trimmed !== mcp.name
+  const valid = !!trimmed && [...trimmed].length <= 80
   const connection = mcp.connection
-  return <div className="mt-3 border-t border-border pt-3">
-    <form className="flex items-end gap-2" onSubmit={event => { event.preventDefault(); mcp.rename(draft) }}>
-      <label className="min-w-0 flex-1">Name your agent sees
-        <input aria-label="Connection name" className="mt-1 w-full rounded border border-border bg-background px-2 py-1" value={draft} onChange={event => setDraft(event.target.value)} />
-      </label>
-      <button type="submit" className="rounded border border-border px-2 py-1 hover:bg-accent disabled:opacity-50" disabled={!trimmed || [...trimmed].length > 80 || trimmed === mcp.name}>Rename</button>
-    </form>
-    {connection && <div className="mt-2 space-y-1 break-words">
-      <p className="flex items-center gap-1">Connection ID <code className="select-all font-mono text-muted-foreground">{connection.id}</code>
-        <button type="button" aria-label="Copy connection ID" className="rounded p-0.5 hover:bg-accent" onClick={() => {
+  return <dl className="grid grid-cols-[4.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1.5 border-t border-border px-3 py-2.5">
+    <dt className="text-muted-foreground" title="The name your agent sees in list_connections">Tab name</dt>
+    <dd><form className="flex items-center gap-1" onSubmit={event => { event.preventDefault(); if (valid && renamed) mcp.rename(draft) }}>
+      <input aria-label="Connection name" value={draft} onChange={event => setDraft(event.target.value)}
+        className="h-7 min-w-0 flex-1 rounded-md border border-transparent bg-muted/40 px-2 outline-none hover:border-border focus:border-primary/60" />
+      {renamed && <button type="submit" disabled={!valid} className="h-7 rounded-md bg-primary px-2 font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50">Save</button>}
+    </form></dd>
+    {connection && <>
+      <dt className="text-muted-foreground">Connection</dt>
+      <dd className="flex min-w-0 items-center gap-1">
+        <code className="min-w-0 truncate font-mono text-muted-foreground" title={connection.id}>{connection.id}</code>
+        <button type="button" aria-label="Copy connection ID" title="Copy connection ID" className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => {
           void navigator.clipboard.writeText(connection.id).then(() => setCopied(true), () => {})
-        }}>{copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}</button></p>
-      {connection.owner ? <p>Agent ID <code className="select-all font-mono text-muted-foreground">{connection.owner.id}</code></p>
-        : <p className="text-muted-foreground">No agent has selected this connection yet.</p>}
-    </div>}
-  </div>
+        }}>{copied ? <Check className="size-3 text-emerald-400" /> : <Copy className="size-3" />}</button>
+      </dd>
+      <dt className="text-muted-foreground">Agent</dt>
+      <dd className="min-w-0 truncate">{connection.owner ? <code className="font-mono text-muted-foreground" title={connection.owner.id}>{connection.owner.id}</code>
+        : <span className="text-muted-foreground">None yet</span>}</dd>
+    </>}
+  </dl>
 }
 
 /**
