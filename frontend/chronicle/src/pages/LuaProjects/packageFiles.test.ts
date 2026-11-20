@@ -12,7 +12,7 @@ describe("package files", () => {
 
   it("summarizes the manifest and tolerates invalid JSON", () => {
     const file = (text: string) => [{ path: "project.json", bytes: strToU8(text) }]
-    expect(manifestSummary(file(`{"streams":["damage"],"capabilities":["ui"],"max_events":5}`))).toEqual({ streams: ["damage"], capabilities: ["ui"], streamScope: "selection", maxEvents: 5 })
+    expect(manifestSummary(file(`{"streams":["damage"],"capabilities":["ui"],"max_events":5}`))).toEqual({ streams: ["damage"], capabilities: ["ui"], streamScope: "selection", filterMode: "none", maxEvents: 5 })
     expect(manifestSummary(file("{"))).toBeNull()
     expect(manifestSummary([])).toBeNull()
   })

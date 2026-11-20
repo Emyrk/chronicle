@@ -13,7 +13,7 @@ and `bySource(onUpdate)`. Events contain only `stream`, `source`, `target`,
 damage stream, decodes it in the Lua worker and replays it once, then calls
 `Panel:OnComplete`. By default it selects only current encounter IDs; a manifest
 with `"stream_scope": "instance"` receives every encounter, tagged `selected`.
-Panel filters are not applied to Lua panels yet. There is no host cap on events or
+Modules opt into panel filters with `filter_mode`: `none` (default), `prefilter` (host filters before Lua), or `manual` (all events reach Lua; `Chronicle.Filter(message)` tests the supplied event). Both enabled modes share the built-in predicate and layout-persisted filter editor. There is no host cap on events or
 bytes: the manifest may set `max_events`, the runtime bounds pending UI operations
 per batch, and the host stops a worker after 10 s without progress. `chronicle.v1.ui` provides `metric`, `table`, `bars`, each
 creating retained UI operations validated by the Guide scene protocol.

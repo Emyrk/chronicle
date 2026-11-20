@@ -120,6 +120,30 @@ func TestCanonicalLuaZIP(t *testing.T) {
 	require.Equal(t, archive, same)
 }
 
+func TestCanonicalLuaZIPFilterMode(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{`"none"`, `"prefilter"`, `"manual"`, `"invalid"`, `""`, `null`, `1`, `false`, `[]`, `{}`} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			manifest := strings.Replace(luaTestManifest, `"assets":[]`, `"assets":[],"filter_mode":`+mode, 1)
+			archive, err := canonicalLuaZIP(bytes.NewReader(luaTestTar(t, luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", manifest))), "panel", "Example", "example")
+			if mode != `"none"` && mode != `"prefilter"` && mode != `"manual"` {
+				require.ErrorContains(t, err, "filter_mode")
+				return
+			}
+			require.NoError(t, err)
+			reader, err := zip.NewReader(bytes.NewReader(archive), int64(len(archive)))
+			require.NoError(t, err)
+			r, err := reader.File[1].Open()
+			require.NoError(t, err)
+			raw, err := io.ReadAll(r)
+			require.NoError(t, err)
+			require.NoError(t, r.Close())
+			require.JSONEq(t, manifest, string(raw))
+		})
+	}
+}
+
 func TestCanonicalLuaZIPRejectsUnsafeEntries(t *testing.T) {
 	t.Parallel()
 	cases := []struct {

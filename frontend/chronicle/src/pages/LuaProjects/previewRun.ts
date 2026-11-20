@@ -136,7 +136,7 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
     worker.onerror = () => finish({ ok: false, error: "Lua worker failed to start." })
     armWatchdog()
     try {
-      worker.postMessage({ type: "start", entrypoint: panel.entrypoint, sources: panel.sources, streams: panel.streams, streamScope: panel.streamScope,
+      worker.postMessage({ type: "start", entrypoint: panel.entrypoint, sources: panel.sources, streams: panel.streams, streamScope: panel.streamScope, filterMode: panel.filterMode,
         maxEvents: panel.maxEvents, capabilities: panel.capabilities, units })
     } catch {
       finish({ ok: false, error: "Lua worker could not receive the source package." })
