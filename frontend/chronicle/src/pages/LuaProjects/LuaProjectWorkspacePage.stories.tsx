@@ -5,6 +5,7 @@ import { strToU8, zipSync } from "fflate"
 import { userEvent, within } from "storybook/test"
 import { createMemoryRouter, Route, RouterProvider, Routes } from "react-router-dom"
 import { Toaster } from "@/components/ui/Sonner/Sonner"
+import { TooltipProvider } from "@/components/ui/Tooltip/tooltip"
 import { InferenceRuntimeProvider } from "@/features/chat/runtime"
 import { LocalMcpProvider } from "@/features/chat/mcp/LocalMcpProvider"
 import { LOCAL_MCP_ORIGIN } from "@/features/chat/mcp/localBridge"
@@ -208,12 +209,12 @@ function seedBrowser({ usedBefore = false, view = "preview", chatOpen = false, s
   else localStorage.removeItem(`lua-workshop-preview:${PROJECT_ID}`)
 }
 
-/** Mirrors main.tsx: a data router around the inference runtime and the tab's local MCP connection. */
+/** Mirrors main.tsx and Layout: a data router around the inference runtime, the tab's local MCP connection and tooltips. */
 function Workshop() {
-  const router = useMemo(() => createMemoryRouter([{ path: "*", element: <InferenceRuntimeProvider><LocalMcpProvider>
+  const router = useMemo(() => createMemoryRouter([{ path: "*", element: <InferenceRuntimeProvider><LocalMcpProvider><TooltipProvider>
     <Routes><Route path="/modules/:author/:slug/edit" element={<ModuleWorkspaceByPath />} /></Routes>
     <Toaster />
-  </LocalMcpProvider></InferenceRuntimeProvider> }], { initialEntries: ["/modules/forgewright/raid-damage-meter/edit"] }), [])
+  </TooltipProvider></LocalMcpProvider></InferenceRuntimeProvider> }], { initialEntries: ["/modules/forgewright/raid-damage-meter/edit"] }), [])
   return <RouterProvider router={router} />
 }
 

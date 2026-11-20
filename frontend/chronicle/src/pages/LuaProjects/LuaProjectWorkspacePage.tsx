@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { BookOpen, ChevronLeft, Code2, Eye, GitCompare, PanelRightClose, Rocket, Save, Undo2 } from "lucide-react"
+import { BookOpen, ChevronLeft, Code2, Eye, GitCompare, PanelLeft, PanelRightClose, Rocket, Save, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
@@ -19,8 +19,9 @@ import { parseRunPreviewArgs, runPreview } from "./previewRun"
 import { runStartupCheck } from "./startupCheck"
 import { buildPanelUnits } from "../Guides/runtime/panelUnits"
 import { resolveInstanceUnits } from "../Instance/instanceUnits"
+import { transformToInstance } from "../Instance/transformInstance"
+import { groupTrashEncounters } from "../Instance/trashGroups"
 import type { LuaSourceEditorHandle, LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
-import { EncounterStrip } from "./EncounterStrip"
 import { PaneResizer } from "./PaneResizer"
 import type { FrameSize } from "./PreviewFrame"
 import { MIN_SIDE_WIDTH } from "./paneWidth"
@@ -31,6 +32,8 @@ import { ConnectAgentPrompt, WorkshopAgentBar } from "./WorkshopAgentBar"
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
 const LuaDiffReview = lazy(() => import("./LuaDiffReview").then(module => ({ default: module.LuaDiffReview })))
+// The instance page's own encounter list, so the preview selects encounters the way the page does.
+const EncounterSidebar = lazy(() => import("../Instance/InstancePageView").then(module => ({ default: module.EncounterSidebar })))
 const LuaInstancePreview = lazy(() => import("./LuaInstancePreview").then(module => ({ default: module.LuaInstancePreview })))
 const events = createCachedStreamProvider()
 const proposalTimeoutMs = 5_000
@@ -41,7 +44,7 @@ const layoutKey = "lua-workshop-layout-v2"
  * secondary drawer: most authors drive the workshop from a local agent over MCP.
  * chatWidth is the drawer's dragged width in px; null keeps the default.
  */
-type Layout = { view: "preview" | "code"; chatOpen: boolean; chatWidth: number | null; frame: FrameSize }
+type Layout = { view: "preview" | "code"; chatOpen: boolean; chatWidth: number | null; frame: FrameSize; encountersOpen: boolean }
 type AiEdit = { file: LuaToolFile; before: EditorFiles; after: EditorFiles; revision: number }
 
 function readLayout(): Layout {
@@ -50,8 +53,8 @@ function readLayout(): Layout {
     const chatWidth = typeof value?.chatWidth === "number" && Number.isFinite(value.chatWidth) && value.chatWidth >= MIN_SIDE_WIDTH ? value.chatWidth : null
     const frame = value?.frame && Number.isFinite(value.frame.width) && Number.isFinite(value.frame.height) && value.frame.width > 0 && value.frame.height > 0
       ? { width: value.frame.width, height: value.frame.height } : null
-    return { view: value?.view === "code" ? "code" : "preview", chatOpen: value?.chatOpen === true, chatWidth, frame }
-  } catch { return { view: "preview", chatOpen: false, chatWidth: null, frame: null } }
+    return { view: value?.view === "code" ? "code" : "preview", chatOpen: value?.chatOpen === true, chatWidth, frame, encountersOpen: value?.encountersOpen !== false }
+  } catch { return { view: "preview", chatOpen: false, chatWidth: null, frame: null, encountersOpen: true } }
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -118,6 +121,9 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   const instance = useInstance(instanceId, { enabled: validInstanceIdentifier, retry: false })
   const previewUnits = useMemo(() => instance.data && buildPanelUnits(instance.data.players,
     resolveInstanceUnits(instance.data.units, instance.data.names_by_entry, instance.data.summons_by_owner)), [instance.data])
+  const sidebarInstance = useMemo(() => instance.data ? transformToInstance(instance.data) : null, [instance.data])
+  const trashGroups = useMemo(() => sidebarInstance ? groupTrashEncounters(sidebarInstance.encounters) : [], [sidebarInstance])
+  const [includeWipes, setIncludeWipes] = useState(false)
   // Start each newly loaded instance on its first boss kill so the preview runs without extra clicks.
   const [defaultedFor, setDefaultedFor] = useState("")
   if (instance.data && defaultedFor !== instance.data.id) {
@@ -360,6 +366,8 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
         : "lg:grid-cols-[minmax(0,1fr)_minmax(320px,min(34%,520px))]"}`}>
       <section aria-label="Module canvas" className="flex min-h-[70vh] min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:min-h-0">
         <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+          {sidebarInstance && view === "preview" && !layout.encountersOpen && <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+            onClick={() => setLayout({ encountersOpen: true })} title="Show encounters" aria-label="Show encounters"><PanelLeft className="size-4" /></button>}
           {instance.data && !choosingInstance ? <div className="flex min-w-0 items-center gap-1.5">
             <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(true)}
               title="Choose another instance" aria-label="Choose another instance"><ChevronLeft className="size-4" /></button>
@@ -394,10 +402,21 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
               className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs ${view === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
               <Icon className="size-3.5" /> {label}</button>)}
           </div>
-          {instance.data && view === "preview" && <div className="basis-full"><EncounterStrip encounters={instance.data.encounters ?? []} selectedIds={encounterIds} onChange={setEncounterIds} /></div>}
         </div>
         {/* Preview and code stay mounted, so switching views keeps the editor's state and undo history. */}
-        <div role="tabpanel" aria-label="Instance preview" hidden={view !== "preview"} className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto bg-black/20 p-3">
+        <div role="tabpanel" aria-label="Instance preview" hidden={view !== "preview"} className="min-h-0 flex-1 bg-black/20 [&:not([hidden])]:flex">
+          {sidebarInstance && layout.encountersOpen && <Suspense fallback={<div className="w-[267px] shrink-0 border-r" />}>
+            <EncounterSidebar instanceId={sidebarInstance.id} raidInstance={sidebarInstance} encounters={sidebarInstance.encounters} trashGroups={trashGroups}
+              selectedIds={encounterIds} activePhaseId={null} rankingWindowActive={false} showRankings={false} hideAd isMobile={false} showHints={false}
+              onSelect={(id, mode) => setEncounterIds(mode === "single" ? [id] : encounterIds.includes(id) ? encounterIds.filter(selected => selected !== id) : [...encounterIds, id])}
+              onSelectMany={ids => setEncounterIds(ids)}
+              // The workshop previews whole encounters; picking a phase previews its encounter.
+              onSelectPhase={(_range, encounterId) => setEncounterIds([encounterId])}
+              includeWipes={includeWipes} onIncludeWipesChange={setIncludeWipes} instanceStartTime={sidebarInstance.startTime}
+              onCollapse={() => setLayout({ encountersOpen: false })}
+              className="static max-h-none min-h-0 bg-background/40 py-3 pl-3 pr-3" />
+          </Suspense>}
+          <div className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
             {!instanceId && <p className="text-xs text-muted-foreground">Choose an instance to run your unsaved source against its encounters in the browser. Your agent's <code className="font-mono">run_preview</code> uses the same selection.</p>}
             {instanceId && !validInstanceIdentifier && <p role="alert" className="text-xs text-destructive">Enter a valid instance ID or slug.</p>}
             {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
@@ -409,6 +428,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
               <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant}
                 frameSize={layout.frame} onFrameSizeChange={frame => setLayout({ frame })} />
             </Suspense>}
+          </div>
         </div>
         <div role="tabpanel" aria-label="Code" hidden={view !== "code"} className="relative min-h-0 flex-1">
           {diffOpen && aiEdit && <div className="absolute inset-x-0 top-0 z-10 max-h-[60%] overflow-hidden border-b border-border bg-background shadow-lg">

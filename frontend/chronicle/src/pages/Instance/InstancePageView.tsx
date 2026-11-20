@@ -46,6 +46,7 @@ import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
 import { EncounterPhaseStrip } from "./EncounterPhaseStrip";
+import { groupTrashEncounters, type TrashGroup } from "./trashGroups";
 import {
   activePhaseForTimeRange,
   formatDurationMs,
@@ -400,35 +401,6 @@ function RankingWindowStrip({
 }
 
 // ============================================================================
-// Trash grouping
-// ============================================================================
-
-interface TrashGroup {
-  name: string;
-  encounters: Encounter[];
-  kills: number;
-  wipes: number;
-}
-
-function groupTrashEncounters(encounters: Encounter[]): TrashGroup[] {
-  const trashEncounters = encounters.filter((e) => !e.boss);
-  const groups = new Map<string, Encounter[]>();
-
-  for (const encounter of trashEncounters) {
-    const existing = groups.get(encounter.name) || [];
-    existing.push(encounter);
-    groups.set(encounter.name, existing);
-  }
-
-  return Array.from(groups.entries()).map(([name, encs]) => ({
-    name,
-    encounters: encs,
-    kills: encs.filter((e) => e.kill_type !== "wipe" && e.kill_type !== "reset").length,
-    wipes: encs.filter((e) => e.kill_type === "wipe").length,
-  }));
-}
-
-// ============================================================================
 // Enemy merging
 // ============================================================================
 
@@ -514,7 +486,7 @@ type EncounterTimeDisplay = "duration" | "start_time" | "end_time";
 // EncounterSidebar component
 // ============================================================================
 
-function EncounterSidebar({
+export function EncounterSidebar({
   encounters,
   trashGroups,
   selectedIds,
