@@ -248,6 +248,8 @@ var RazorgorePhaseDefinitions = &phases.EncounterPhases{
 }
 
 type razorgore struct {
+	// Keep Common's death handling: missing egg casts must not invalidate a kill.
+	// Without a detected P2, rankings fall back to the full encounter.
 	*characters.Common
 	all          *characters.Characters
 	eggThreshold int
@@ -305,17 +307,6 @@ func (c *razorgore) Process(m messages.Message) error {
 		c.adsGone = false
 	}
 	return err
-}
-
-// Died distinguishes losing the mind-controlled boss during the egg phase from
-// defeating him. Preserve legacy behavior on flavors without egg tracking.
-func (c *razorgore) Died(reason string, m messages.Message) {
-	if c.eggThreshold > 0 && !c.adsGone {
-		c.End("razorgore_died_before_eggs_destroyed", m, period.EndStateReset)
-		c.LastSlain = m // Suppress lingering damage from reopening the failed pull.
-		return
-	}
-	c.Common.Died(reason, m)
 }
 
 // killEggAds marks the phase-1 adds as killed. In the real fight they run away
