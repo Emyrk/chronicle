@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 )
 
 // Blizzard v22 layouts are documented at https://wowcoach.gg/docs/combat-log.
@@ -40,6 +41,7 @@ type advancedCombatSnapshot struct {
 }
 
 type transformReader struct {
+	playerRealms                map[guid.GUID]map[string]PlayerRealmInfo
 	scanner                     *bufio.Scanner
 	guids                       *guidNormalizer
 	names                       map[string]string
@@ -180,14 +182,6 @@ func (r *transformReader) transform(line string) (string, error) {
 	}
 
 	base := make([]string, 0, 6)
-	sourceName := r.normalizeUnitName(args[0], args[1])
-	destName := r.normalizeUnitName(args[4], args[5])
-	if strings.HasPrefix(args[0], "Player-") && sourceName != "nil" {
-		r.names[args[0]] = strings.Trim(sourceName, "\"")
-	}
-	if strings.HasPrefix(args[4], "Player-") && destName != "nil" {
-		r.names[args[4]] = strings.Trim(destName, "\"")
-	}
 	source, err := r.guids.normalize(args[0])
 	if err != nil {
 		return "", err
@@ -195,6 +189,14 @@ func (r *transformReader) transform(line string) (string, error) {
 	dest, err := r.guids.normalize(args[4])
 	if err != nil {
 		return "", err
+	}
+	sourceName := r.normalizeUnitName(args[0], args[1])
+	destName := r.normalizeUnitName(args[4], args[5])
+	if strings.HasPrefix(args[0], "Player-") && sourceName != "nil" {
+		r.names[args[0]] = strings.Trim(sourceName, "\"")
+	}
+	if strings.HasPrefix(args[4], "Player-") && destName != "nil" {
+		r.names[args[4]] = strings.Trim(destName, "\"")
 	}
 	base = append(base, source, sourceName, args[2], dest, destName, args[6])
 
@@ -408,7 +410,9 @@ func (r *transformReader) normalizeUnitName(rawGUID, quotedName string) string {
 		return quotedName
 	}
 	if r.combatLogVersion == 22 {
-		return strconv.Quote(stripRealm(name))
+		display := stripRealm(name)
+		r.recordPlayerRealm(rawGUID, name, display)
+		return strconv.Quote(display)
 	}
 	return strconv.Quote(strings.TrimSuffix(name, "-"))
 }
@@ -470,6 +474,11 @@ func (r *transformReader) transformAbsorbed(prefix string, args []string) (strin
 	caster, err := r.guids.normalize(args[index])
 	if err != nil {
 		return "", err
+	}
+	if r.combatLogVersion == 22 {
+		r.normalizeUnitName(args[0], args[1])
+		r.normalizeUnitName(args[4], args[5])
+		r.normalizeUnitName(args[index], args[index+1])
 	}
 	absorbSpellID := args[index+4]
 	absorbSpellName := args[index+5]
