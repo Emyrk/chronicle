@@ -196,10 +196,10 @@ function api({ current = project(), canRelease = true }: { current?: LuaProject;
   ]
 }
 
-type Setup = { usedBefore?: boolean; view?: "preview" | "code"; chatOpen?: boolean; selection?: boolean }
+type Setup = { usedBefore?: boolean; view?: "preview" | "code"; chatOpen?: boolean; selection?: boolean; frame?: { width: number; height: number } }
 /** Per-viewer browser state the page reads on mount. Stories share one origin, so reset it every time. */
-function seedBrowser({ usedBefore = false, view = "preview", chatOpen = false, selection = true }: Setup) {
-  localStorage.setItem("lua-workshop-layout-v2", JSON.stringify({ view, chatOpen, chatWidth: null }))
+function seedBrowser({ usedBefore = false, view = "preview", chatOpen = false, selection = true, frame }: Setup) {
+  localStorage.setItem("lua-workshop-layout-v2", JSON.stringify({ view, chatOpen, chatWidth: null, frame: frame ?? null }))
   localStorage.setItem("lua-workshop-auto-preview", "1")
   if (usedBefore) localStorage.setItem("chronicle-local-mcp-used", "1")
   else localStorage.removeItem("chronicle-local-mcp-used")
@@ -259,6 +259,11 @@ export const AgentDriving: Story = {
 export const AgentEditUnsaved: Story = {
   parameters: { msw: { handlers: [...api(), ...fakeDaemon({ owner: { id: "agent-claude", name: "Claude Code", version: "2.1.0" }, steps: TOP_TEN, pauseMs: 600 })] } },
   play: connect,
+}
+
+/** The preview held at a third-width panel's size (4×4 on the instance grid). Drag its edges to try other sizes. */
+export const PreviewAtPanelSize: Story = {
+  beforeEach: () => seedBrowser({ frame: { width: 456, height: 420 } }),
 }
 
 /** Code is an optional view of the same canvas. */

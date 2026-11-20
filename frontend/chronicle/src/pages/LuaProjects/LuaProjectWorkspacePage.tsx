@@ -22,6 +22,7 @@ import { resolveInstanceUnits } from "../Instance/instanceUnits"
 import type { LuaSourceEditorHandle, LuaSourceProposal, LuaWorkingCopy } from "./LuaSourceEditor"
 import { EncounterStrip } from "./EncounterStrip"
 import { PaneResizer } from "./PaneResizer"
+import type { FrameSize } from "./PreviewFrame"
 import { MIN_SIDE_WIDTH } from "./paneWidth"
 import { readPreviewSelection, restoredEncounters, writePreviewSelection } from "./previewSelection"
 import { isInstanceIdentifier } from "./instanceIdentifier"
@@ -40,15 +41,17 @@ const layoutKey = "lua-workshop-layout-v2"
  * secondary drawer: most authors drive the workshop from a local agent over MCP.
  * chatWidth is the drawer's dragged width in px; null keeps the default.
  */
-type Layout = { view: "preview" | "code"; chatOpen: boolean; chatWidth: number | null }
+type Layout = { view: "preview" | "code"; chatOpen: boolean; chatWidth: number | null; frame: FrameSize }
 type AiEdit = { file: LuaToolFile; before: EditorFiles; after: EditorFiles; revision: number }
 
 function readLayout(): Layout {
   try {
     const value = JSON.parse(localStorage.getItem(layoutKey) ?? "null") as Partial<Layout> | null
     const chatWidth = typeof value?.chatWidth === "number" && Number.isFinite(value.chatWidth) && value.chatWidth >= MIN_SIDE_WIDTH ? value.chatWidth : null
-    return { view: value?.view === "code" ? "code" : "preview", chatOpen: value?.chatOpen === true, chatWidth }
-  } catch { return { view: "preview", chatOpen: false, chatWidth: null } }
+    const frame = value?.frame && Number.isFinite(value.frame.width) && Number.isFinite(value.frame.height) && value.frame.width > 0 && value.frame.height > 0
+      ? { width: value.frame.width, height: value.frame.height } : null
+    return { view: value?.view === "code" ? "code" : "preview", chatOpen: value?.chatOpen === true, chatWidth, frame }
+  } catch { return { view: "preview", chatOpen: false, chatWidth: null, frame: null } }
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -394,7 +397,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
           {instance.data && view === "preview" && <div className="basis-full"><EncounterStrip encounters={instance.data.encounters ?? []} selectedIds={encounterIds} onChange={setEncounterIds} /></div>}
         </div>
         {/* Preview and code stay mounted, so switching views keeps the editor's state and undo history. */}
-        <div role="tabpanel" aria-label="Instance preview" hidden={view !== "preview"} className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto bg-black/20 p-3">
+        <div role="tabpanel" aria-label="Instance preview" hidden={view !== "preview"} className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto bg-black/20 p-3">
             {!instanceId && <p className="text-xs text-muted-foreground">Choose an instance to run your unsaved source against its encounters in the browser. Your agent's <code className="font-mono">run_preview</code> uses the same selection.</p>}
             {instanceId && !validInstanceIdentifier && <p role="alert" className="text-xs text-destructive">Enter a valid instance ID or slug.</p>}
             {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
@@ -403,7 +406,8 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
             {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
             {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
             {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
-              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant} />
+              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant}
+                frameSize={layout.frame} onFrameSizeChange={frame => setLayout({ frame })} />
             </Suspense>}
         </div>
         <div role="tabpanel" aria-label="Code" hidden={view !== "code"} className="relative min-h-0 flex-1">

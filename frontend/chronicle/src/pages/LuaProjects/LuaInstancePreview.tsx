@@ -5,6 +5,7 @@ import type { PanelPackage } from "../Guides/package/panelLoader"
 import type { PanelUnits } from "../Guides/runtime/panelUnits"
 import { PANEL_STREAMS, type EventStreams } from "../Guides/runtime/panelEvents"
 import { loadPreviewStreams, type PreviewStreamProvider } from "./previewStream"
+import { FrameSizeControls, PreviewFrame, type FrameSize } from "./PreviewFrame"
 
 /** The caller must authorize instance access; the preview passes on every event in scope. */
 export type LuaPreviewEventProvider = Pick<PreviewStreamProvider, "getStream">
@@ -21,6 +22,9 @@ export interface LuaInstancePreviewProps {
   units?: PanelUnits
   /** Sends a prompt to the workshop assistant, for the error card's "Ask the assistant" button. */
   onAskAssistant?: (prompt: string) => void
+  /** Fixed preview size for checking layouts; null fills the canvas. Omit to hide the size controls. */
+  frameSize?: FrameSize
+  onFrameSizeChange?: (size: FrameSize) => void
 }
 
 interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; encounterIds: readonly string[]; streams: EventStreams }
@@ -38,7 +42,8 @@ function readAutoPreview(): boolean {
  * Ephemeral browser-only preview. No package lookup, upload or server execution. Runs on click, or
  * with Auto on, after every edit (including AI diffs) and encounter selection change.
  */
-export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, onAskAssistant, autoRun = false }: LuaInstancePreviewProps) {
+export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, onAskAssistant, autoRun = false, frameSize = null, onFrameSizeChange }: LuaInstancePreviewProps) {
+  const [measured, setMeasured] = useState<{ width: number; height: number } | null>(null)
   const [run, setRun] = useState<Run | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
@@ -135,12 +140,16 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
           <Switch size="sm" checked={auto} onCheckedChange={toggleAuto} aria-label="Auto preview" /> Auto
         </label>
         {visible && !current && <span role="status" className="text-[11px] text-muted-foreground">{busy ? "Updating…" : "Waiting for changes to settle…"}</span>}
-        <span className="ml-auto whitespace-nowrap text-[11px] text-muted-foreground" title={`Streams: ${panel.streams.join(", ") || "none"}. Nothing is uploaded or published.`}>{panel.streams.length === 1 ? `${panel.streams[0]} events` : `${panel.streams.length} streams`} · runs locally</span>
+        {onFrameSizeChange && <div className="ml-auto"><FrameSizeControls size={frameSize} measured={visible ? measured : null} onChange={onFrameSizeChange} /></div>}
+        <span className={`${onFrameSizeChange ? "" : "ml-auto "}whitespace-nowrap text-[11px] text-muted-foreground`} title={`Streams: ${panel.streams.join(", ") || "none"}. Nothing is uploaded or published.`}>{panel.streams.length === 1 ? `${panel.streams[0]} events` : `${panel.streams.length} streams`} · runs locally</span>
       </div>
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
-      {visible && <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
-        <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope} filterMode={visible.panel.filterMode}
-          maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} eventStreams={visible.streams} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} /></div>}
+      {visible && (() => {
+        const host = <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
+          <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope} filterMode={visible.panel.filterMode}
+            maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} eventStreams={visible.streams} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} /></div>
+        return onFrameSizeChange ? <PreviewFrame size={frameSize} onChange={onFrameSizeChange} onMeasure={setMeasured}>{host}</PreviewFrame> : host
+      })()}
     </>}
   </section>
 }
