@@ -7,7 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/stretchr/testify/require"
 )
@@ -129,4 +132,32 @@ func TestRealmIndexDisabledOutsideForever(t *testing.T) {
 	_, err = p.Advance(context.Background())
 	require.NoError(t, err)
 	require.Nil(t, p.playerRealms)
+}
+
+func TestParserRealmLookupEnrichesUnitDB(t *testing.T) {
+	t.Parallel()
+	input := `10/7/2026 22:00:00.000  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1
+10/7/2026 22:00:01.000  SPELL_CAST_SUCCESS,Player-4618-00C7EC79,"First-Last-Normal-US",0x518,0x80000000,Player-4618-00C7EC79,"Other-Name-Normal-EU",0x518,0x80000000,686,"Shadow Bolt",0x20`
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(input), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV22Cleu)
+	require.NoError(t, err)
+	units := unitdb.New(nil)
+	units.SetPlayerRealmLookup(p)
+	id := guid.GUID(0x0000120A00C7EC79)
+	units.UpdatePlayer(combatant.Combatant{Guid: id, Name: "First Last"})
+	units.Update(unitinfo.Info{Guid: id, Name: "Other Name"})
+	require.Empty(t, units.Players[id].RawRealm)
+	for {
+		_, err := p.Advance(context.Background())
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+	}
+	units.RefreshPlayerRealms()
+	require.Equal(t, "Normal-US", units.Players[id].RawRealm)
+	require.Equal(t, "Normal-EU", units.Info[id].RawRealm)
+	_, ok := p.LookupPlayerRealm(id, "Missing Name")
+	require.False(t, ok)
+	units.UpdatePlayer(combatant.Combatant{Guid: id, Name: "Missing Name"})
+	require.Empty(t, units.Players[id].RawRealm)
 }
