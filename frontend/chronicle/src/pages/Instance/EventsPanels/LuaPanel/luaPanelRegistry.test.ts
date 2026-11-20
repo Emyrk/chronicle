@@ -41,7 +41,7 @@ describe("Lua panel discovery", () => {
       { id: id("3"), owner_id: "o", kind: "guide", name: "Guide", slug: "g", description: "", revision: 1, stars: 0, starred: false,
         releases: [release("v1")], created_at: "", updated_at: "" },
     ] as LuaProject[]
-    expect(publicLuaPanelOptions(projects)).toEqual([{ ref: luaPanelRef(id("2"), "release"), icon: "swords", label: "someone/Released", description: "", stars: 9 }])
+    expect(publicLuaPanelOptions(projects)).toEqual([{ name: "someone/Released", channel: "release", ref: luaPanelRef(id("2"), "release"), icon: "swords", label: "someone/Released", description: "", stars: 9 }])
   })
 
   it("reads saved stable and unstable references as release and main", () => {

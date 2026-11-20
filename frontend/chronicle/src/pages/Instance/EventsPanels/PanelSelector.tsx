@@ -16,7 +16,10 @@ import { listSelectableCustomPanels, resolveCustomPanel, useCustomPanelRegistry 
 import { isCustomPanelRef } from "./custom/pluginTypes";
 import { isLuaPanelRef, parseLuaPanelRef, publicLuaPanelOptions, trackedLuaPanelOptions, useLuaPanelCatalog, usePublicLuaPanels } from "./LuaPanel/luaPanelRegistry";
 import { ModuleIcon } from "../../LuaProjects/ModuleIcon";
+import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { PanelExplorer } from "./PanelExplorer";
+
+const DROPDOWN_WIDTH = 300;
 
 /** Props for the recursive CategoryNode component */
 interface CategoryNodeProps {
@@ -196,7 +199,7 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
     const availableHeight = Math.max(80, openBelow ? spaceBelow : spaceAbove);
     const left = Math.min(
       Math.max(viewportMargin, rect.left),
-      Math.max(viewportMargin, portalWindow.innerWidth - 260 - viewportMargin),
+      Math.max(viewportMargin, portalWindow.innerWidth - DROPDOWN_WIDTH - viewportMargin),
     );
 
     setDropdownPosition({
@@ -348,8 +351,9 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
       {isOpen && dropdownPosition && portalContainer && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed z-[9999] flex w-[260px] flex-col bg-popover text-popover-foreground border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
+          className="fixed z-[9999] flex flex-col bg-popover text-popover-foreground border rounded-md shadow-lg overflow-hidden animate-in fade-in-0 zoom-in-95"
           style={{
+            width: DROPDOWN_WIDTH,
             left: dropdownPosition.left,
             top: dropdownPosition.top,
             bottom: dropdownPosition.bottom,
@@ -380,8 +384,9 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
           </div>
 
           {/* Results */}
+          {/* Radix wraps content in a display:table div that grows to the widest row; block lets long names truncate. */}
           <ScrollArea
-            className="styled-scrollbar"
+            className="styled-scrollbar [&_[data-slot=scroll-area-viewport]>div]:!block"
             style={{ maxHeight: dropdownPosition.resultsMaxHeight }}
           >
             <div className="p-1">
@@ -432,9 +437,18 @@ export function PanelSelector({ value, onChange, className, excludedValues }: Pa
                         <span className="ml-auto text-xs text-muted-foreground">{luaPanels.length}</span>
                       </button>
                       {expandedPaths.has("Lua") && <div className="ml-2 border-l pl-1">{luaPanels.map((item) => (
-                        <button key={item.ref} type="button" onClick={() => handleSelect(item.ref)} className={cn("flex w-full items-center gap-2 pl-6 pr-2 py-1.5 text-left text-sm rounded-sm hover:bg-accent", item.ref === value && "bg-accent/50")}>
-                          <ModuleIcon name={item.icon} className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="truncate">{item.label}</span>
-                        </button>
+                        <HintTooltip key={item.ref}>
+                          <TooltipTrigger asChild>
+                            <button type="button" onClick={() => handleSelect(item.ref)} className={cn("flex w-full items-center gap-2 pl-6 pr-2 py-1.5 text-left text-sm rounded-sm hover:bg-accent", item.ref === value && "bg-accent/50")}>
+                              <ModuleIcon name={item.icon} className="h-4 w-4 shrink-0 text-muted-foreground" /><span className="min-w-0 truncate">{item.name}</span>
+                              {item.channel === "main" && <span className="shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1 text-2xs leading-4 text-amber-500">main</span>}
+                            </button>
+                          </TooltipTrigger>
+                          {/* Full name beside the row without changing the list's layout; above the dropdown's z-index. */}
+                          <TooltipContent side="right" sideOffset={8} className="z-[10000]">
+                            {item.name} <span className="text-zinc-400">({item.channel})</span>
+                          </TooltipContent>
+                        </HintTooltip>
                       ))}</div>}
                     </div>
                   )}

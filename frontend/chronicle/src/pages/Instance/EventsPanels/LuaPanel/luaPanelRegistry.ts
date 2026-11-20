@@ -62,6 +62,9 @@ export function moduleDisplayName(project: { author?: string; name: string }): s
 /** One module panel a picker can choose. */
 export interface LuaPanelOption {
   ref: LuaPanelRef
+  /** Module name alone; `label` adds the channel for flat text contexts. */
+  name: string
+  channel: LuaChannel
   label: string
   icon?: string
   description: string
@@ -71,7 +74,7 @@ export interface LuaPanelOption {
 /** Tracked modules as picker choices: the release, plus main (labelled so) when there is one. */
 export function trackedLuaPanelOptions(catalog: readonly LuaProjectCatalogEntry[]): LuaPanelOption[] {
   return catalog.flatMap(project => (["release", "main"] as const).filter(channel => project[channel]).map(channel => ({
-    ref: luaPanelRef(project.id, channel), icon: project[channel]?.icon, description: project.description, stars: project.stars,
+    ref: luaPanelRef(project.id, channel), name: moduleDisplayName(project), channel, icon: project[channel]?.icon, description: project.description, stars: project.stars,
     label: channel === "release" ? moduleDisplayName(project) : `${moduleDisplayName(project)} (main)`,
   })))
 }
@@ -81,7 +84,7 @@ export function publicLuaPanelOptions(projects: readonly LuaProject[]): LuaPanel
   return projects.flatMap(project => {
     const latest = latestRelease(project)
     if (project.kind !== "panel" || !latest?.sha256) return []
-    return [{ ref: luaPanelRef(project.id, "release"), icon: latest.icon, label: moduleDisplayName(project), description: project.description, stars: project.stars }]
+    return [{ ref: luaPanelRef(project.id, "release"), name: moduleDisplayName(project), channel: "release" as const, icon: latest.icon, label: moduleDisplayName(project), description: project.description, stars: project.stars }]
   })
 }
 

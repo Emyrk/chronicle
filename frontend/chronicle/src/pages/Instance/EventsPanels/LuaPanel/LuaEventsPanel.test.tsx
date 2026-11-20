@@ -49,7 +49,7 @@ function elements(node: unknown): ReactElement<Record<string, unknown>>[] {
   if (!node || typeof node !== "object") return []
   if (Array.isArray(node)) return node.flatMap(elements)
   const element = node as ReactElement<Record<string, unknown>>
-  return [element, ...elements(element.props?.children)]
+  return [element, ...elements(element.props?.children), ...elements(element.props?.front)]
 }
 const seed: PanelFilter[] = [{ type: "ability_name", value: "Fireball" }]
 let props: EventsPanelProps

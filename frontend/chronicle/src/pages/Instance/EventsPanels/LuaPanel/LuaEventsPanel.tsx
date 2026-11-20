@@ -11,6 +11,7 @@ import { PanelFilterEditor } from "../PanelFilterEditor"
 import type { PanelFilter } from "../processors/filters"
 import type { ProcessorContext } from "../processorTypes"
 import { toSerializableContext } from "../usePanelAggregation"
+import { PanelCard } from "../PanelCard"
 import { PanelSelector } from "../PanelSelector"
 import { usePanelTiming, usePanelTimingContext } from "../PanelTimingContext"
 import { buildPanelUnits } from "../../../Guides/runtime/panelUnits"
@@ -137,27 +138,25 @@ function LuaEventsPanelContent(props: EventsPanelProps) {
     return urls
   }, [panel])
   useEffect(() => () => { for (const url of assetUrls.values()) URL.revokeObjectURL(url) }, [assetUrls])
-  return <div data-panel-explorer-host className="relative flex h-full flex-col rounded-lg border border-border bg-card text-card-foreground">
-    <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
-      <span className="truncate font-semibold">{panel?.name ?? "Module"} <span className="text-xs text-muted-foreground">({ref?.channel})</span></span>
-      <div className="flex items-center gap-2">
-        {filteringSupported && <Button size="sm" variant="ghost" disabled={isSyncActive}
-          aria-label="Edit panel filters" title={isSyncActive ? "Filter editing is unavailable during Sync" : "Edit panel filters"}
-          onClick={() => setEditing(true)}><Filter className="h-4 w-4" /></Button>}
-        <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />
-      </div>
+  const showEditor = editing && filteringSupported && !isSyncActive
+  let content
+  if (channelQuery.isPending || (hash && packageQuery.isPending)) content = <div className="p-4 text-sm">Loading module...</div>
+  else if (channelQuery.error || packageQuery.error || streamError || !hash) content = <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div>
+  else if (panel) content = (panel.streams.length > 0 || filteringSupported) && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
+    <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
+      filterMode={panel.filterMode} filterContext={filterContext}
+      eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics} />
+  return <PanelCard flipped={false} back={null} front={<>
+    <div className="flex min-w-0 items-center justify-between gap-2">
+      <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />
+      {filteringSupported && <Button size="sm" variant="ghost" disabled={isSyncActive}
+        aria-label="Edit panel filters" title={isSyncActive ? "Filter editing is unavailable during Sync" : "Edit panel filters"}
+        onClick={() => setEditing(true)}><Filter className="h-4 w-4" /></Button>}
     </div>
-    {editing && filteringSupported && !isSyncActive && <div className="min-h-0 flex-1 overflow-auto p-3 styled-scrollbar">
+    {showEditor && <div className="min-h-0 flex-1 overflow-auto styled-scrollbar">
       <PanelFilterEditor panelLabel={panel?.name} filters={pendingFilters ?? filters}
         onChange={editFilters} onClose={closeEditor} onReset={resetFilters} />
     </div>}
-    <div className={editing && filteringSupported && !isSyncActive ? "hidden" : "min-h-0 flex-1"}>
-    {channelQuery.isPending || (hash && packageQuery.isPending) ? <div className="p-4 text-sm">Loading module...</div> :
-      channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
-      panel && ((panel.streams.length > 0 || filteringSupported) && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
-        <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
-          filterMode={panel.filterMode} filterContext={filterContext}
-          eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics} />)}
-    </div>
-  </div>
+    <div className={showEditor ? "hidden" : "relative flex min-h-0 flex-1 flex-col"}>{content}</div>
+  </>} />
 }
