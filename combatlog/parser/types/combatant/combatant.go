@@ -55,37 +55,10 @@ type CombatantInfoV22 struct {
 	SpecID                 int32
 }
 
-// PlayerIdentity qualifies a player GUID with its raw home-realm label. Forever
-// may reuse the same GUID on different realms. This is a parser identity, not a
-// canonical database realm: aliases remain distinct evidence until a later
-// catalog-resolution layer establishes equivalence.
-type PlayerIdentity struct {
-	GUID  guid.GUID
-	Realm string
-}
-
-// RealmObservation is an unresolved realm label read from a combat-log player
-// name. ObservedAt is the time of that input, not the time of a later combatant
-// snapshot. It is never inferred from the numeric server component of a GUID.
-type RealmObservation struct {
-	RawName    string
-	ObservedAt time.Time
-}
-
-// mergeRealm retains known evidence across partial snapshots and timestamp
-// regressions. Equal timestamps retain existing evidence deterministically.
-func mergeRealm(incoming, existing RealmObservation) RealmObservation {
-	if incoming.RawName == "" || (existing.RawName != "" && !incoming.ObservedAt.After(existing.ObservedAt)) {
-		return existing
-	}
-	return incoming
-}
-
 // Combatant is the raw parsing. Additional logic should be built on top
 // to handle things like enums.
 type Combatant struct {
 	Name      string
-	Realm     RealmObservation
 	Guid      guid.GUID
 	Seen      time.Time
 	HeroClass types.HeroClasses
@@ -105,17 +78,7 @@ type Combatant struct {
 	V22            *CombatantInfoV22
 }
 
-// Identity is available only when this record actually carries realm evidence.
-// A GUID-only Forever record must not borrow the last realm seen for that GUID.
-func (c Combatant) Identity() (PlayerIdentity, bool) {
-	return PlayerIdentity{GUID: c.Guid, Realm: c.Realm.RawName}, c.Realm.RawName != ""
-}
-
 func (c *Combatant) SafeMergeExisting(existing Combatant) {
-	if c.Guid != existing.Guid || c.Realm.RawName != existing.Realm.RawName {
-		return
-	}
-	c.Realm = mergeRealm(c.Realm, existing.Realm)
 	if c.Name == "" && existing.Name != "" {
 		c.Name = existing.Name
 	}
@@ -144,9 +107,6 @@ func (c *Combatant) SafeMergeExisting(existing Combatant) {
 }
 
 func (c *Combatant) MergeExisting(existing Combatant) {
-	if c.Guid != existing.Guid || c.Realm.RawName != existing.Realm.RawName {
-		return
-	}
 	c.SafeMergeExisting(existing)
 	if c.GearSetups == nil && existing.GearSetups != nil {
 		c.GearSetups = existing.GearSetups

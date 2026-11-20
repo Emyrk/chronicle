@@ -65,13 +65,16 @@ const ReorderWindow = 3 * time.Second
 // Parser adapts modern Blizzard combat-log records to Chronicle's CLEU parser
 // while retaining version-specific metadata such as gear and talent summaries.
 type Parser struct {
-	inner       *wotlk.Parser
-	wowDB       gamedb.SpellFetcher
-	talentTrees *talents.TalentTreeData
-	flavor      database.WoWFlavor
-	guids       *guidNormalizer
-	owners      map[guid.GUID]guid.GUID
-	version     int
+	// playerRealms accumulates raw name/realm evidence in input order. It is not
+	// yet used for event attribution or exposed to consumers.
+	playerRealms map[guid.GUID]map[string]PlayerRealmInfo
+	inner        *wotlk.Parser
+	wowDB        gamedb.SpellFetcher
+	talentTrees  *talents.TalentTreeData
+	flavor       database.WoWFlavor
+	guids        *guidNormalizer
+	owners       map[guid.GUID]guid.GUID
+	version      int
 }
 
 func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.GameDB, gear gamedb.GearResolver, reg *registry.Registry, format database.LogFormat) (*Parser, error) {
@@ -85,6 +88,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		return nil, err
 	}
 	p.guids = transformer.guids
+	p.playerRealms = transformer.playerRealms
 	p.inner.SetBaseYear(year)
 	switch format {
 	case database.LogFormatV22Cleu:
@@ -107,6 +111,7 @@ func NewHermesProxy(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB
 		return nil, err
 	}
 	p.guids = transformer.guids
+	p.playerRealms = transformer.playerRealms
 	p.version = 9
 	return p, nil
 }
