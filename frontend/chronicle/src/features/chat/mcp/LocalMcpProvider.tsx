@@ -59,14 +59,16 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
   }
   const connect = useCallback(() => {
     if (safeMode || active) return
-    // Runtime scopes identify the module/instance; otherwise the route is useful
-    // without copying potentially sensitive query parameters into a display name.
-    const capability = runtime.capabilities?.find(item => item.id === "lua-editor")
-    const defaultName = [...(capability?.scope_id ? `Module ${capability.scope_id}` : `Chronicle ${location.pathname}`)].slice(0, 80).join("").trim()
+    // Prefer the human-facing module route over the capability's project ID.
+    // Never include query parameters in a connection display name.
+    const moduleRoute = /^\/modules\/([^/]+)\/([^/]+)(?:\/edit)?\/?$/.exec(location.pathname)
+    const label = moduleRoute && moduleRoute[1] !== "id"
+      ? `Module ${moduleRoute[1]}/${moduleRoute[2]}` : `Chronicle ${location.pathname}`
+    const defaultName = [...label].slice(0, 80).join("").trim()
     connectionName.current = defaultName
     setName(defaultName); setNameDraft(defaultName)
     setError(""); setActionError(""); setConnection(null); setBusy(false); setRevoking(false); setStatus("connecting"); setActive(true)
-  }, [safeMode, active, runtime.capabilities, location.pathname])
+  }, [safeMode, active, location.pathname])
 
   const registerCapability = runtime.registerCapability
   useEffect(() => {
@@ -93,11 +95,18 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
       status: (value: "connected" | "reconnecting") => { if (!abort.signal.aborted) setStatus(value) },
       busy: (value: boolean) => { if (!abort.signal.aborted) setBusy(value) },
       controls: (value: { revoke: () => Promise<void> }) => { if (!abort.signal.aborted) controls.current = value },
-    })).catch(reason => { if (!abort.signal.aborted) { setError(reason instanceof Error ? reason.message : "MCP connection failed") } })
+    })).catch(reason => {
+      if (abort.signal.aborted) return
+      abort.abort()
+      controls.current = null
+      setConnection(null); setBusy(false); setRevoking(false)
+      setError(reason instanceof Error ? reason.message : "MCP connection failed")
+    })
     return () => {
       abort.abort()
       controls.current = null
       connectionAbort.current = null
+      setConnection(null); setBusy(false); setRevoking(false)
     }
   }, [active, safeMode])
 
@@ -121,7 +130,7 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
   return <LocalMcpContext.Provider value={{ active, connect, disconnect }}>
     {children}
     {active && <aside aria-label="Local MCP connection" className="styled-scrollbar fixed bottom-4 left-4 z-[100] max-h-[calc(100vh-2rem)] max-w-sm overflow-auto rounded-md border border-border bg-background p-3 text-xs shadow-lg">
-      <p className="font-semibold">{error ? "Local MCP error" : status === "connected" ? "Local MCP connected" : status === "reconnecting" ? "Reconnecting to local MCP…" : "Connecting to local MCP…"}</p>
+      <p className="font-semibold">{safeMode ? "Local MCP disconnected" : error ? "Local MCP error" : status === "connected" ? "Local MCP connected" : status === "reconnecting" ? "Reconnecting to local MCP…" : "Connecting to local MCP…"}</p>
       <p className="mt-1 text-muted-foreground">Your agent can use this page’s tools and read their output. Modules use the browser working copy, not files on disk.</p>
       {error && <p role="alert" className="mt-2 text-destructive">{error}. Start the MCP server in your agent, check allowed origins and browser local-network permission, then disconnect and retry.</p>}
       <form className="mt-2 flex gap-2" onSubmit={event => {
@@ -136,7 +145,7 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
         </label>
         <button type="submit" className="self-end rounded border px-2 py-1" disabled={!nameDraft.trim() || [...nameDraft.trim()].length > 80 || nameDraft.trim() === name}>Rename</button>
       </form>
-      {connection && <div className="mt-2 break-words">
+      {connection && !safeMode && !error && <div className="mt-2 break-words">
         <p>Connection ID: <code className="select-all">{connection.id}</code></p>
         <button type="button" className="mt-1 rounded border px-2 py-1" onClick={async () => {
           setActionError("")

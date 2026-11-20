@@ -238,14 +238,15 @@ describe("Local MCP connection controls", () => {
     expect(text()).not.toContain("agent-1")
   })
 
-  it("uses the module scope as a default and only renames explicitly, without reconnecting", async () => {
+  it("uses the module route as a default and only renames explicitly, without reconnecting", async () => {
     hooks.capabilities = [{ id: "lua-editor", version: 1, scope_id: "my-module" }]
+    await hooks.router!.navigate("/modules/author/my-module/edit?private=value")
     const bridge = await start()
-    expect(bridge.current().name).toBe("Module my-module")
+    expect(bridge.current().name).toBe("Module author/my-module")
     const input = nodes().find(node => node.type === "input")!
     ;(input.props.onChange as (event: unknown) => void)({ target: { value: "Raid workspace" } })
     render()
-    expect(bridge.current().name).toBe("Module my-module")
+    expect(bridge.current().name).toBe("Module author/my-module")
     const form = nodes().find(node => node.type === "form")!
     ;(form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() })
     render()
@@ -254,7 +255,7 @@ describe("Local MCP connection controls", () => {
   })
 
   it("bounds default names and explicit rename by Unicode code points", async () => {
-    hooks.capabilities = [{ id: "lua-editor", version: 1, scope_id: "🎉".repeat(100) }]
+    await hooks.router!.navigate("/modules/author/" + "x".repeat(100) + "/edit")
     const bridge = await start()
     const original = bridge.current().name
     expect([...original]).toHaveLength(80)
@@ -323,6 +324,41 @@ describe("Local MCP connection controls", () => {
     expect(render().active).toBe(false)
     await Promise.resolve()
     expect(connectLocalMcp).not.toHaveBeenCalled()
+  })
+
+  it("clears stale owner metadata and controls on terminal failure", async () => {
+    let fail!: (reason: Error) => void
+    vi.mocked(connectLocalMcp).mockImplementationOnce(() => new Promise((_, reject) => { fail = reject }))
+    const bridge = await start()
+    const revoke = vi.fn()
+    bridge.changed?.(metadata); bridge.controls?.({ revoke }); bridge.busy?.(true)
+    render()
+    expect(text()).toContain("agent-1")
+    fail(new Error("Session expired"))
+    await Promise.resolve(); await Promise.resolve(); await Promise.resolve()
+    render()
+    expect(text()).toContain("Session expired")
+    expect(text()).not.toContain("agent-1")
+    expect(bridge.signal.aborted).toBe(true)
+    bridge.changed?.(metadata); render()
+    expect(text()).not.toContain("agent-1")
+    expect(nodes().some(node => text(node) === "Revoke agent access")).toBe(false)
+  })
+
+  it("clears ownership when navigating into safe mode", async () => {
+    const bridge = await start()
+    bridge.changed?.(metadata); bridge.controls?.({ revoke: vi.fn() })
+    render(); browser.confirm.mockReturnValue(true)
+    await hooks.router!.navigate("/current?safe=1")
+    render()
+    await vi.waitFor(() => expect(hooks.router!.state.location.search).toBe("?safe=1"))
+    render(); render()
+    expect(bridge.signal.aborted).toBe(true)
+    expect(text()).toContain("Local MCP disconnected")
+    expect(text()).not.toContain("agent-1")
+    expect(text()).not.toContain("connection-123")
+    bridge.changed?.(metadata); render()
+    expect(text()).not.toContain("agent-1")
   })
 
   it("reports connection failures", async () => {
