@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { ReactElement, ReactNode } from "react"
 import { createMemoryRouter } from "react-router-dom"
 import { LocalMcpProvider } from "./LocalMcpProvider"
 import { connectLocalMcp } from "./localBridge"
@@ -11,6 +12,8 @@ const hooks = vi.hoisted(() => ({
   states: [] as unknown[], stateIndex: 0,
   refs: [] as Array<{ current: unknown }>, refIndex: 0,
   effects: [] as Effect[], effectIndex: 0, pending: [] as Array<() => void>,
+  pendingConfirmation: null as null | { runId: string; toolName: string; arguments: object },
+  capabilities: [] as Array<{ id: string; version: number; scope_id: string }>,
   router: null as ReturnType<typeof createMemoryRouter> | null,
 }))
 vi.mock("react", async importOriginal => {
@@ -50,17 +53,19 @@ vi.mock("react-router-dom", async importOriginal => ({
 }))
 vi.mock("../runtime", () => {
   const registerCapability = vi.fn(() => () => {})
-  return { useInferenceRuntime: () => ({ sessionId: "test-session", registerCapability }) }
+  return { useInferenceRuntime: () => ({ sessionId: "test-session", registerCapability, capabilities: hooks.capabilities, pendingConfirmation: hooks.pendingConfirmation }) }
 })
 vi.mock("./browserTools", () => ({ loadToolCatalog: async () => [], availableBrowserTools: () => [] }))
 vi.mock("./localBridge", () => ({ connectLocalMcp: vi.fn() }))
 
 let browser: EventTarget & { location: { origin: string }; confirm: ReturnType<typeof vi.fn> }
+let tree: ReactNode
 function render() {
   hooks.refIndex = 0
   hooks.stateIndex = 0
   hooks.effectIndex = 0
   const element = LocalMcpProvider({ children: null })
+  tree = element
   for (const effect of hooks.pending.splice(0)) effect()
   return element.props.value
 }
@@ -81,6 +86,8 @@ afterEach(() => {
   for (const effect of hooks.effects) effect.cleanup?.()
   hooks.router?.dispose()
   hooks.router = null
+  hooks.pendingConfirmation = null
+  hooks.capabilities = []
   hooks.refs = []
   hooks.states = []
   hooks.effects = []
@@ -172,5 +179,140 @@ describe("Local MCP navigation protection", () => {
     for (const effect of hooks.effects) effect.cleanup?.()
     hooks.effects = []
     expect(unload().defaultPrevented).toBe(false)
+  })
+})
+
+// Inspect rendered host elements without pretending this harness tests a DOM.
+type Host = ReactElement<{ children?: ReactNode; [key: string]: unknown }>
+function nodes(node: ReactNode = tree): Host[] {
+  if (Array.isArray(node)) return node.flatMap(child => nodes(child))
+  if (!node || typeof node !== "object" || !("props" in node)) return []
+  const element = node as Host
+  return [element, ...nodes(element.props.children ?? null)]
+}
+function text(node: ReactNode = tree): string {
+  if (Array.isArray(node)) return node.map(child => text(child)).join("")
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (node && typeof node === "object" && "props" in node) return text((node as Host).props.children ?? null)
+  return ""
+}
+function click(label: string) {
+  const button = nodes().find(node => node.type === "button" && text(node) === label)
+  expect(button, label).toBeDefined()
+  ;(button!.props.onClick as () => void)()
+}
+async function start() {
+  render().connect()
+  render()
+  await vi.waitFor(() => expect(connectLocalMcp).toHaveBeenCalledTimes(1))
+  return vi.mocked(connectLocalMcp).mock.calls[0][0]
+}
+const metadata = {
+  id: "connection-123", name: "Module example", page: { url: "https://chronicle.test/current", generation: "1", sessionId: "test-session" },
+  owner: { id: "agent-1", name: "<script>agent</script>", version: "3.0" }, ownershipRevision: 1,
+}
+
+describe("Local MCP connection controls", () => {
+  it("shows live status and owner metadata as text, and copies the connection ID", async () => {
+    const copy = vi.fn().mockResolvedValue(undefined)
+    vi.stubGlobal("navigator", { clipboard: { writeText: copy } })
+    const bridge = await start()
+    expect(text()).toContain("Connecting to local MCP")
+    bridge.connected?.()
+    bridge.changed?.(metadata)
+    render()
+    expect(text()).toContain("Local MCP connected")
+    expect(text()).toContain("<script>agent</script>")
+    expect(text()).toContain("Version: 3.0")
+    expect(text()).toContain("agent-1")
+    expect(nodes().some(node => "dangerouslySetInnerHTML" in node.props)).toBe(false)
+    click("Copy connection ID")
+    expect(copy).toHaveBeenCalledWith("connection-123")
+    bridge.status?.("reconnecting")
+    render()
+    expect(text()).toContain("Reconnecting to local MCP")
+    bridge.status?.("connected")
+    bridge.changed?.({ ...metadata, owner: null, ownershipRevision: 2 })
+    render()
+    expect(text()).toContain("No agent owns this connection")
+    expect(text()).not.toContain("agent-1")
+  })
+
+  it("uses the module scope as a default and only renames explicitly, without reconnecting", async () => {
+    hooks.capabilities = [{ id: "lua-editor", version: 1, scope_id: "my-module" }]
+    const bridge = await start()
+    expect(bridge.current().name).toBe("Module my-module")
+    const input = nodes().find(node => node.type === "input")!
+    ;(input.props.onChange as (event: unknown) => void)({ target: { value: "Raid workspace" } })
+    render()
+    expect(bridge.current().name).toBe("Module my-module")
+    const form = nodes().find(node => node.type === "form")!
+    ;(form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() })
+    render()
+    expect(bridge.current().name).toBe("Raid workspace")
+    expect(connectLocalMcp).toHaveBeenCalledTimes(1)
+  })
+
+  it.each(["work", "approval"])("confirms revoke and disconnect with pending %s", async pending => {
+    const bridge = await start()
+    const revoke = vi.fn().mockResolvedValue(undefined)
+    bridge.controls?.({ revoke })
+    bridge.changed?.(metadata)
+    if (pending === "work") bridge.busy?.(true)
+    else hooks.pendingConfirmation = { runId: "local-mcp:1", toolName: "save_lua_files", arguments: {} }
+    render()
+    browser.confirm.mockReturnValue(false)
+    click("Revoke agent access")
+    render().disconnect()
+    expect(revoke).not.toHaveBeenCalled()
+    expect(bridge.signal.aborted).toBe(false)
+    browser.confirm.mockReturnValue(true)
+    click("Revoke agent access")
+    expect(revoke).toHaveBeenCalledTimes(1)
+    await Promise.resolve()
+    render().disconnect()
+    expect(bridge.signal.aborted).toBe(true)
+    expect(render().active).toBe(false)
+  })
+
+  it("surfaces revoke failures without discarding the connection", async () => {
+    const bridge = await start()
+    bridge.changed?.(metadata)
+    bridge.controls?.({ revoke: async () => { throw new Error("Revoke failed. Disconnect and retry.") } })
+    render()
+    click("Revoke agent access")
+    await Promise.resolve()
+    expect(render().active).toBe(true)
+    expect(text()).toContain("Revoke failed. Disconnect and retry.")
+    expect(bridge.signal.aborted).toBe(false)
+  })
+
+  it("uses the page path without query parameters and ignores callbacks after disconnect", async () => {
+    await hooks.router!.navigate("/current?private=value")
+    const bridge = await start()
+    expect(bridge.current().name).toBe("Chronicle /current")
+    render().disconnect()
+    bridge.changed?.(metadata)
+    bridge.status?.("reconnecting")
+    bridge.busy?.(true)
+    expect(render().active).toBe(false)
+    expect(text()).not.toContain("connection-123")
+    expect(browser.confirm).not.toHaveBeenCalled()
+  })
+
+  it("does not connect in safe mode", async () => {
+    await hooks.router!.navigate("/current?safe=1")
+    render().connect()
+    expect(render().active).toBe(false)
+    await Promise.resolve()
+    expect(connectLocalMcp).not.toHaveBeenCalled()
+  })
+
+  it("reports connection failures", async () => {
+    vi.mocked(connectLocalMcp).mockRejectedValueOnce(new Error("Protocol mismatch"))
+    await start()
+    render()
+    expect(text()).toContain("Local MCP error")
+    expect(text()).toContain("Protocol mismatch")
   })
 })
