@@ -79,6 +79,8 @@ export type LuaWorkingCopy = {
   /** A private draft exists on the server for this working copy. */
   saved: boolean
   saving: boolean
+  /** Package paths that differ from the saved draft, e.g. ["main.lua"]. Every file before the first save. */
+  changed: string[]
 }
 /** Lets the page save from anywhere (header, publish) while the editor keeps owning its draft baseline. */
 export type LuaSourceEditorHandle = { save(expectedRevision?: number): Promise<{ ok: boolean; error?: string }> }
@@ -158,6 +160,7 @@ export function LuaSourceEditor({ project, onUploaded, onWorkingCopy, proposedSo
     onWorkingCopyRef.current?.(files && !loading ? {
       source: files.lua, manifest: files.manifest, readme: files.readme, revision: localRevision.current,
       dirty, valid: !validation && !error, validation: validation || error, saved: !!baseline, saving,
+      changed: (["lua", "manifest", "readme"] as const).filter(key => !baseline || files[key] !== baseline[key]).map(key => tabLabel[key]),
     } : null)
   }, [files, loading, dirty, validation, error, baseline, saving])
 

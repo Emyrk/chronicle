@@ -24,6 +24,20 @@ export async function readBridgeJSON(response: Response): Promise<unknown> {
   return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes))
 }
 
+/**
+ * True when chronicle-mcp speaking protocol 3 is listening and accepts this origin. /healthz is
+ * credential-free: it neither connects the tab nor exposes connection details.
+ */
+export async function probeLocalMcp(signal?: AbortSignal, fetcher: typeof fetch = fetch): Promise<boolean> {
+  try {
+    const response = await fetcher(`${LOCAL_MCP_ORIGIN}/healthz`, { credentials: "omit", referrerPolicy: "no-referrer", cache: "no-store",
+      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(2000)]) : AbortSignal.timeout(2000) })
+    if (!response.ok) return false
+    const health = await response.json() as { service?: unknown; protocol?: unknown } | null
+    return health?.service === "chronicle" && health.protocol === 3
+  } catch { return false }
+}
+
 export interface BridgeConnection {
   id: string
   name: string

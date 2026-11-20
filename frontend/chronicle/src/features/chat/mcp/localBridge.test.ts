@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { connectLocalMcp, parseBridgeCommands, parseBridgeConnection, readBridgeJSON, type BridgeConnection } from "./localBridge"
+import { connectLocalMcp, parseBridgeCommands, parseBridgeConnection, probeLocalMcp, readBridgeJSON, type BridgeConnection } from "./localBridge"
 import type { BrowserCommand } from "./browserTools"
 
 const page = { url: "http://localhost:4000/modules/author/module/edit", generation: "g1", sessionId: "s1" }
@@ -185,5 +185,21 @@ describe("protocol 3 local MCP relay", () => {
     const h = harness(); h.intercept(path => path === "browser" ? Promise.resolve(Response.json({ ok: true })) : undefined)
     await h.start(); expect(await h.pending).toBeInstanceOf(Error)
     expect(h.execute).not.toHaveBeenCalled()
+  })
+})
+
+describe("probeLocalMcp", () => {
+  it("finds only a protocol-3 chronicle-mcp through its credential-free health check", async () => {
+    const healthy = vi.fn<typeof fetch>(async () => Response.json({ service: "chronicle", version: "0.2.1", protocol: 3 }))
+    await expect(probeLocalMcp(undefined, healthy)).resolves.toBe(true)
+    const [url, init] = healthy.mock.calls[0]
+    expect(url).toBe("http://127.0.0.1:17643/healthz")
+    expect(init).toMatchObject({ credentials: "omit", referrerPolicy: "no-referrer" })
+    expect(init?.headers).toBeUndefined()
+    const answer = (body: unknown, status = 200) => vi.fn<typeof fetch>(async () => Response.json(body, { status }))
+    await expect(probeLocalMcp(undefined, answer({ service: "chronicle", protocol: 2 }))).resolves.toBe(false)
+    await expect(probeLocalMcp(undefined, answer({ service: "other", protocol: 3 }))).resolves.toBe(false)
+    await expect(probeLocalMcp(undefined, answer({ error: "Not found" }, 404))).resolves.toBe(false)
+    await expect(probeLocalMcp(undefined, vi.fn<typeof fetch>(async () => { throw new TypeError("Failed to fetch") }))).resolves.toBe(false)
   })
 })

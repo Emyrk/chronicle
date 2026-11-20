@@ -6,9 +6,26 @@ import { availableBrowserTools, executeBrowserCommand, loadToolCatalog, type Bro
 import { connectLocalMcp, type BridgeConnection } from "./localBridge"
 import { pageGuidanceRegistration } from "./pageGuidance"
 
-interface LocalMcpContextValue { active: boolean; connect: () => void; disconnect: () => void }
+/** The agent's most recent tool call through this tab. */
+export interface LocalMcpCall { toolName: string; at: number; state: "running" | "success" | "error" }
+export interface LocalMcpContextValue {
+  active: boolean; connect: () => void; disconnect: () => void
+  safeMode: boolean
+  status: "connecting" | "connected" | "reconnecting"
+  error: string; actionError: string
+  connection: BridgeConnection | null
+  busy: boolean; revoking: boolean; revoke: () => Promise<void>
+  name: string; rename: (name: string) => void
+  lastCall: LocalMcpCall | null
+  /** This browser has connected before, so probing the local port will not surprise the user. */
+  usedBefore: boolean
+  /** A page that shows the connection itself hides the floating panel while mounted. */
+  dock: () => () => void
+}
 const LocalMcpContext = createContext<LocalMcpContextValue | null>(null)
 export const useOptionalLocalMcp = () => useContext(LocalMcpContext)
+const usedKey = "chronicle-local-mcp-used"
+const readUsed = () => { try { return localStorage.getItem(usedKey) === "1" } catch { return false } }
 
 /** One explicit tab connection persists across routes; each navigation gets a fresh generation. */
 export function LocalMcpProvider({ children }: { children: ReactNode }) {
@@ -26,6 +43,10 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
   const connectionAbort = useRef<AbortController | null>(null)
   const connectionName = useRef("")
   const [error, setError] = useState("")
+  const [lastCall, setLastCall] = useState<LocalMcpCall | null>(null)
+  const [usedBefore, setUsedBefore] = useState(readUsed)
+  const [docks, setDocks] = useState(0)
+  const dock = useCallback(() => { setDocks(count => count + 1); return () => setDocks(count => count - 1) }, [])
   const safeMode = new URLSearchParams(location.search).get("safe") === "1"
   const url = typeof window === "undefined" ? location.pathname : window.location.origin + location.pathname + location.search
   const current = useRef<BrowserPage>({ url, generation: "", sessionId: runtime.sessionId })
@@ -46,7 +67,7 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
     if (!confirmCancellation()) return
     connectionAbort.current?.abort()
     controls.current = null
-    setActive(false); setConnection(null); setBusy(false); setError(""); setActionError("")
+    setActive(false); setConnection(null); setBusy(false); setError(""); setActionError(""); setLastCall(null)
   }
   const revoke = async () => {
     if (!controls.current || !confirmCancellation()) return
@@ -88,9 +109,24 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
           .filter(tool => available.some(item => item.capability.id === tool.capability.id && item.names.includes(tool.name)))
         return { page: current.current, tools, name: connectionName.current }
       },
-      execute: (command, snapshot, tools, signal) => executeBrowserCommand(command, snapshot, tools, currentRuntime(),
-        () => current.current, AbortSignal.any([signal, pageAbort.current.signal])),
-      connected: () => { if (!abort.signal.aborted) setStatus("connected") },
+      execute: async (command, snapshot, tools, signal) => {
+        const call = { toolName: command.toolName, at: Date.now() }
+        if (!abort.signal.aborted) setLastCall({ ...call, state: "running" })
+        try {
+          const result = await executeBrowserCommand(command, snapshot, tools, currentRuntime(),
+            () => current.current, AbortSignal.any([signal, pageAbort.current.signal]))
+          if (!abort.signal.aborted) setLastCall({ ...call, state: result.status === "success" ? "success" : "error" })
+          return result
+        } catch (reason) {
+          if (!abort.signal.aborted) setLastCall({ ...call, state: "error" })
+          throw reason
+        }
+      },
+      connected: () => {
+        if (abort.signal.aborted) return
+        setStatus("connected"); setUsedBefore(true)
+        try { localStorage.setItem(usedKey, "1") } catch { /* only skips the next visit's probe */ }
+      },
       changed: (value: BridgeConnection) => { if (!abort.signal.aborted) setConnection(value) },
       status: (value: "connected" | "reconnecting") => { if (!abort.signal.aborted) setStatus(value) },
       busy: (value: boolean) => { if (!abort.signal.aborted) setBusy(value) },
@@ -127,18 +163,23 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener("beforeunload", unload)
   }, [active])
 
-  return <LocalMcpContext.Provider value={{ active, connect, disconnect }}>
+  const rename = (value: string) => {
+    const trimmed = value.trim()
+    if (!trimmed || [...trimmed].length > 80) return
+    connectionName.current = trimmed
+    setName(trimmed); setNameDraft(trimmed)
+  }
+  const value: LocalMcpContextValue = { active, connect, disconnect, safeMode, status, error, actionError, connection, busy, revoking,
+    revoke, name, rename, lastCall, usedBefore, dock }
+  return <LocalMcpContext.Provider value={value}>
     {children}
-    {active && <aside aria-label="Local MCP connection" className="styled-scrollbar fixed bottom-4 left-4 z-[100] max-h-[calc(100vh-2rem)] max-w-sm overflow-auto rounded-md border border-border bg-background p-3 text-xs shadow-lg">
+    {active && (docks === 0 || localConfirmation) && <aside aria-label="Local MCP connection" className="styled-scrollbar fixed bottom-4 left-4 z-[100] max-h-[calc(100vh-2rem)] max-w-sm overflow-auto rounded-md border border-border bg-background p-3 text-xs shadow-lg">
       <p className="font-semibold">{safeMode ? "Local MCP disconnected" : error ? "Local MCP error" : status === "connected" ? "Local MCP connected" : status === "reconnecting" ? "Reconnecting to local MCP…" : "Connecting to local MCP…"}</p>
       <p className="mt-1 text-muted-foreground">Your agent can use this page’s tools and read their output. Modules use the browser working copy, not files on disk.</p>
       {error && <p role="alert" className="mt-2 text-destructive">{error}. Start the MCP server in your agent, check allowed origins and browser local-network permission, then disconnect and retry.</p>}
       <form className="mt-2 flex gap-2" onSubmit={event => {
         event.preventDefault()
-        const value = nameDraft.trim()
-        if (!value || [...value].length > 80) return
-        connectionName.current = value
-        setName(value)
+        rename(nameDraft)
       }}>
         <label className="min-w-0 flex-1">Connection name
           <input aria-label="Connection name" className="mt-1 w-full rounded border bg-background px-2 py-1" value={nameDraft} onChange={event => setNameDraft(event.target.value)} />

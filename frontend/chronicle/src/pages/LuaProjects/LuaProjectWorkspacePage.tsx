@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { ArrowLeftRight, BookOpen, ChevronLeft, GitCompare, PanelRightClose, PanelRightOpen, Rocket, Save, Undo2 } from "lucide-react"
+import { BookOpen, ChevronLeft, Code2, Eye, GitCompare, PanelRightClose, Rocket, Save, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
@@ -25,6 +25,7 @@ import { PaneResizer } from "./PaneResizer"
 import { MIN_SIDE_WIDTH } from "./paneWidth"
 import { readPreviewSelection, restoredEncounters, writePreviewSelection } from "./previewSelection"
 import { isInstanceIdentifier } from "./instanceIdentifier"
+import { ConnectAgentPrompt, WorkshopAgentBar } from "./WorkshopAgentBar"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
@@ -32,18 +33,22 @@ const LuaDiffReview = lazy(() => import("./LuaDiffReview").then(module => ({ def
 const LuaInstancePreview = lazy(() => import("./LuaInstancePreview").then(module => ({ default: module.LuaInstancePreview })))
 const events = createCachedStreamProvider()
 const proposalTimeoutMs = 5_000
-const layoutKey = "lua-workshop-layout"
+const layoutKey = "lua-workshop-layout-v2"
 
-/** sideWidth is the right-hand column's dragged width in px; null keeps the default. */
-type Layout = { focus: "chat" | "code"; sideOpen: boolean; sideWidth: number | null }
+/**
+ * The preview owns the canvas; code is an optional view of the same canvas. Browser chat is a
+ * secondary drawer: most authors drive the workshop from a local agent over MCP.
+ * chatWidth is the drawer's dragged width in px; null keeps the default.
+ */
+type Layout = { view: "preview" | "code"; chatOpen: boolean; chatWidth: number | null }
 type AiEdit = { file: LuaToolFile; before: EditorFiles; after: EditorFiles; revision: number }
 
 function readLayout(): Layout {
   try {
     const value = JSON.parse(localStorage.getItem(layoutKey) ?? "null") as Partial<Layout> | null
-    const sideWidth = typeof value?.sideWidth === "number" && Number.isFinite(value.sideWidth) && value.sideWidth >= MIN_SIDE_WIDTH ? value.sideWidth : null
-    return { focus: value?.focus === "code" ? "code" : "chat", sideOpen: value?.sideOpen !== false, sideWidth }
-  } catch { return { focus: "chat", sideOpen: true, sideWidth: null } }
+    const chatWidth = typeof value?.chatWidth === "number" && Number.isFinite(value.chatWidth) && value.chatWidth >= MIN_SIDE_WIDTH ? value.chatWidth : null
+    return { view: value?.view === "code" ? "code" : "preview", chatOpen: value?.chatOpen === true, chatWidth }
+  } catch { return { view: "preview", chatOpen: false, chatWidth: null } }
 }
 
 function errorMessage(error: unknown, fallback: string) {
@@ -64,7 +69,6 @@ function releaseStatus(project: LuaProject, copy: LuaWorkingCopy | null): { labe
 }
 
 const iconButton = "inline-flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground"
-const paneButton = "inline-flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
 
 /** The Workshop at /modules/<author>/<slug>/edit: resolves the module, then opens it by ID. */
 export function ModuleWorkspaceByPath() {
@@ -169,7 +173,8 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   const [layout, setLayoutState] = useState(readLayout)
   const gridRef = useRef<HTMLDivElement>(null)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
-  const [sideTab, setSideTab] = useState<"pane" | "preview">("pane")
+  // Browser chat loads only once opened, then stays mounted to keep its thread.
+  const [chatMounted, setChatMounted] = useState(() => readLayout().chatOpen)
   const [chatRequest, setChatRequest] = useState<WorkshopChatRequest>()
   const [aiEdit, setAiEdit] = useState<AiEdit | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
@@ -282,6 +287,14 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
     const result = await propose(aiEdit.before, aiEdit.revision)
     if (result.applied) setAiEdit(null)
   }
+  // A bullet in the tab title keeps unsaved agent edits visible while you work in the agent's terminal.
+  const dirty = !!copy?.dirty
+  useEffect(() => {
+    if (!dirty) return
+    const original = document.title
+    document.title = `● ${original}`
+    return () => { document.title = original }
+  }, [dirty])
   const localPanel = useMemo(() => {
     if (!project || !copy?.valid) return null
     try { return { value: panelPackageFromWorkingCopy(project, { manifest: copy.manifest, lua: copy.source, readme: copy.readme }), error: "" } }
@@ -293,96 +306,107 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   if (project.kind !== "panel") return <div className="container mx-auto p-8" role="alert">Browser source editing currently supports panel projects only.</div>
 
   const selectInstance = (id: string) => { setInstanceId(id); setEncounterIds([]); setChoosingInstance(false) }
-  const { focus, sideOpen } = layout
-  const sideWidth = dragWidth ?? layout.sideWidth
-  const sideName = focus === "chat" ? "code" : "chat"
-  const swap = () => { setLayout({ focus: sideName, sideOpen: true }); setSideTab("pane") }
-  const showSidePane = (pane: "chat" | "code") => { if (pane !== focus) setSideTab("pane") }
-  // From the preview's error card: send the explanation to the chat and make sure the chat is visible.
-  const askAssistant = (text: string) => { setChatRequest({ id: Date.now(), text }); showSidePane("chat") }
-  // Chat and code stay mounted and move between grid cells, so the editor keeps its state and undo history.
-  // Preview always lives in the side column; on narrow screens the side column stacks below the main pane.
-  const sideHidden = sideOpen ? "" : "lg:hidden"
-  const paneClass = (pane: "chat" | "code") => pane === focus
-    ? "flex min-h-[70vh] min-w-0 flex-col lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:min-h-0"
-    : `${sideTab === "pane" ? "flex" : "hidden"} order-1 h-[70vh] min-w-0 flex-col bg-black/20 lg:col-start-2 lg:row-start-2 lg:h-auto ${sideHidden}`
-  const swapButton = <button type="button" className={paneButton} onClick={swap} title="Swap which of code and chat is in the main area">
-    <ArrowLeftRight className="size-3.5" /> Swap code &amp; chat</button>
-  const mainControls = (pane: "chat" | "code") => pane === focus ? <span className="max-lg:hidden">{swapButton}</span> : undefined
+  const { view, chatOpen } = layout
+  const chatWidth = dragWidth ?? layout.chatWidth
+  const openChat = () => { setChatMounted(true); setLayout({ chatOpen: true }) }
+  const toggleChat = () => chatOpen ? setLayout({ chatOpen: false }) : openChat()
+  // From the preview's error card: send the explanation to the browser chat and open it.
+  const askAssistant = (text: string) => { setChatRequest({ id: Date.now(), text }); openChat() }
   const aiEditCurrent = !!aiEdit && copy?.revision === aiEdit.revision
   const status = releaseStatus(project, copy)
   const released = !!copy && !copy.dirty && copy.saved && !!project.main && latestRelease(project)?.sha256 === project.main.sha256
   const canSave = !!copy && copy.dirty && copy.valid && !copy.saving && !publishing
   const canRelease = !!copy && copy.valid && !copy.saving && !publishing && !released && (copy.dirty || !!project.main)
+  const unsaved = !!copy?.dirty && !copy.saving
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-border px-4 py-2">
+    <ConnectAgentPrompt />
+    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2">
       <Link className="text-xs text-muted-foreground hover:text-foreground" to={modulePath(project)}>← Overview</Link>
       <span aria-hidden className="h-4 w-px bg-border" />
       <h1 className="text-base font-semibold">{project.name}</h1>
       <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
       <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/modules/api" target="_blank" rel="noreferrer"
         title="Module API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
-      <button type="button" className={paneButton} disabled={!localMcp || new URLSearchParams(window.location.search).get("safe") === "1"}
-        title="Allow the local MCP server at 127.0.0.1:17643 to run local Lua previews and read output, player names, and encounter context. Nothing is saved or released."
-        onClick={() => { if (localMcp?.active) localMcp.disconnect(); else localMcp?.connect(); setSideTab("preview"); setLayout({ sideOpen: true }) }}>
-        {localMcp?.active ? "Disconnect local MCP" : "Connect to local MCP"}
-      </button>
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
+        {unsaved ? <span role="status" title={copy?.validation || "These files differ from main. Save to keep them."}
+          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-400/50 bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-amber-200">
+          <span aria-hidden className="size-2 animate-pulse rounded-full bg-amber-400" />
+          Unsaved · {copy.changed.join(", ")}
+          {!copy.valid && <span className="text-destructive">· invalid</span>}
+        </span> : <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
           <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}
           {copy && !copy.valid && <span className="text-destructive">· invalid</span>}
-        </span>
+        </span>}
         <button type="button" disabled={!canSave} onClick={() => void saveDraft()}
           title={`Save your changes to main. People who choose main run it; everyone else stays on the latest release. (${isMac ? "⌘" : "Ctrl+"}S)`}
-          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${copy?.dirty ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
-          <Save className="size-3.5" /> {copy?.saving && !publishing ? "Saving…" : "Save to main"}</button>
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${unsaved ? "bg-amber-400 text-black shadow-[0_0_0_3px_rgba(251,191,36,0.25)] hover:bg-amber-300" : "border border-border hover:bg-accent"}`}>
+          <Save className="size-3.5" /> {copy?.saving && !publishing ? "Saving…" : "Save to main"}
+          {unsaved && <kbd className="rounded bg-black/15 px-1 font-mono text-[10px]">{isMac ? "⌘S" : "Ctrl+S"}</kbd>}</button>
         {canTagReleases && <button type="button" disabled={!canRelease} onClick={() => void release()}
           title={released ? "Main is already the latest release." : "Tag main as a release. Everyone running the module moves to it."}
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!copy?.dirty && canRelease ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
           <Rocket className="size-3.5" /> {publishing ? "Releasing…" : copy?.dirty ? "Save & tag release" : "Tag release"}</button>}
       </div>
-      <div className="flex items-center gap-1">
-        <span className="lg:hidden">{swapButton}</span>
-        {!sideOpen && <button type="button" onClick={() => setLayout({ sideOpen: true })} className="hidden items-center gap-1.5 rounded-md border border-border px-2.5 py-1 text-xs hover:bg-accent lg:inline-flex">
-          <PanelRightOpen className="size-3.5" /> Show side panel
-        </button>}
-      </div>
     </header>
-    <div ref={gridRef} style={sideWidth !== null ? { "--workshop-side": `${sideWidth}px` } as CSSProperties : undefined}
-      className={`grid flex-1 grid-cols-1 lg:min-h-0 lg:grid-rows-[auto_minmax(0,1fr)] ${!sideOpen ? "lg:grid-cols-1"
-        // A dragged width still leaves the main area its minimum when the window shrinks.
-        : sideWidth !== null ? "lg:grid-cols-[minmax(0,1fr)_min(var(--workshop-side),calc(100%_-_360px))]"
-        : "lg:grid-cols-[minmax(0,1fr)_minmax(360px,min(44%,680px))]"}`}>
-      <div className={`order-1 flex h-10 items-center gap-1 border-y-2 border-foreground/25 bg-black/20 px-2 lg:col-start-2 lg:row-start-1 lg:border-y-0 lg:border-b lg:border-b-border ${sideHidden}`}>
-        {(["pane", "preview"] as const).map(tab => <button key={tab} type="button" aria-pressed={sideTab === tab} onClick={() => setSideTab(tab)}
-          className={`rounded-md px-2.5 py-1 text-xs ${sideTab === tab ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>{tab === "preview" ? "Preview" : sideName === "code" ? "Code" : "Chat"}</button>)}
-        <div className="ml-auto flex items-center gap-1 max-lg:hidden">
-          {swapButton}
-          <button type="button" className={iconButton} onClick={() => setLayout({ sideOpen: false })} title="Hide side panel" aria-label="Hide side panel"><PanelRightClose className="size-4" /></button>
-        </div>
-      </div>
-      {/* Divider between the main area and the side column; drag it to resize. */}
-      <PaneResizer containerRef={gridRef} width={sideWidth} onDrag={setDragWidth}
-        onCommit={width => { setDragWidth(null); setLayout({ sideWidth: width }) }}
-        className={`hidden lg:col-start-2 lg:row-span-2 lg:row-start-1 ${sideOpen ? "lg:block" : ""}`} />
-      <section className={paneClass("chat")} aria-label="Workshop chat">
-        <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading chat…</p>}>
-          <LuaWorkshopChat projectId={project.id} projectName={project.name} request={chatRequest} windowControls={mainControls("chat")}
-            onShowCode={focus === "chat" ? swap : undefined} />
-        </Suspense>
-      </section>
-      <section className={paneClass("code")} aria-label="Code">
-        {(focus === "code" || aiEdit) && <div className="flex h-10 shrink-0 items-center gap-1 border-b border-border px-2">
-          {aiEdit && <div className="flex min-w-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 py-0.5 pl-2 pr-0.5 text-[11px]">
-            <span className="truncate">AI edited {aiEdit.file}</span>
-            <button type="button" className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent" onClick={() => { showSidePane("code"); setDiffOpen(open => !open) }}><GitCompare className="size-3" /> Diff</button>
-            <button type="button" className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent disabled:opacity-40" disabled={!aiEditCurrent} onClick={() => void undoAiEdit()}
-              title={aiEditCurrent ? "Restore the files from before this AI edit" : "The working copy changed since this edit; use editor undo (Ctrl+Z) instead"}><Undo2 className="size-3" /> Undo</button>
+    <WorkshopAgentBar chatOpen={chatOpen} onToggleChat={toggleChat} />
+    <div ref={gridRef} style={chatWidth !== null ? { "--workshop-side": `${chatWidth}px` } as CSSProperties : undefined}
+      className={`grid flex-1 grid-cols-1 lg:min-h-0 ${!chatOpen ? ""
+        // A dragged width still leaves the canvas its minimum when the window shrinks.
+        : chatWidth !== null ? "lg:grid-cols-[minmax(0,1fr)_min(var(--workshop-side),calc(100%_-_360px))]"
+        : "lg:grid-cols-[minmax(0,1fr)_minmax(320px,min(34%,520px))]"}`}>
+      <section aria-label="Module canvas" className="flex min-h-[70vh] min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:min-h-0">
+        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
+          {instance.data && !choosingInstance ? <div className="flex min-w-0 items-center gap-1.5">
+            <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(true)}
+              title="Choose another instance" aria-label="Choose another instance"><ChevronLeft className="size-4" /></button>
+            <span className="min-w-0 truncate text-xs" title={instance.data.id}>
+              <span className="font-medium">{instance.data.name}</span>
+              <span className="text-muted-foreground"> · {instance.data.realm_name}{instance.data.start_time && ` · ${new Date(instance.data.start_time).toLocaleDateString()}`}</span>
+            </span>
+          </div> : <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+            {recent.data && <select aria-label="Recent instance" className="min-w-0 flex-1 basis-56 rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
+              <option value="">Choose a recent instance…</option>
+              {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
+            </select>}
+            <form className="flex min-w-0 flex-1 basis-56 gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
+              <input aria-label="Instance ID or slug" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID or slug" : "Paste an instance ID or slug"} />
+              <button className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
+            </form>
+            {instance.data && <button type="button" className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(false)}>Cancel</button>}
           </div>}
-          <div className="ml-auto flex items-center">{mainControls("code")}</div>
-        </div>}
-        <div className="relative min-h-0 flex-1">
+          {aiEdit && <div className="flex min-w-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 py-0.5 pl-2 pr-0.5 text-[11px]">
+            <span className="truncate">Agent edited {aiEdit.file}</span>
+            <button type="button" className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent" onClick={() => {
+              const opening = !diffOpen
+              setDiffOpen(opening)
+              if (opening) setLayout({ view: "code" })
+            }}><GitCompare className="size-3" /> Diff</button>
+            <button type="button" className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent disabled:opacity-40" disabled={!aiEditCurrent} onClick={() => void undoAiEdit()}
+              title={aiEditCurrent ? "Restore the files from before this edit" : "The working copy changed since this edit; use editor undo (Ctrl+Z) instead"}><Undo2 className="size-3" /> Undo</button>
+          </div>}
+          <div role="tablist" aria-label="Canvas view" className="ml-auto flex shrink-0 rounded-md border border-border p-0.5">
+            {([["preview", "Preview", Eye], ["code", "Code", Code2]] as const).map(([value, label, Icon]) => <button key={value} type="button" role="tab" aria-selected={view === value}
+              onClick={() => setLayout({ view: value })}
+              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs ${view === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+              <Icon className="size-3.5" /> {label}</button>)}
+          </div>
+          {instance.data && view === "preview" && <div className="basis-full"><EncounterStrip encounters={instance.data.encounters ?? []} selectedIds={encounterIds} onChange={setEncounterIds} /></div>}
+        </div>
+        {/* Preview and code stay mounted, so switching views keeps the editor's state and undo history. */}
+        <div role="tabpanel" aria-label="Instance preview" hidden={view !== "preview"} className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto bg-black/20 p-3">
+            {!instanceId && <p className="text-xs text-muted-foreground">Choose an instance to run your unsaved source against its encounters in the browser. Your agent's <code className="font-mono">run_preview</code> uses the same selection.</p>}
+            {instanceId && !validInstanceIdentifier && <p role="alert" className="text-xs text-destructive">Enter a valid instance ID or slug.</p>}
+            {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
+            {instance.isError && <p role="alert" className="text-xs text-destructive">Instance unavailable.</p>}
+            {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
+            {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
+            {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
+            {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
+              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant} />
+            </Suspense>}
+        </div>
+        <div role="tabpanel" aria-label="Code" hidden={view !== "code"} className="relative min-h-0 flex-1">
           {diffOpen && aiEdit && <div className="absolute inset-x-0 top-0 z-10 max-h-[60%] overflow-hidden border-b border-border bg-background shadow-lg">
             <div className="flex items-center justify-between px-3 py-1.5 text-xs text-muted-foreground">
               <span>{aiEdit.file} · before (left), after (right)</span>
@@ -399,41 +423,17 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
           </Suspense>
         </div>
       </section>
-      <section aria-label="Instance preview" className={`${sideTab === "preview" ? "flex" : "hidden"} order-1 h-[70vh] min-w-0 flex-col bg-black/20 lg:col-start-2 lg:row-start-2 lg:h-auto ${sideHidden}`}>
-        <div className="flex flex-wrap items-center gap-2 border-b border-border p-2">
-          {instance.data && !choosingInstance ? <div className="flex min-w-0 basis-full items-center gap-1.5">
-            <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(true)}
-              title="Choose another instance" aria-label="Choose another instance"><ChevronLeft className="size-4" /></button>
-            <span className="min-w-0 truncate text-xs" title={instance.data.id}>
-              <span className="font-medium">{instance.data.name}</span>
-              <span className="text-muted-foreground"> · {instance.data.realm_name}{instance.data.start_time && ` · ${new Date(instance.data.start_time).toLocaleDateString()}`}</span>
-            </span>
-          </div> : <>
-          {recent.data && <select aria-label="Recent instance" className="min-w-0 flex-1 basis-56 rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
-            <option value="">Choose a recent instance…</option>
-            {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
-          </select>}
-          <form className="flex min-w-0 flex-1 basis-56 gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
-            <input aria-label="Instance ID or slug" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID or slug" : "Paste an instance ID or slug"} />
-            <button className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
-          </form>
-          {instance.data && <button type="button" className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(false)}>Cancel</button>}
-          </>}
-          {instance.data && <div className="basis-full"><EncounterStrip encounters={instance.data.encounters ?? []} selectedIds={encounterIds} onChange={setEncounterIds} /></div>}
-        </div>
-        <div className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-y-auto p-3">
-          {!instanceId && <p className="text-xs text-muted-foreground">Choose an instance to run your unsaved source against its encounters in the browser.</p>}
-          {instanceId && !validInstanceIdentifier && <p role="alert" className="text-xs text-destructive">Enter a valid instance ID or slug.</p>}
-          {instance.isFetching && <p role="status" className="text-xs text-muted-foreground">Loading encounters…</p>}
-          {instance.isError && <p role="alert" className="text-xs text-destructive">Instance unavailable.</p>}
-          {localPanel?.error && <p role="alert" className="text-xs text-destructive">{localPanel.error}</p>}
-          {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
-          {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
-          {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
-            <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant} />
-          </Suspense>}
-        </div>
-      </section>
+      {/* Divider between the canvas and the chat drawer; drag it to resize. */}
+      {chatOpen && <PaneResizer containerRef={gridRef} width={chatWidth} onDrag={setDragWidth}
+        onCommit={width => { setDragWidth(null); setLayout({ chatWidth: width }) }}
+        className="hidden lg:col-start-2 lg:row-start-1 lg:block" />}
+      {chatMounted && <section aria-label="Browser chat" hidden={!chatOpen} className="h-[70vh] min-w-0 flex-col border-t border-border bg-black/20 lg:col-start-2 lg:row-start-1 lg:h-auto lg:border-t-0 [&:not([hidden])]:flex">
+        <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading chat…</p>}>
+          <LuaWorkshopChat projectId={project.id} projectName={project.name} request={chatRequest}
+            windowControls={<button type="button" className={iconButton} onClick={() => setLayout({ chatOpen: false })} title="Close browser chat" aria-label="Close browser chat"><PanelRightClose className="size-4" /></button>}
+            onShowCode={view === "code" ? undefined : () => setLayout({ view: "code" })} />
+        </Suspense>
+      </section>}
     </div>
   </div>
 }

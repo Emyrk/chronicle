@@ -81,7 +81,7 @@ func TestSaveLuaFilesArguments(t *testing.T) {
 	tool, ok := clientToolByName(luaEditorCapabilityID, "save_lua_files")
 	require.True(t, ok)
 	require.Equal(t, "view_mutation", tool.Effect)
-	require.Equal(t, "unless_yolo", tool.Confirmation)
+	require.Equal(t, "never", tool.Confirmation)
 	require.JSONEq(t, `{"type":"object","properties":{"expected_revision":{"type":"integer","minimum":0}},"required":["expected_revision"],"additionalProperties":false}`, string(tool.Parameters))
 	for _, raw := range []string{`{}`, `null`, `[]`, `{"expected_revision":null}`, `{"expected_revision":-1}`, `{"expected_revision":1.5}`, `{"expected_revision":"1"}`, `{"expected_revision":0,"extra":true}`, `{"expected_revision":0} {}`, `{"expected_revision":9223372036854775808}`} {
 		_, err := validateClientToolArguments(tool.Name, raw)
