@@ -13,7 +13,8 @@ import (
 )
 
 type Units struct {
-	flavor database.WoWFlavor
+	playerRealmLookup PlayerRealmLookup
+	flavor            database.WoWFlavor
 	// TODO: Slain to remove units?
 	Info         map[guid.GUID]unitinfo.Info
 	Players      map[guid.GUID]combatant.Combatant
@@ -226,11 +227,19 @@ func (us *Units) flattenOwners() {
 
 func (us *Units) Get(gid guid.GUID) (unitinfo.Info, bool) {
 	u, ok := us.Info[gid]
+	if ok && us.playerRealmLookup != nil {
+		u.RawRealm = us.PlayerRawRealm(gid, u.Name, u.RawRealm)
+		us.Info[gid] = u
+	}
 	return u, ok
 }
 
 func (us *Units) GetPlayer(gid guid.GUID) (combatant.Combatant, bool) {
 	c, ok := us.Players[gid]
+	if ok && us.playerRealmLookup != nil {
+		c.RawRealm = us.PlayerRawRealm(gid, c.Name, c.RawRealm)
+		us.Players[gid] = c
+	}
 	return c, ok
 }
 
@@ -299,6 +308,10 @@ func (us *Units) Update(u unitinfo.Info) {
 	} else {
 		us.directOwners[u.Guid] = *u.Owner
 	}
+	if u.RawRealm == "" && u.Name == existing.Name {
+		u.RawRealm = existing.RawRealm
+	}
+	u.RawRealm = us.PlayerRawRealm(u.Guid, u.Name, u.RawRealm)
 	us.Info[u.Guid] = u
 	us.flattenOwners()
 }
@@ -309,11 +322,12 @@ func (us *Units) UpdateUnitName(gid guid.GUID, name string) {
 			return
 		}
 		info.Name = name
+		info.RawRealm = us.PlayerRawRealm(gid, name, "")
 		us.Info[gid] = info
 		return
 	}
 
-	us.Info[gid] = unitinfo.Info{Guid: gid, Name: name}
+	us.Info[gid] = unitinfo.Info{Guid: gid, Name: name, RawRealm: us.PlayerRawRealm(gid, name, "")}
 }
 
 // InvalidatePlayerTalents clears the talents used by encounter ranking snapshots.
@@ -342,6 +356,7 @@ func (us *Units) UpdatePlayer(c combatant.Combatant) {
 		c.MergeExisting(existing)
 	}
 
+	c.RawRealm = us.PlayerRawRealm(c.Guid, c.Name, c.RawRealm)
 	us.Players[c.Guid] = c
 	us.PlayerByName[c.Name] = c.Guid
 }

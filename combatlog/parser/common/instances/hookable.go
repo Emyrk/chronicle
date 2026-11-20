@@ -993,6 +993,7 @@ func (h *Hookable) FightDetectionHandler(m messages.Message) (func() error, erro
 }
 
 func (h *Hookable) finalizeFight() error {
+	h.units.RefreshPlayerRealms()
 	// Close the live phase tracker at fight end. The final phase's kill type
 	// is not yet known; fightEncounter assigns it after computing the outcome.
 	h.currentFight.Phases.close(*h.currentFight.End, "")
@@ -1310,6 +1311,7 @@ func (h *Hookable) Finalize(ctx context.Context) (*FinalizedInstance, error) {
 	if h.finalizing || h.finalized {
 		return nil, fmt.Errorf("instance finalization already started")
 	}
+	h.units.RefreshPlayerRealms()
 	h.finalizing = true
 	defer func() {
 		h.finalizing = false

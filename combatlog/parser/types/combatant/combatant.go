@@ -58,6 +58,10 @@ type CombatantInfoV22 struct {
 // Combatant is the raw parsing. Additional logic should be built on top
 // to handle things like enums.
 type Combatant struct {
+	// RawRealm is unresolved evidence for Name, not realm-qualified ownership of
+	// this GUID-only compatibility record's gear or other merged metadata.
+	RawRealm string
+
 	Name      string
 	Guid      guid.GUID
 	Seen      time.Time
@@ -85,6 +89,9 @@ func (c *Combatant) SafeMergeExisting(existing Combatant) {
 	if c.Name == "Unknown" && existing.Name != "Unknown" && existing.Name != "" {
 		// Annoying, but another case to consider
 		c.Name = existing.Name
+	}
+	if c.RawRealm == "" && c.Name == existing.Name && c.Guid == existing.Guid {
+		c.RawRealm = existing.RawRealm
 	}
 	if c.Level == nil {
 		c.Level = existing.Level
