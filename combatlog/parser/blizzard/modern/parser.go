@@ -83,6 +83,11 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 		return nil, err
 	}
 	transformer := newTransformReader(r)
+	// Allocate before wiring the reader so parser and transformer share the same
+	// index even when the inner scanner buffers ahead. Other formats leave it nil.
+	if format == database.LogFormatV22Cleu {
+		transformer.playerRealms = make(map[guid.GUID]map[string]PlayerRealmInfo)
+	}
 	p, err := newParser(ctx, logger, transformer, wowDB, gear, reg)
 	if err != nil {
 		return nil, err
@@ -111,7 +116,6 @@ func NewHermesProxy(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB
 		return nil, err
 	}
 	p.guids = transformer.guids
-	p.playerRealms = transformer.playerRealms
 	p.version = 9
 	return p, nil
 }

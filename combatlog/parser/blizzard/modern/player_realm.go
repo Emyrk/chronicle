@@ -18,6 +18,9 @@ type PlayerRealmInfo struct {
 // backwards. Same-GUID/same-name players on different realms remain ambiguous;
 // retaining the first realm is an intentional limitation of this metadata index.
 func (r *transformReader) recordPlayerRealm(rawGUID, name, display string) {
+	if r.playerRealms == nil {
+		return
+	}
 	value, ok := r.guids.rawToValue[rawGUID]
 	if !ok || display == "" {
 		return

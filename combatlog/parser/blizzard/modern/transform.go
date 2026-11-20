@@ -68,7 +68,6 @@ func newHermesProxyTransformReader(r io.Reader) *transformReader {
 func newTransformReaderWithOptions(r io.Reader, preserveTimestamp, trimPlayerNameSuffix bool, advancedFields int) *transformReader {
 	return &transformReader{
 		scanner:              logscanner.New(r),
-		playerRealms:         make(map[guid.GUID]map[string]PlayerRealmInfo),
 		guids:                newGUIDNormalizer(),
 		names:                make(map[string]string),
 		preserveTimestamp:    preserveTimestamp,
