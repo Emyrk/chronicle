@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { BookOpen, ChevronLeft, Code2, Eye, GitCompare, PanelLeft, PanelRightClose, Rocket, Save, Undo2 } from "lucide-react"
+import { BookOpen, Bot, ChevronLeft, Code2, Eye, GitCompare, MessageSquare, PanelLeft, PanelRightClose, Rocket, Save, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { useInstance } from "@/api/queries"
 import type { RecentInstancesResponse } from "@/api/typesGenerated"
@@ -27,7 +27,7 @@ import type { FrameSize } from "./PreviewFrame"
 import { MIN_SIDE_WIDTH } from "./paneWidth"
 import { readPreviewSelection, restoredEncounters, writePreviewSelection } from "./previewSelection"
 import { isInstanceIdentifier } from "./instanceIdentifier"
-import { ConnectAgentPrompt, WorkshopAgentBar } from "./WorkshopAgentBar"
+import { ConnectAgentPrompt, WorkshopAgentControl } from "./WorkshopAgentControl"
 
 const LuaSourceEditor = lazy(() => import("./LuaSourceEditor").then(module => ({ default: module.LuaSourceEditor })))
 const LuaWorkshopChat = lazy(() => import("./LuaWorkshopChat").then(module => ({ default: module.LuaWorkshopChat })))
@@ -330,18 +330,40 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
 
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <ConnectAgentPrompt />
-    <header className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border px-4 py-2">
-      <Link className="text-xs text-muted-foreground hover:text-foreground" to={modulePath(project)}>← Overview</Link>
-      <span aria-hidden className="h-4 w-px bg-border" />
-      <h1 className="text-base font-semibold">{project.name}</h1>
-      <span className="font-mono text-xs text-muted-foreground">{project.slug}</span>
-      <a className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground" href="/modules/api" target="_blank" rel="noreferrer"
-        title="Module API reference and FAQ (opens in a new tab)"><BookOpen className="size-3.5" /> API reference</a>
+    <header className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-border px-3 py-2">
+      <Link className={iconButton} to={modulePath(project)} title="Back to the module overview" aria-label="Back to the module overview"><ChevronLeft className="size-4" /></Link>
+      <h1 className="min-w-0 truncate text-sm font-semibold" title={project.slug}>{project.name}</h1>
+      <a className={iconButton} href="/modules/api" target="_blank" rel="noreferrer"
+        title="Module API reference and FAQ (opens in a new tab)" aria-label="Module API reference"><BookOpen className="size-4" /></a>
+      <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+      {view === "preview" && !layout.encountersOpen && <button type="button" className={iconButton}
+        onClick={() => setLayout({ encountersOpen: true })} title="Show instance and encounters" aria-label="Show encounters"><PanelLeft className="size-4" /></button>}
+      <div role="tablist" aria-label="Canvas view" className="flex shrink-0 rounded-md border border-border p-0.5">
+        {([["preview", "Preview", Eye], ["code", "Code", Code2]] as const).map(([value, label, Icon]) => <button key={value} type="button" role="tab" aria-selected={view === value}
+          onClick={() => setLayout({ view: value })}
+          className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs ${view === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
+          <Icon className="size-3.5" /> {label}</button>)}
+      </div>
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        {unsaved ? <span role="status" title={copy?.validation || "These files differ from main. Save to keep them."}
-          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-400/50 bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-amber-200">
-          <span aria-hidden className="size-2 animate-pulse rounded-full bg-amber-400" />
-          Unsaved · {copy.changed.join(", ")}
+        <WorkshopAgentControl />
+        <button type="button" aria-pressed={chatOpen} onClick={toggleChat} title="Chat with Chronicle's in-browser assistant instead"
+          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs ${chatOpen ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-accent"}`}>
+          <MessageSquare className="size-3.5" /> Chat</button>
+        <span aria-hidden className="mx-1 h-5 w-px bg-border" />
+        {aiEdit && <div className="flex min-w-0 items-center gap-0.5 rounded-full border border-primary/40 bg-primary/10 py-0.5 pl-2 pr-0.5 text-[11px]" title={`Agent edited ${aiEdit.file}`}>
+          <Bot aria-label={`Agent edited ${aiEdit.file}`} className="size-3.5 text-primary" />
+          <button type="button" className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent" onClick={() => {
+            const opening = !diffOpen
+            setDiffOpen(opening)
+            if (opening) setLayout({ view: "code" })
+          }}><GitCompare className="size-3" /> Diff</button>
+          <button type="button" className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent disabled:opacity-40" disabled={!aiEditCurrent} onClick={() => void undoAiEdit()}
+            title={aiEditCurrent ? "Restore the files from before this edit" : "The working copy changed since this edit; use editor undo (Ctrl+Z) instead"}><Undo2 className="size-3" /> Undo</button>
+        </div>}
+        {unsaved ? <span role="status" title={copy?.validation || `${copy.changed.join(", ")} differ from main. Save to keep them.`}
+          className="inline-flex max-w-52 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-400/50 bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-amber-200">
+          <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
+          <span className="truncate">Unsaved · {copy.changed.join(", ")}</span>
           {!copy.valid && <span className="text-destructive">· invalid</span>}
         </span> : <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
           <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}
@@ -355,57 +377,40 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
         {canTagReleases && <button type="button" disabled={!canRelease} onClick={() => void release()}
           title={released ? "Main is already the latest release." : "Tag main as a release. Everyone running the module moves to it."}
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!copy?.dirty && canRelease ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
-          <Rocket className="size-3.5" /> {publishing ? "Releasing…" : copy?.dirty ? "Save & tag release" : "Tag release"}</button>}
+          <Rocket className="size-3.5" /> {publishing ? "Releasing…" : copy?.dirty ? "Save & tag" : "Tag release"}</button>}
       </div>
     </header>
-    <WorkshopAgentBar chatOpen={chatOpen} onToggleChat={toggleChat} />
     <div ref={gridRef} style={chatWidth !== null ? { "--workshop-side": `${chatWidth}px` } as CSSProperties : undefined}
       className={`grid flex-1 grid-cols-1 lg:min-h-0 ${!chatOpen ? ""
         // A dragged width still leaves the canvas its minimum when the window shrinks.
         : chatWidth !== null ? "lg:grid-cols-[minmax(0,1fr)_min(var(--workshop-side),calc(100%_-_360px))]"
         : "lg:grid-cols-[minmax(0,1fr)_minmax(320px,min(34%,520px))]"}`}>
       <section aria-label="Module canvas" className="flex min-h-[70vh] min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:min-h-0">
-        <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2">
-          {sidebarInstance && view === "preview" && !layout.encountersOpen && <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            onClick={() => setLayout({ encountersOpen: true })} title="Show encounters" aria-label="Show encounters"><PanelLeft className="size-4" /></button>}
-          {instance.data && !choosingInstance ? <div className="flex min-w-0 items-center gap-1.5">
-            <button type="button" className="rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(true)}
-              title="Choose another instance" aria-label="Choose another instance"><ChevronLeft className="size-4" /></button>
-            <span className="min-w-0 truncate text-xs" title={instance.data.id}>
-              <span className="font-medium">{instance.data.name}</span>
-              <span className="text-muted-foreground"> · {instance.data.realm_name}{instance.data.start_time && ` · ${new Date(instance.data.start_time).toLocaleDateString()}`}</span>
-            </span>
-          </div> : <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
-            {recent.data && <select aria-label="Recent instance" className="min-w-0 flex-1 basis-56 rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
-              <option value="">Choose a recent instance…</option>
-              {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
-            </select>}
-            <form className="flex min-w-0 flex-1 basis-56 gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
-              <input aria-label="Instance ID or slug" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "…or paste an instance ID or slug" : "Paste an instance ID or slug"} />
-              <button className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
-            </form>
-            {instance.data && <button type="button" className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(false)}>Cancel</button>}
-          </div>}
-          {aiEdit && <div className="flex min-w-0 items-center gap-1 rounded-md border border-primary/40 bg-primary/10 py-0.5 pl-2 pr-0.5 text-[11px]">
-            <span className="truncate">Agent edited {aiEdit.file}</span>
-            <button type="button" className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent" onClick={() => {
-              const opening = !diffOpen
-              setDiffOpen(opening)
-              if (opening) setLayout({ view: "code" })
-            }}><GitCompare className="size-3" /> Diff</button>
-            <button type="button" className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 hover:bg-accent disabled:opacity-40" disabled={!aiEditCurrent} onClick={() => void undoAiEdit()}
-              title={aiEditCurrent ? "Restore the files from before this edit" : "The working copy changed since this edit; use editor undo (Ctrl+Z) instead"}><Undo2 className="size-3" /> Undo</button>
-          </div>}
-          <div role="tablist" aria-label="Canvas view" className="ml-auto flex shrink-0 rounded-md border border-border p-0.5">
-            {([["preview", "Preview", Eye], ["code", "Code", Code2]] as const).map(([value, label, Icon]) => <button key={value} type="button" role="tab" aria-selected={view === value}
-              onClick={() => setLayout({ view: value })}
-              className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs ${view === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
-              <Icon className="size-3.5" /> {label}</button>)}
-          </div>
-        </div>
         {/* Preview and code stay mounted, so switching views keeps the editor's state and undo history. */}
         <div role="tabpanel" aria-label="Instance preview" hidden={view !== "preview"} className="min-h-0 flex-1 bg-black/20 [&:not([hidden])]:flex">
-          {sidebarInstance && layout.encountersOpen && <Suspense fallback={<div className="w-[267px] shrink-0 border-r" />}>
+          {(layout.encountersOpen || !sidebarInstance) && <aside aria-label="Instance and encounters" className="flex min-h-0 w-[267px] shrink-0 flex-col border-r border-border bg-background/40">
+            <div className="border-b border-border p-3">
+              {instance.data && !choosingInstance ? <div className="flex items-start gap-2">
+                <div className="min-w-0 flex-1" title={instance.data.id}>
+                  <p className="truncate text-sm font-medium">{instance.data.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{instance.data.realm_name}{instance.data.start_time && ` · ${new Date(instance.data.start_time).toLocaleDateString()}`}</p>
+                </div>
+                <button type="button" className="rounded-md border border-border px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(true)}
+                  title="Choose another instance">Change</button>
+              </div> : <div className="flex flex-col gap-2">
+                <p className="text-xs font-medium text-muted-foreground">Preview instance</p>
+                {recent.data && <select aria-label="Recent instance" className="w-full rounded-md border border-border bg-background px-2 py-1.5 text-xs" value={recent.data.instances.some(item => item.id === instanceId) ? instanceId : ""} onChange={event => selectInstance(event.target.value)}>
+                  <option value="">Choose a recent instance…</option>
+                  {recent.data.instances.map(item => <option key={item.id} value={item.id}>{item.name} · {item.realm_name} · {new Date(item.uploaded_at).toLocaleDateString()}</option>)}
+                </select>}
+                <form className="flex gap-2" onSubmit={event => { event.preventDefault(); selectInstance(instanceInput.trim()) }}>
+                  <input aria-label="Instance ID or slug" className="min-w-0 flex-1 rounded-md border border-border bg-background px-2 py-1.5 font-mono text-xs" value={instanceInput} onChange={event => setInstanceInput(event.target.value)} placeholder={recent.data ? "or an ID or slug" : "Instance ID or slug"} />
+                  <button className="rounded-md border border-border px-2.5 py-1.5 text-xs hover:bg-accent disabled:opacity-50" type="submit" disabled={!instanceInput.trim()}>Load</button>
+                </form>
+                {instance.data && <button type="button" className="self-start rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground" onClick={() => setChoosingInstance(false)}>Cancel</button>}
+              </div>}
+            </div>
+            {sidebarInstance && <Suspense fallback={null}>
             <EncounterSidebar instanceId={sidebarInstance.id} raidInstance={sidebarInstance} encounters={sidebarInstance.encounters} trashGroups={trashGroups}
               selectedIds={encounterIds} activePhaseId={null} rankingWindowActive={false} showRankings={false} hideAd isMobile={false} showHints={false}
               onSelect={(id, mode) => setEncounterIds(mode === "single" ? [id] : encounterIds.includes(id) ? encounterIds.filter(selected => selected !== id) : [...encounterIds, id])}
@@ -414,8 +419,9 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
               onSelectPhase={(_range, encounterId) => setEncounterIds([encounterId])}
               includeWipes={includeWipes} onIncludeWipesChange={setIncludeWipes} instanceStartTime={sidebarInstance.startTime}
               onCollapse={() => setLayout({ encountersOpen: false })}
-              className="static max-h-none min-h-0 bg-background/40 py-3 pl-3 pr-3" />
-          </Suspense>}
+              className="static max-h-none min-h-0 w-auto flex-1 border-r-0 py-3 pl-3 pr-3" />
+            </Suspense>}
+          </aside>}
           <div className="styled-scrollbar flex min-h-0 min-w-0 flex-1 flex-col gap-3 overflow-auto p-3">
             {!instanceId && <p className="text-xs text-muted-foreground">Choose an instance to run your unsaved source against its encounters in the browser. Your agent's <code className="font-mono">run_preview</code> uses the same selection.</p>}
             {instanceId && !validInstanceIdentifier && <p role="alert" className="text-xs text-destructive">Enter a valid instance ID or slug.</p>}

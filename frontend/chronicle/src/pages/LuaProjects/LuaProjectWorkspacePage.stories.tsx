@@ -227,9 +227,9 @@ const meta = {
 export default meta
 type Story = StoryObj<typeof meta>
 
-/** Clicks the agent bar's Connect button, as a first-time user would. */
+/** Clicks the header's Connect agent button, as a first-time user would. */
 const connect: Story["play"] = async ({ canvasElement }) => {
-  await userEvent.click(await within(canvasElement).findByRole("button", { name: "Connect local agent" }, { timeout: 15_000 }))
+  await userEvent.click(await within(canvasElement).findByRole("button", { name: "Connect agent" }, { timeout: 15_000 }))
 }
 
 /** First visit: no agent has ever connected, so nothing probes the local port. The agent bar explains MCP setup. */
