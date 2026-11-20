@@ -435,13 +435,34 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	// ── Parse ────────────────────────────────────────────────────────────
 	reg := w.parent.RegistryForFlavor(flavor)
 	parsed, profileCaptured, err := w.parseCombatLogWithOptionalCPUProfile(ctx, job.Args.LogID, job.Args.Profile, func() (*parseResult, error) {
-		return w.parseCombatLog(ctx, logFormat, files, artifacts, gameDB, reg, job.Args.IdentityMode, preloadedFirst, preRealmName)
+		return w.parseCombatLog(ctx, logFormat, files, artifacts, gameDB, reg, job.Args.IdentityMode, preloadedFirst, preRealmName, preRealmID, job.Args.TenantID)
 	})
 	if err != nil {
 		jobResult = "failure"
 		return err
 	}
 	report.CPUProfileAvailable = profileCaptured
+
+	// Scouting includes players outside every encounter and possibly outside
+	// the uploader's realm. Never use the upload realm as an identity fallback.
+	if parsed.scouting.Len() > 0 {
+		realms := parsed.scoutingRealms
+		if len(realms) > 0 {
+			payload, err := scoutingPayload(parsed.scouting, realms)
+			if err != nil {
+				return fmt.Errorf("encode scouting players: %w", err)
+			}
+			if err := db.InTx(ctx, func(tx *authz.AuthzTX) error {
+				if err := lockExpectedParseGeneration(ctx, tx, job.Args.LogID, parseGeneration); err != nil {
+					return err
+				}
+				_, err := tx.UpsertScoutedPlayers(ctx, payload)
+				return err
+			}, nil); err != nil {
+				return fmt.Errorf("persist scouting players: %w", err)
+			}
+		}
+	}
 
 	logCapabilities := parsed.logCapabilities
 	encountersState := parsed.encountersState

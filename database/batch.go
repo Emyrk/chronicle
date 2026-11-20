@@ -4793,39 +4793,50 @@ func (b *UpsertPlayerGearHistoryBatchResults) Close() error {
 }
 
 const upsertPlayers = `-- name: UpsertPlayers :batchexec
-INSERT INTO
-  game_players (
-    id, realm_id, name, guild_id,
-    class, gender, race, faction,
-    gear, level, talents,
-    updated_from_instance,
-    updated_at
-  )
-VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-ON CONFLICT (id, realm_id) DO UPDATE
-  SET name = EXCLUDED.name,
-      guild_id = EXCLUDED.guild_id,
-      class = EXCLUDED.class,
-      race = EXCLUDED.race,
-      gender = EXCLUDED.gender,
-      faction = COALESCE(EXCLUDED.faction, game_players.faction),
-      gear = CASE
-        WHEN EXCLUDED.gear IS NOT NULL AND EXCLUDED.gear != '[]'::jsonb
-        THEN EXCLUDED.gear
-        ELSE game_players.gear
-      END,
-      level = EXCLUDED.level,
-      talents = CASE
-        WHEN EXCLUDED.talents IS NOT NULL AND EXCLUDED.talents != 'null'::jsonb
-        THEN EXCLUDED.talents
-        ELSE game_players.talents
-      END,
-      updated_from_instance = EXCLUDED.updated_from_instance,
-
-      updated_at = EXCLUDED.updated_at
-WHERE
-  EXCLUDED.updated_at > game_players.updated_at
+INSERT INTO game_players (
+  id, realm_id, name, guild_id, class, gender, race, faction, gear, level, talents, updated_from_instance, updated_at,
+  name_observed_at, class_observed_at, race_observed_at, gender_observed_at, faction_observed_at, level_observed_at, guild_observed_at
+) VALUES (
+  $1::wow_guid,
+  $2::uuid,
+  $3::text,
+  $4::uuid,
+  $5::wow_playable_class,
+  $6::wow_playable_gender,
+  $7::wow_playable_race,
+  $8::wow_player_faction,
+  $9,
+  $10::smallint,
+  $11,
+  $12::uuid,
+  $13::timestamptz,
+  CASE WHEN $3 NOT IN ('', 'Unknown') THEN COALESCE($14::timestamptz, $13::timestamptz) END,
+  CASE WHEN $5 <> 'UNKNOWN' THEN COALESCE($15::timestamptz, $13::timestamptz) END,
+  CASE WHEN $7 <> 'Unknown' THEN COALESCE($16::timestamptz, $13::timestamptz) END,
+  CASE WHEN $6 NOT IN ('Unknown', 'NotSet') THEN COALESCE($17::timestamptz, $13::timestamptz) END,
+  CASE WHEN $8 IS NOT NULL THEN COALESCE($18::timestamptz, $13::timestamptz) END,
+  CASE WHEN $10 > 0 THEN COALESCE($19::timestamptz, $13::timestamptz) END,
+  CASE WHEN ($4 IS NOT NULL OR $20::boolean) THEN COALESCE($21::timestamptz, $13::timestamptz) END
+)
+ON CONFLICT (id, realm_id) DO UPDATE SET
+  name = CASE WHEN EXCLUDED.name_observed_at > COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name NOT IN ('', 'Unknown') THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.name ELSE game_players.name END,
+  name_observed_at = CASE WHEN EXCLUDED.name_observed_at > COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name NOT IN ('', 'Unknown') THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.name_observed_at ELSE COALESCE(game_players.name_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.name NOT IN ('', 'Unknown') THEN game_players.updated_at END) END,
+  class = CASE WHEN EXCLUDED.class_observed_at > COALESCE(game_players.class_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.class <> 'UNKNOWN' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.class ELSE game_players.class END,
+  class_observed_at = CASE WHEN EXCLUDED.class_observed_at > COALESCE(game_players.class_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.class <> 'UNKNOWN' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.class_observed_at ELSE COALESCE(game_players.class_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.class <> 'UNKNOWN' THEN game_players.updated_at END) END,
+  race = CASE WHEN EXCLUDED.race_observed_at > COALESCE(game_players.race_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.race <> 'Unknown' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.race ELSE game_players.race END,
+  race_observed_at = CASE WHEN EXCLUDED.race_observed_at > COALESCE(game_players.race_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.race <> 'Unknown' THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.race_observed_at ELSE COALESCE(game_players.race_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.race <> 'Unknown' THEN game_players.updated_at END) END,
+  gender = CASE WHEN EXCLUDED.gender_observed_at > COALESCE(game_players.gender_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.gender NOT IN ('Unknown', 'NotSet') THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.gender ELSE game_players.gender END,
+  gender_observed_at = CASE WHEN EXCLUDED.gender_observed_at > COALESCE(game_players.gender_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.gender NOT IN ('Unknown', 'NotSet') THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.gender_observed_at ELSE COALESCE(game_players.gender_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.gender NOT IN ('Unknown', 'NotSet') THEN game_players.updated_at END) END,
+  faction = CASE WHEN EXCLUDED.faction_observed_at > COALESCE(game_players.faction_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.faction IS NOT NULL THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.faction ELSE game_players.faction END,
+  faction_observed_at = CASE WHEN EXCLUDED.faction_observed_at > COALESCE(game_players.faction_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.faction IS NOT NULL THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.faction_observed_at ELSE COALESCE(game_players.faction_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.faction IS NOT NULL THEN game_players.updated_at END) END,
+  level = CASE WHEN EXCLUDED.level_observed_at > COALESCE(game_players.level_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.level > 0 THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.level ELSE game_players.level END,
+  level_observed_at = CASE WHEN EXCLUDED.level_observed_at > COALESCE(game_players.level_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.level > 0 THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.level_observed_at ELSE COALESCE(game_players.level_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.level > 0 THEN game_players.updated_at END) END,
+  guild_id = CASE WHEN EXCLUDED.guild_observed_at > COALESCE(game_players.guild_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.guild_id IS NOT NULL THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.guild_id ELSE game_players.guild_id END,
+  guild_observed_at = CASE WHEN EXCLUDED.guild_observed_at > COALESCE(game_players.guild_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.guild_id IS NOT NULL THEN game_players.updated_at END, '-infinity'::timestamptz) THEN EXCLUDED.guild_observed_at ELSE COALESCE(game_players.guild_observed_at, CASE WHEN game_players.scouting_last_seen_at IS NULL AND game_players.guild_id IS NOT NULL THEN game_players.updated_at END) END,
+  gear = CASE WHEN EXCLUDED.updated_at > game_players.updated_at AND EXCLUDED.gear IS NOT NULL AND EXCLUDED.gear <> '[]'::jsonb THEN EXCLUDED.gear ELSE game_players.gear END,
+  talents = CASE WHEN EXCLUDED.updated_at > game_players.updated_at AND EXCLUDED.talents IS NOT NULL AND EXCLUDED.talents <> 'null'::jsonb THEN EXCLUDED.talents ELSE game_players.talents END,
+  updated_from_instance = CASE WHEN EXCLUDED.updated_at > game_players.updated_at THEN EXCLUDED.updated_from_instance ELSE game_players.updated_from_instance END,
+  updated_at = GREATEST(game_players.updated_at, EXCLUDED.updated_at)
 `
 
 type UpsertPlayersBatchResults struct {
@@ -4848,8 +4859,18 @@ type UpsertPlayersParams struct {
 	Talents             *PlayerTalents       `db:"talents" json:"talents"`
 	UpdatedFromInstance uuid.NullUUID        `db:"updated_from_instance" json:"updated_from_instance"`
 	UpdatedAt           pgtype.Timestamptz   `db:"updated_at" json:"updated_at"`
+	NameObservedAt      pgtype.Timestamptz   `db:"name_observed_at" json:"name_observed_at"`
+	ClassObservedAt     pgtype.Timestamptz   `db:"class_observed_at" json:"class_observed_at"`
+	RaceObservedAt      pgtype.Timestamptz   `db:"race_observed_at" json:"race_observed_at"`
+	GenderObservedAt    pgtype.Timestamptz   `db:"gender_observed_at" json:"gender_observed_at"`
+	FactionObservedAt   pgtype.Timestamptz   `db:"faction_observed_at" json:"faction_observed_at"`
+	LevelObservedAt     pgtype.Timestamptz   `db:"level_observed_at" json:"level_observed_at"`
+	GuildKnown          bool                 `db:"guild_known" json:"guild_known"`
+	GuildObservedAt     pgtype.Timestamptz   `db:"guild_observed_at" json:"guild_observed_at"`
 }
 
+// Freeze legacy known-value clocks before advancing snapshot freshness, even when
+// incoming metadata is unknown. Unknown legacy values have no fallback clock.
 func (q *sqlQuerier) UpsertPlayers(ctx context.Context, arg []UpsertPlayersParams) *UpsertPlayersBatchResults {
 	batch := &pgx.Batch{}
 	for _, a := range arg {
@@ -4867,6 +4888,14 @@ func (q *sqlQuerier) UpsertPlayers(ctx context.Context, arg []UpsertPlayersParam
 			a.Talents,
 			a.UpdatedFromInstance,
 			a.UpdatedAt,
+			a.NameObservedAt,
+			a.ClassObservedAt,
+			a.RaceObservedAt,
+			a.GenderObservedAt,
+			a.FactionObservedAt,
+			a.LevelObservedAt,
+			a.GuildKnown,
+			a.GuildObservedAt,
 		}
 		batch.Queue(upsertPlayers, vals...)
 	}

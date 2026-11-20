@@ -18,6 +18,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
@@ -27,6 +29,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
+	"github.com/google/uuid"
 )
 
 type overrideGameDB struct {
@@ -62,6 +65,8 @@ func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chron
 // parseResult holds everything produced by the parse phase that the
 // finalization phase needs.
 type parseResult struct {
+	scoutingRealms  map[guid.GUID]uuid.UUID
+	scouting        *scouting.Scouting
 	encountersState *encounters.State
 	creaturesState  *creatures.Creatures
 	consumers       *consumers.Consumers
@@ -95,6 +100,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	identityMode bool,
 	preloadedFirst []byte,
 	preRealmName string,
+	uploadRealmID, tenantID uuid.UUID,
 ) (*parseResult, error) {
 	logLogger := w.parent.logger
 	if !w.parent.EmitParsingLogs() {
@@ -102,6 +108,22 @@ func (w *WorkerLogParse) parseCombatLog(
 	}
 
 	logCapabilities := initialLogCapabilities(logFormat)
+	var scoutPlayers *scouting.Scouting
+	var scoutRealms map[guid.GUID]uuid.UUID
+	if logFormat == database.LogFormatV22Cleu {
+		var err error
+		scoutPlayers, err = w.loadForeverScouting(ctx, artifacts)
+		if err != nil {
+			return nil, err
+		}
+		scoutRealms, err = resolveScoutingRealms(ctx, w.parent.Zed, scoutPlayers, tenantID)
+		if err != nil {
+			return nil, err
+		}
+		if skipped := scoutPlayers.Len() - len(scoutRealms); skipped > 0 {
+			w.parent.logger.WarnContext(ctx, "skipping scouting players without an unambiguous verified realm", "skipped_players", skipped)
+		}
+	}
 
 	// Server-side logs still use the flavor registry for known instances so
 	// rankings and speedrun rules are attached. The AzerothCore resolver adds
@@ -284,6 +306,9 @@ func (w *WorkerLogParse) parseCombatLog(
 		var parseAdvancer consumers.Advancer = p
 		if logFormat == database.LogFormatV22Cleu {
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
+			if scoutPlayers.Len() > 0 {
+				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, uploadRealmID: uploadRealmID}
+			}
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
@@ -357,6 +382,8 @@ func (w *WorkerLogParse) parseCombatLog(
 	}
 
 	return &parseResult{
+		scoutingRealms:  scoutRealms,
+		scouting:        scoutPlayers,
 		encountersState: encountersState,
 		creaturesState:  creaturesState,
 		consumers:       c,

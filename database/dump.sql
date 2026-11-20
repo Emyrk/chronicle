@@ -1320,7 +1320,15 @@ CREATE TABLE game_players (
     updated_from_instance uuid,
     level smallint DEFAULT 0 NOT NULL,
     talents jsonb DEFAULT 'null'::jsonb NOT NULL,
-    faction wow_player_faction
+    faction wow_player_faction,
+    name_observed_at timestamp with time zone,
+    class_observed_at timestamp with time zone,
+    race_observed_at timestamp with time zone,
+    gender_observed_at timestamp with time zone,
+    faction_observed_at timestamp with time zone,
+    level_observed_at timestamp with time zone,
+    guild_observed_at timestamp with time zone,
+    scouting_last_seen_at timestamp with time zone
 );
 
 CREATE TABLE gear_lists (

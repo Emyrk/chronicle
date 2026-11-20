@@ -1721,6 +1721,14 @@ type GamePlayer struct {
 	Level               int16                `db:"level" json:"level"`
 	Talents             *PlayerTalents       `db:"talents" json:"talents"`
 	Faction             NullWowPlayerFaction `db:"faction" json:"faction"`
+	NameObservedAt      pgtype.Timestamptz   `db:"name_observed_at" json:"name_observed_at"`
+	ClassObservedAt     pgtype.Timestamptz   `db:"class_observed_at" json:"class_observed_at"`
+	RaceObservedAt      pgtype.Timestamptz   `db:"race_observed_at" json:"race_observed_at"`
+	GenderObservedAt    pgtype.Timestamptz   `db:"gender_observed_at" json:"gender_observed_at"`
+	FactionObservedAt   pgtype.Timestamptz   `db:"faction_observed_at" json:"faction_observed_at"`
+	LevelObservedAt     pgtype.Timestamptz   `db:"level_observed_at" json:"level_observed_at"`
+	GuildObservedAt     pgtype.Timestamptz   `db:"guild_observed_at" json:"guild_observed_at"`
+	ScoutingLastSeenAt  pgtype.Timestamptz   `db:"scouting_last_seen_at" json:"scouting_last_seen_at"`
 }
 
 // One gear snapshot per (player, log instance): the outfit worn as of the last COMBATANT_INFO in that instance. Powers armory item-level trends and gear-over-time views.
