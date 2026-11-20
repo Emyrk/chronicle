@@ -253,6 +253,23 @@ describe("Local MCP connection controls", () => {
     expect(connectLocalMcp).toHaveBeenCalledTimes(1)
   })
 
+  it("bounds default names and explicit rename by Unicode code points", async () => {
+    hooks.capabilities = [{ id: "lua-editor", version: 1, scope_id: "🎉".repeat(100) }]
+    const bridge = await start()
+    const original = bridge.current().name
+    expect([...original]).toHaveLength(80)
+    for (const value of [" ", "x".repeat(81), "🎉".repeat(80)]) {
+      const input = nodes().find(node => node.type === "input")!
+      ;(input.props.onChange as (event: unknown) => void)({ target: { value } })
+      render()
+      const form = nodes().find(node => node.type === "form")!
+      ;(form.props.onSubmit as (event: unknown) => void)({ preventDefault: vi.fn() })
+      render()
+      expect(bridge.current().name).toBe(value.startsWith("🎉") ? value : original)
+    }
+    expect(connectLocalMcp).toHaveBeenCalledTimes(1)
+  })
+
   it.each(["work", "approval"])("confirms revoke and disconnect with pending %s", async pending => {
     const bridge = await start()
     const revoke = vi.fn().mockResolvedValue(undefined)

@@ -62,7 +62,7 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
     // Runtime scopes identify the module/instance; otherwise the route is useful
     // without copying potentially sensitive query parameters into a display name.
     const capability = runtime.capabilities?.find(item => item.id === "lua-editor")
-    const defaultName = capability?.scope_id ? `Module ${capability.scope_id}` : `Chronicle ${location.pathname}`
+    const defaultName = [...(capability?.scope_id ? `Module ${capability.scope_id}` : `Chronicle ${location.pathname}`)].slice(0, 80).join("").trim()
     connectionName.current = defaultName
     setName(defaultName); setNameDraft(defaultName)
     setError(""); setActionError(""); setConnection(null); setBusy(false); setRevoking(false); setStatus("connecting"); setActive(true)
@@ -127,14 +127,14 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
       <form className="mt-2 flex gap-2" onSubmit={event => {
         event.preventDefault()
         const value = nameDraft.trim()
-        if (!value) return
+        if (!value || [...value].length > 80) return
         connectionName.current = value
         setName(value)
       }}>
         <label className="min-w-0 flex-1">Connection name
-          <input aria-label="Connection name" className="mt-1 w-full rounded border bg-background px-2 py-1" maxLength={120} value={nameDraft} onChange={event => setNameDraft(event.target.value)} />
+          <input aria-label="Connection name" className="mt-1 w-full rounded border bg-background px-2 py-1" value={nameDraft} onChange={event => setNameDraft(event.target.value)} />
         </label>
-        <button type="submit" className="self-end rounded border px-2 py-1" disabled={!nameDraft.trim() || nameDraft.trim() === name}>Rename</button>
+        <button type="submit" className="self-end rounded border px-2 py-1" disabled={!nameDraft.trim() || [...nameDraft.trim()].length > 80 || nameDraft.trim() === name}>Rename</button>
       </form>
       {connection && <div className="mt-2 break-words">
         <p>Connection ID: <code className="select-all">{connection.id}</code></p>
@@ -147,8 +147,8 @@ export function LocalMcpProvider({ children }: { children: ReactNode }) {
           <p>Agent: {connection.owner.name}</p>
           <p>Version: {connection.owner.version}</p>
           <p>Agent ID: <code className="select-all">{connection.owner.id}</code></p>
-          <button type="button" className="mt-2 rounded border px-2 py-1" disabled={revoking} onClick={() => void revoke()}>{revoking ? "Revoking…" : "Revoke agent access"}</button>
-        </div> : <p className="mt-2 text-muted-foreground">No agent owns this connection.</p>}
+          <button type="button" className="mt-2 rounded border px-2 py-1" disabled={revoking || !!error} onClick={() => void revoke()}>{revoking ? "Revoking…" : "Revoke agent access"}</button>
+        </div> : <p className="mt-2 text-muted-foreground">No agent owns this connection. Available; waiting for an agent to select it.</p>}
       </div>}
       {actionError && <p role="alert" className="mt-2 text-destructive">{actionError}</p>}
       {safeMode && <p>Local MCP is disabled by ?safe=1.</p>}
