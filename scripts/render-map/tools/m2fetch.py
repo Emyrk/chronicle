@@ -29,8 +29,9 @@ def main():
     product, region = cfg["product"], cfg.get("region", "us")
     cache = os.path.join(ROOT, "cache", "cdn", "%s-%s" % (product, region))
     params = "%s*%s*%s" % (cache, product, region)
-    bad = m2obj.fetch(raw, os.path.join(ROOT, "cache", "casc", "cascget"), params, sorted(fids))
-    print("m2fetch: %d models, %d unusable: %s" % (len(fids), len(bad), bad))
+    bad, missing = m2obj.fetch(raw, os.path.join(ROOT, "cache", "casc", "cascget"), params, sorted(fids))
+    print("m2fetch: %d models, %d unusable: %s; %d textures unusable (empty/undecodable, parts skipped): %s"
+          % (len(fids), len(bad), bad, len(missing), [os.path.basename(m) for m in missing]))
 
 
 if __name__ == "__main__":

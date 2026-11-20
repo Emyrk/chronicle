@@ -64,6 +64,13 @@ the kind instead (open sky: there is no ceiling over the ground to remove):
      glTF (x, y, z) = (-wow_x, wow_z, wow_y) and bounds_wow means the same thing for both.
   height.png is rendered in the UNTURNED world frame with the passes' camera (frame x/y, --rot), so
   it overlays dry.png / textured.png of the same version pixel for pixel (at the same width).
+  6. M2 DOODADS (`m2_*` objects, render_set --m2): clipped and buried-culled like any placed object, then
+     joined into their OWN node `doodad` (smooth-shaded so the exporter shares their vertices; the M2
+     two-sided flag -> `_ds` material -> doubleSided). They never move anything else: bounds_wow, the
+     centring offset, the height z range and height.png come from the other objects only, and they do not
+     count as cover in the buried cull, so terrain/WMO/liquid faces are identical to a run without them.
+     Tree tops may stand above bounds_wow z max. Consumers render the node but must not treat it as floor
+     or as a camera blocker (chronicle MapScene3D leaves `doodad*` out of its floor probes).
 """
 import argparse
 import json
@@ -187,6 +194,11 @@ def select_geometry(objs, include_value=None, exclude_value=None, z_min=None, z_
 
 def is_liquid(ob):
     return ob.name.startswith("liquid")
+
+
+def is_doodad(ob):
+    """M2 doodads from adt2obj --m2 (terrain maps only): `m2_*` objects, joined into `doodad` for export."""
+    return ob.name.startswith(("m2_", "doodad"))
 
 
 def join_solid(objs):
@@ -395,7 +407,7 @@ def build_pbr(mat):
         mat.surface_render_method = "BLENDED"
         mat.use_backface_culling = False
         return
-    mat.use_backface_culling = True
+    mat.use_backface_culling = "_ds_" not in mat.name  # M2 two-sided flag (adt2obj m2_material)
     if img:
         tex = nt.nodes.new("ShaderNodeTexImage")
         tex.image = img
@@ -666,9 +678,9 @@ def bury_cull(objs, depth, hole_depth, straddle_depth, lo, hi):
                 "skipped": "no terrain vertices"}
     bvh = BVHTree.FromPolygons(fv, fp, all_triangles=False, epsilon=0.0)
     ground, n_grid = filled_ground(fv, lo, hi)
-    sv, sp = [], []  # every solid face (terrain + WMO + doodads), for 'is anything over this point?'
+    sv, sp = [], []  # every solid face (terrain + WMO; not doodads: they never change other geometry's cull)
     for ob in objs:
-        if not is_liquid(ob):
+        if not is_liquid(ob) and not is_doodad(ob):
             base = len(sv)
             sv.extend(tuple(v.co) for v in ob.data.vertices)
             sp.extend(tuple(base + i for i in p.vertices) for p in ob.data.polygons)
@@ -852,29 +864,44 @@ def prepare_terrain(a, cull=True):
     st["objects_kept"] = len(objs)
     src = {}
     for o in objs:  # terrain / liquid / wmo_<fid> / m2: where the faces (and the bytes) are
-        k = "terrain" if is_terrain(o) else "liquid" if is_liquid(o) else "_".join(o.name.split("_")[:2])
+        k = "terrain" if is_terrain(o) else "liquid" if is_liquid(o) else "m2" if is_doodad(o) else "_".join(o.name.split("_")[:2])
         src[k] = src.get(k, 0) + len(o.data.polygons)
     st["faces_by_source"] = dict(sorted(src.items(), key=lambda kv: -kv[1]))
     log(f"terrain prepare (cull={cull}): {st}")
     return objs, lo, hi, st
 
 
+def join_as(objs, name):
+    with bpy.context.temp_override(active_object=objs[0], selected_editable_objects=objs, selected_objects=objs):
+        bpy.ops.object.join()
+    objs[0].name = name
+    return objs[0]
+
+
 def export_terrain_glb(a, path, cull, report):
     objs, flo, fhi, st = prepare_terrain(a, cull)
-    wlo, whi = world_bounds(objs)
+    wlo, whi = world_bounds([o for o in objs if not is_doodad(o)])
     atlases = shrink_atlases(objs, a.terrain_px_per_yard)
     for mat in bpy.data.materials:
         build_pbr(mat)
-    solid = [o for o in objs if not is_liquid(o)]
-    with bpy.context.temp_override(active_object=solid[0], selected_editable_objects=solid, selected_objects=solid):
-        bpy.ops.object.join()
-    solid[0].name = "terrain"
+    doodads = [o for o in objs if is_doodad(o)]  # before the join: it removes the joined objects
+    join_as([o for o in objs if not is_liquid(o) and not is_doodad(o)], "terrain")
+    if doodads:
+        doodad = join_as(doodads, "doodad")
+        doodad.data.polygons.foreach_set("use_smooth", [True] * len(doodad.data.polygons))
+        doodad.data.update()
     objs = meshes()
     for ob in objs:
         ob.data.transform(TO_PIPELINE_FRAME)
-    lo, hi = world_bounds(objs)
+    lo, hi = world_bounds([o for o in objs if not is_doodad(o)])
     off = centre(objs, lo, hi)
     export_glb(path, a.image_format)
+    if doodads:
+        dlo, dhi = world_bounds([o for o in objs if is_doodad(o)])
+        report["doodads"] = {
+            "node": "doodad", "faces": sum(len(o.data.polygons) for o in objs if is_doodad(o)),
+            "z_max": dhi.z - off.z, "glb_bytes": os.path.getsize(path),
+            "note": "M2 doodads, own node; not floor, not a camera blocker; z_max may exceed bounds_wow max z"}
     return objs, flo, fhi, wlo, whi, lo, hi, off, st, atlases
 
 
@@ -890,7 +917,7 @@ def main_terrain(a):
     report["bounds_wow"] = {"min": list(lo), "max": list(hi)}
     report["offset_applied"] = list(off)
     report["faces_full"] = st["faces_in"]
-    report["faces_open_top"] = sum(len(o.data.polygons) for o in objs)
+    report["faces_open_top"] = sum(len(o.data.polygons) for o in objs)  # doodads included (report["doodads"])
     report["support_cull"] = st
     report["support_cull_args"] = {"keep_buried": a.keep_buried, "bury_depth": a.bury_depth, "hole_depth": a.hole_depth,
                                    "straddle_depth": a.straddle_depth,
@@ -908,7 +935,7 @@ def main_terrain(a):
 
     # ---- height map: open-top, no liquid, TRUE world frame, the passes' camera (frame x/y, --rot)
     objs, _, _, _ = prepare_terrain(a, True)
-    for ob in [o for o in objs if is_liquid(o)]:
+    for ob in [o for o in objs if is_liquid(o) or is_doodad(o)]:  # the floor elevation: no water, no canopies
         bpy.data.objects.remove(ob, do_unlink=True)
     for mat in bpy.data.materials:
         height_material(mat, wlo.z, whi.z)

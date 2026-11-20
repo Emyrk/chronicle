@@ -1,8 +1,10 @@
 """Terrain (ADT) map -> OBJ for blender_topdown.py: heightmap mesh with baked ground textures,
 water (MH2O) as liquid_* objects, and placed WMOs (obj0 MODF) as transformed group objects.
-M2 doodads (trees, rocks, crates) are NOT included.
+M2 doodads (trees, shrubs, crates; obj0 MDDF) only with --m2, as m2_<fid>_... objects (needs raw/m2 from
+m2fetch.py; render_set --m2 runs both; README "M2 doodads").
 
   .venv/bin/python -I tools/adt2obj.py <map-dir> --out <map-dir>/raw/obj/<slug>.obj [--chunk-px 128]
+      [--m2 [--m2-exclude a,b] [--m2-max-height H]]
 
 Needs (from fetch_map.py): raw/tiles.json, raw/adt/XX_YY_{root,tex0,obj0}.adt,
 raw/terrain-textures/<fid>.png, raw/wmo/<fid>/{root.wmo,groups/,textures/}.
@@ -330,6 +332,55 @@ def place_m2_vertices(verts, pl, yaw_off_deg):
     return np.stack([MAPC - F[:, 2], MAPC - F[:, 0], F[:, 1]], axis=1)
 
 
+def m2_material(part):
+    """One material per (texture, two-sided, alpha key): every model sharing a texture shares a material.
+    `_ds` = M2Material flag 0x4 (two-sided: foliage cards); export_glb turns back-face culling off for it.
+    The `_b<blend>` suffix stays last (export_glb reads it: 1 = alpha key)."""
+    return "m2_t%s%s_b%d" % (part["tex"] or 0, "_ds" if part["flags"] & 0x4 else "", min(part["blend"], 1))
+
+
+def m2_exclusions(mdir, spec):
+    """--m2-exclude -> fid -> reason or None. Integers are FileDataIDs; anything else is a case-insensitive
+    substring of the model path in the community listfile (workdir cache/, as fetch_map uses)."""
+    items = [t.strip() for t in spec.split(",") if t.strip()]
+    fids = {int(t) for t in items if t.isdigit()}
+    subs = [t.lower() for t in items if not t.isdigit()]
+    names = {}
+    if subs:
+        lf = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(mdir))), "cache", "community-listfile.csv")
+        if not os.path.exists(lf):
+            raise SystemExit("--m2-exclude by name needs %s (fetch_map.py --refresh-wdt-index downloads it)" % lf)
+        with open(lf, encoding="utf-8", errors="replace") as f:
+            for line in f:
+                fid, _, name = line.partition(";")
+                name = name.strip().lower()
+                if name.endswith(".m2") and any(t in name for t in subs) and fid.isdigit():
+                    names[int(fid)] = name
+
+    def excluded(fid):
+        if fid in fids:
+            return "fid"
+        if fid in names:
+            return "name " + next(t for t in subs if t in names[fid])
+        return None
+    return excluded
+
+
+def m2_shrink(model, pl, max_height):
+    """--m2-max-height: the factor (<= 1) that makes placed FOLIAGE (rest pose, exported parts, x scale) at
+    most max_height tall; 1 when it already is, without a cap, or for a model that is not foliage. Foliage =
+    a part that is two-sided (M2Material 0x4) AND alpha-keyed (blend 1): leaf cards. On Excavation Site that
+    is every tree and no barrier (opaque planks), crane (two-sided but opaque ropes) or crate."""
+    if max_height <= 0:
+        return 1.0
+    parts = [p for p in model["parts"] if p["tris"] and p["blend"] < 2]
+    if not any(p["flags"] & 0x4 and p["blend"] == 1 for p in parts):
+        return 1.0
+    zs = [p["verts"][:, 2] for p in parts]
+    h = (max(z.max() for z in zs) - min(z.min() for z in zs)) * pl["scale"]
+    return min(1.0, max_height / h) if h > 0 else 1.0
+
+
 def rot_x(a):
     c, s = math.cos(a), math.sin(a)
     return np.array([[1, 0, 0], [0, c, -s], [0, s, c]])
@@ -579,6 +630,13 @@ def main():
     ap.add_argument("--chunk-px", type=int, default=128)
     ap.add_argument("--m2", action="store_true", help="also place M2 doodads (spike; needs raw/m2 from m2fetch)")
     ap.add_argument("--m2-yaw", type=float, default=180.0, help="yaw offset (deg) for M2 placements")
+    ap.add_argument("--m2-exclude", default="",
+                    help="with --m2: comma-separated FileDataIDs or case-insensitive substrings of the model's "
+                         "community-listfile path (e.g. 'fish,dragonfly' or 'wetlandtree') to leave out")
+    ap.add_argument("--m2-max-height", type=float, default=0.0,
+                    help="with --m2: shrink FOLIAGE (a model with a two-sided alpha-keyed part: leaf cards) taller "
+                         "than this (yd) to this height, about its origin (canopy readability: Excavation Site's "
+                         "wetland trees stand up to 136 yd; barriers, cranes and other props are never shrunk; 0 = off)")
     a = ap.parse_args()
     mdir = a.map_dir
     cfg = yaml.safe_load(open(os.path.join(mdir, "map.yaml")))
@@ -603,6 +661,10 @@ def main():
     # once, so do we (before this, 114612 was meshed twice: 510k coincident triangles).
     placed_uids = {"wmo": set(), "m2": set()}
     stats["wmo_duplicate_uids"] = stats["m2_duplicate_uids"] = 0
+    m2_excluded = m2_exclusions(mdir, a.m2_exclude) if a.m2 else None
+    if a.m2:
+        stats.update({"m2_excluded": {}, "m2_textures_missing": set(), "m2_parts_missing_texture": 0,
+                      "m2_parts_translucent_skipped": 0})
 
     for t in tiles:
         tag = "%02d_%02d" % (t["x"], t["y"])
@@ -702,7 +764,10 @@ def main():
                         lq.append([tuple(v) for v in Wq])
                     obj.quads("liquid_wmo_%s_%s_%d_%03d" % (pl["fid"], tag, n, gi), lq, "liquid")
             stats["wmo_instances"] += 1
-        # M2 doodads (spike)
+        # M2 doodads (spike). Kept: opaque (blend 0) and alpha-keyed (blend 1) parts. Skipped: blend >= 2
+        # (alpha-blended, additive, modulate: light shafts, fog sheets, glows, wings; a GLB can only cut
+        # them out, which draws Excavation Site's light-shaft cones as pale-blue cards over the pond), and
+        # parts whose texture is missing (the CDN served it empty).
         if a.m2 and layout != "monolithic-1.12":
             for n, pl in enumerate(read_obj0_mddf(os.path.join(raw, "adt", tag + "_obj0.adt"))):
                 wx, wy = MAPC - pl["pos"][2], MAPC - pl["pos"][0]
@@ -714,27 +779,44 @@ def main():
                 placed_uids["m2"].add(pl["uid"])
                 if pl["fid"] not in m2_cache:
                     m2_cache[pl["fid"]] = m2obj.load(raw, pl["fid"])
-                    for pi, part in enumerate(m2_cache[pl["fid"]]["parts"] if m2_cache[pl["fid"]] else []):
-                        png = os.path.join(raw, "m2", "textures", "%d.png" % part["tex"]) if part["tex"] else None
-                        obj.material("m2_%d_%d_b%d" % (pl["fid"], pi, min(part["blend"], 1)),
-                                     png if png and os.path.exists(png) else None)
                 m = m2_cache[pl["fid"]]
                 if not m:
                     stats["m2_skipped"].add(pl["fid"])
                     continue
+                why = m2_excluded(pl["fid"])
+                if why:
+                    key = "%d %s" % (pl["fid"], why)
+                    stats["m2_excluded"][key] = stats["m2_excluded"].get(key, 0) + 1
+                    continue
+                shrink = m2_shrink(m, pl, a.m2_max_height)
+                if shrink < 1:
+                    pl = dict(pl, scale=pl["scale"] * shrink)
+                    stats["m2_shrunk"] = stats.get("m2_shrunk", 0) + 1
                 for pi, part in enumerate(m["parts"]):
-                    if not part["tris"] or part["blend"] >= 3:  # additive/mod blend: glow, fog, particles-as-cards
+                    if not part["tris"]:
                         continue
+                    if part["blend"] >= 2:
+                        stats["m2_parts_translucent_skipped"] += 1
+                        continue
+                    png = os.path.join(raw, "m2", "textures", "%d.png" % part["tex"]) if part["tex"] else None
+                    if png and not os.path.exists(png):
+                        stats["m2_textures_missing"].add(part["tex"])
+                        stats["m2_parts_missing_texture"] += 1
+                        continue
+                    mat = m2_material(part)
+                    obj.material(mat, png)
                     W = place_m2_vertices(part["verts"], pl, a.m2_yaw)
                     uvs = np.asarray(part["uvs"])
                     uvs = np.stack([uvs[:, 0], 1 - uvs[:, 1]], axis=1)
-                    mat = "m2_%d_%d_b%d" % (pl["fid"], pi, min(part["blend"], 1))
                     obj.mesh("m2_%d_%s_%d_%d" % (pl["fid"], tag, n, pi), W, part["tris"], uvs, mat)
                 stats["m2_instances"] += 1
     obj.close()
     stats["triangles"] = obj.ntri
     stats["wmo_skipped"] = sorted(set(stats["wmo_skipped"]))
     stats["m2_skipped"] = sorted(stats["m2_skipped"])
+    if a.m2:
+        stats["m2_textures_missing"] = sorted(stats["m2_textures_missing"])
+        stats["m2_excluded"] = dict(sorted(stats["m2_excluded"].items()))
     json.dump(stats, open(os.path.splitext(a.out)[0] + ".stats.json", "w"), indent=2)
     print("wrote %s: %s" % (a.out, json.dumps(stats)), file=sys.stderr)
 

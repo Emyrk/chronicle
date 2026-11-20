@@ -37,8 +37,8 @@ holes where floor should be?) and reporting it.
    and pin `wdt_fid:` from the `WdtFileDataID` column (plus `directory: "<numeric id>"`).
 2. **Fetch.** `tools/fetch_map.py <slug>`. It detects the kind — `wmo`
    (cave/building) or `terrain` (ADT tiles: heightmap + baked ground textures + water +
-   placed WMOs, converted by `adt2obj.py`; NO M2 doodads — trees, rocks, crates, scaffolds
-   are absent, say so). For terrain set `crop: {x: [..], y: [..]}` (world yards) in
+   placed WMOs, converted by `adt2obj.py`; M2 doodads — trees, shrubs, crates, fences — only
+   with `render_set.py --m2`, say which). For terrain set `crop: {x: [..], y: [..]}` (world yards) in
    `map.yaml` FIRST: locate the area on the minimap stitch (`render_set.py <slug> look`
    before any ADTs are fetched gives `v000` with `world_transform` in its manifest), else
    you fetch and mesh the whole map (39 tiles / 2.8M tris for Excavation Site). It prints the live build;
@@ -86,7 +86,12 @@ holes where floor should be?) and reporting it.
    `height.png` size/alpha == `dry.png`; perspective + `view_glb.py --focus all` show no slab
    under a cut edge and no floating piece. A slab under a cut edge = something underground
    survived: hide the liquids before blaming water (LEARNINGS 2026-10-14). The knob table is in
-   README "Terrain maps"; `--m2` with `--glb` is still refused.
+   README "Terrain maps".
+   **Doodads (`--m2 --glb`, terrain only):** the M2 props land in their own GLB node `doodad`
+   (README "M2 doodads"): never floor, never a camera blocker in chronicle, never moving
+   `bounds_wow`/`height.png`. Verify `height.json` `faces_by_source.m2` > 0 and `bounds_wow` equal to the
+   same map's no-`--m2` version; read the manifest `m2.stats` (`m2_textures_missing`, `m2_excluded`).
+   Tall canopies hiding water or paths: `--m2-max-height <yd>` shrinks foliage only (Excavation Site: 30).
 5. **Read the result.** Open `textured.png` (downscale for viewing). Check: ceilings gone,
    water on pools and rivers but not on bridges, no transparent holes inside floor
    (compare `dry.png` alpha; small round holes are doodad plugs and are expected).
@@ -277,8 +282,8 @@ onto the minimap frame); `textured-aligned.png` is the flat variant. Your terrai
 6. Each crop change = a new version with a `--note` saying what the crop is and why; keep the
    wider one (it is the comparison).
 
-Known limits on terrain: no M2 doodads unless `--m2` (another session's spike; trees, lamps,
-crates), a faint shading seam at tile borders in the shaded pass, and lava/water both come
+Known limits on terrain: no M2 doodads unless `--m2` (rest pose; blended/additive parts skipped;
+README "M2 doodads"), a faint shading seam at tile borders in the shaded pass, and lava/water both come
 from MH2O/MLIQ (tint via `water_color`/`water_tint` in `map.yaml`).
 
 ## What is deterministic, and what is not
