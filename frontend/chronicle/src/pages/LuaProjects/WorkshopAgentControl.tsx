@@ -2,7 +2,7 @@ import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from "rea
 import { Bot, Check, ChevronDown, Copy, ExternalLink, LoaderCircle, Plug, Unplug } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useOptionalLocalMcp, type LocalMcpContextValue } from "@/features/chat/mcp/LocalMcpProvider"
-import { probeLocalMcp } from "@/features/chat/mcp/localBridge"
+import { LOCAL_MCP_ORIGIN, probeLocalMcp } from "@/features/chat/mcp/localBridge"
 
 export const MCP_SETUP_URL = "https://github.com/Emyrk/chronicle-mcp"
 const promptDismissedKey = "chronicle-local-mcp-prompt-dismissed"
@@ -144,6 +144,9 @@ function ConnectionDetails({ mcp }: { mcp: LocalMcpContextValue }) {
       <dd className="min-w-0 truncate">{connection.owner ? <code className="font-mono text-muted-foreground" title={connection.owner.id}>{connection.owner.id}</code>
         : <span className="text-muted-foreground">None yet</span>}</dd>
     </>}
+    <dt className="text-muted-foreground">Server</dt>
+    <dd><a href={`${LOCAL_MCP_ORIGIN}/`} target="_blank" rel="noreferrer" title="Open the chronicle-mcp dashboard: connections, agents and shutdown"
+      className="inline-flex items-center gap-1 font-mono text-primary hover:underline">{LOCAL_MCP_ORIGIN.replace(/^https?:\/\//, "")} <ExternalLink className="size-3" /></a></dd>
   </dl>
 }
 
