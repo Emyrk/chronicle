@@ -336,47 +336,48 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
       <a className={iconButton} href="/modules/api" target="_blank" rel="noreferrer"
         title="Module API reference and FAQ (opens in a new tab)" aria-label="Module API reference"><BookOpen className="size-4" /></a>
       <span aria-hidden className="mx-1 h-5 w-px bg-border" />
-      {view === "preview" && !layout.encountersOpen && <button type="button" className={iconButton}
-        onClick={() => setLayout({ encountersOpen: true })} title="Show instance and encounters" aria-label="Show encounters"><PanelLeft className="size-4" /></button>}
       <div role="tablist" aria-label="Canvas view" className="flex shrink-0 rounded-md border border-border p-0.5">
         {([["preview", "Preview", Eye], ["code", "Code", Code2]] as const).map(([value, label, Icon]) => <button key={value} type="button" role="tab" aria-selected={view === value}
           onClick={() => setLayout({ view: value })}
           className={`inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs ${view === value ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}>
           <Icon className="size-3.5" /> {label}</button>)}
       </div>
+      {aiEdit && <div className="flex min-w-0 items-center gap-0.5 rounded-full border border-primary/40 bg-primary/10 py-0.5 pl-2 pr-0.5 text-[11px]" title={`Agent edited ${aiEdit.file}`}>
+        <Bot aria-label={`Agent edited ${aiEdit.file}`} className="size-3.5 text-primary" />
+        <button type="button" className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent" onClick={() => {
+          const opening = !diffOpen
+          setDiffOpen(opening)
+          if (opening) setLayout({ view: "code" })
+        }}><GitCompare className="size-3" /> Diff</button>
+        <button type="button" className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent disabled:opacity-40" disabled={!aiEditCurrent} onClick={() => void undoAiEdit()}
+          title={aiEditCurrent ? "Restore the files from before this edit" : "The working copy changed since this edit; use editor undo (Ctrl+Z) instead"}><Undo2 className="size-3" /> Undo</button>
+      </div>}
       <div className="ml-auto flex flex-wrap items-center gap-2">
         <WorkshopAgentControl />
         <button type="button" aria-pressed={chatOpen} onClick={toggleChat} title="Chat with Chronicle's in-browser assistant instead"
           className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs ${chatOpen ? "border-primary/60 bg-primary/10 text-foreground" : "border-border text-muted-foreground hover:bg-accent"}`}>
           <MessageSquare className="size-3.5" /> Chat</button>
         <span aria-hidden className="mx-1 h-5 w-px bg-border" />
-        {aiEdit && <div className="flex min-w-0 items-center gap-0.5 rounded-full border border-primary/40 bg-primary/10 py-0.5 pl-2 pr-0.5 text-[11px]" title={`Agent edited ${aiEdit.file}`}>
-          <Bot aria-label={`Agent edited ${aiEdit.file}`} className="size-3.5 text-primary" />
-          <button type="button" className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent" onClick={() => {
-            const opening = !diffOpen
-            setDiffOpen(opening)
-            if (opening) setLayout({ view: "code" })
-          }}><GitCompare className="size-3" /> Diff</button>
-          <button type="button" className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 hover:bg-accent disabled:opacity-40" disabled={!aiEditCurrent} onClick={() => void undoAiEdit()}
-            title={aiEditCurrent ? "Restore the files from before this edit" : "The working copy changed since this edit; use editor undo (Ctrl+Z) instead"}><Undo2 className="size-3" /> Undo</button>
-        </div>}
+        {/* Fixed-width slots so saving, the shortcut hint and release labels never shift the header. */}
+        <div className="flex w-52 shrink-0 justify-end">
         {unsaved ? <span role="status" title={copy?.validation || `${copy.changed.join(", ")} differ from main. Save to keep them.`}
           className="inline-flex max-w-52 items-center gap-1.5 whitespace-nowrap rounded-full border border-amber-400/50 bg-amber-400/15 px-2.5 py-1 text-xs font-medium text-amber-200">
           <span aria-hidden className="size-2 shrink-0 animate-pulse rounded-full bg-amber-400" />
           <span className="truncate">Unsaved · {copy.changed.join(", ")}</span>
           {!copy.valid && <span className="text-destructive">· invalid</span>}
-        </span> : <span role="status" className="flex items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || undefined}>
-          <span aria-hidden className={`size-2 rounded-full ${status.tone}`} />{status.label}
+        </span> : <span role="status" className="flex min-w-0 items-center gap-1.5 whitespace-nowrap text-xs text-muted-foreground" title={copy?.validation || status.label}>
+          <span aria-hidden className={`size-2 shrink-0 rounded-full ${status.tone}`} /><span className="truncate">{status.label}</span>
           {copy && !copy.valid && <span className="text-destructive">· invalid</span>}
         </span>}
+        </div>
         <button type="button" disabled={!canSave} onClick={() => void saveDraft()}
           title={`Save your changes to main. People who choose main run it; everyone else stays on the latest release. (${isMac ? "⌘" : "Ctrl+"}S)`}
-          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${unsaved ? "bg-amber-400 text-black shadow-[0_0_0_3px_rgba(251,191,36,0.25)] hover:bg-amber-300" : "border border-border hover:bg-accent"}`}>
+          className={`inline-flex h-7 w-40 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${unsaved ? "bg-amber-400 text-black shadow-[0_0_0_3px_rgba(251,191,36,0.25)] hover:bg-amber-300" : "border border-border hover:bg-accent"}`}>
           <Save className="size-3.5" /> {copy?.saving && !publishing ? "Saving…" : "Save to main"}
-          {unsaved && <kbd className="rounded bg-black/15 px-1 font-mono text-[10px]">{isMac ? "⌘S" : "Ctrl+S"}</kbd>}</button>
+          <kbd aria-hidden={!unsaved} className={`rounded bg-black/15 px-1 font-mono text-[10px] ${unsaved ? "" : "invisible"}`}>{isMac ? "⌘S" : "Ctrl+S"}</kbd></button>
         {canTagReleases && <button type="button" disabled={!canRelease} onClick={() => void release()}
           title={released ? "Main is already the latest release." : "Tag main as a release. Everyone running the module moves to it."}
-          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!copy?.dirty && canRelease ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
+          className={`inline-flex h-7 w-28 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-md text-xs font-medium disabled:cursor-not-allowed disabled:opacity-40 ${!copy?.dirty && canRelease ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border border-border hover:bg-accent"}`}>
           <Rocket className="size-3.5" /> {publishing ? "Releasing…" : copy?.dirty ? "Save & tag" : "Tag release"}</button>}
       </div>
     </header>
@@ -388,6 +389,16 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
       <section aria-label="Module canvas" className="flex min-h-[70vh] min-w-0 flex-col lg:col-start-1 lg:row-start-1 lg:min-h-0">
         {/* Preview and code stay mounted, so switching views keeps the editor's state and undo history. */}
         <div role="tabpanel" aria-label="Instance preview" hidden={view !== "preview"} className="min-h-0 flex-1 bg-black/20 [&:not([hidden])]:flex">
+          {/* Collapsed, the sidebar leaves a full-height rail naming the selection, so it is easy to reopen. */}
+          {sidebarInstance && !layout.encountersOpen && <button type="button" onClick={() => setLayout({ encountersOpen: true })}
+            title="Show instance and encounters" aria-label="Show encounters"
+            className="group flex w-9 shrink-0 flex-col items-center gap-3 border-r border-border bg-background/40 py-3 text-muted-foreground hover:bg-accent hover:text-foreground">
+            <PanelLeft className="size-4 shrink-0" />
+            <span className="min-h-0 truncate text-xs [writing-mode:vertical-rl]">
+              <span className="font-medium text-foreground">{sidebarInstance.name}</span>
+              {encounterIds.length > 0 && ` · ${encounterIds.length === 1 ? sidebarInstance.encounters.find(encounter => encounter.id === encounterIds[0])?.name ?? "1 encounter" : `${encounterIds.length} encounters`}`}
+            </span>
+          </button>}
           {(layout.encountersOpen || !sidebarInstance) && <aside aria-label="Instance and encounters" className="flex min-h-0 w-[267px] shrink-0 flex-col border-r border-border bg-background/40">
             <div className="border-b border-border p-3">
               {instance.data && !choosingInstance ? <div className="flex items-start gap-2">

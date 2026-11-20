@@ -57,19 +57,19 @@ export function WorkshopAgentControl() {
 
   const state = agentState(mcp)
   const toggle = () => showPopover ? close() : setOpen(true)
-  return <div ref={ref} className="relative">
-    {!mcp.active ? <div className="flex items-stretch overflow-hidden rounded-md bg-primary text-primary-foreground">
+  // Fixed width: status changes swap the label in place instead of pushing the header around.
+  return <div ref={ref} className="relative w-40 shrink-0">
+    {!mcp.active ? <div className="flex h-7 w-full items-stretch overflow-hidden rounded-md bg-primary text-primary-foreground">
       <button type="button" disabled={mcp.safeMode} onClick={mcp.connect} title="Connect this tab to chronicle-mcp so your coding agent can drive it"
-        className="inline-flex items-center gap-1.5 whitespace-nowrap px-3 py-1.5 text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
+        className="inline-flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap text-xs font-medium hover:bg-primary/90 disabled:opacity-50">
         <Plug className="size-3.5" /> Connect agent</button>
       <button type="button" aria-label="About coding agents" aria-expanded={showPopover} onClick={toggle}
         className="border-l border-primary-foreground/20 px-1.5 hover:bg-primary/90"><ChevronDown className="size-3.5" /></button>
     </div> : <button type="button" aria-expanded={showPopover} aria-label={`Coding agent: ${state.label}`} onClick={toggle}
-      className={`inline-flex max-w-56 items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-medium ${state.pill}`}>
+      className={`flex h-7 w-full items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 text-xs font-medium ${state.pill}`}>
       <span aria-hidden className={`size-2 shrink-0 rounded-full ${state.dot}`} />
-      <span className="truncate">{state.label}</span>
-      {mcp.busy && <LoaderCircle aria-label="Agent tool running" className="size-3.5 shrink-0 animate-spin" />}
-      <ChevronDown className="size-3.5 shrink-0 opacity-60" />
+      <span className="min-w-0 flex-1 truncate text-left">{state.label}</span>
+      {mcp.busy ? <LoaderCircle aria-label="Agent tool running" className="size-3.5 shrink-0 animate-spin" /> : <ChevronDown className="size-3.5 shrink-0 opacity-60" />}
     </button>}
     {showPopover && <div role="dialog" aria-label="Coding agent" className="absolute right-0 top-full z-40 mt-1.5 w-[22rem] max-w-[calc(100vw-2rem)] overflow-hidden rounded-lg border border-border bg-background text-xs shadow-xl">
       <div className="flex items-start gap-3 p-3">
