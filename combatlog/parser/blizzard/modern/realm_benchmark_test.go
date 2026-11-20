@@ -35,7 +35,7 @@ func BenchmarkForeverRealmParser(b *testing.B) {
 				if err != nil {
 					b.Fatal(err)
 				}
-				observations, casts := 0, 0
+				casts := 0
 				for {
 					batch, err := p.Advance(context.Background())
 					if err == io.EOF {
@@ -46,15 +46,10 @@ func BenchmarkForeverRealmParser(b *testing.B) {
 					}
 					for _, m := range batch {
 						switch m.(type) {
-						case *messages.PlayerRealm:
-							observations++
 						case *messages.SpellGo:
 							casts++
 						}
 					}
-				}
-				if observations != events*2 {
-					b.Fatalf("observations=%d", observations)
 				}
 				if casts != events {
 					b.Fatalf("casts=%d", casts)

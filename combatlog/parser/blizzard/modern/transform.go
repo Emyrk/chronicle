@@ -12,11 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
-	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
-	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
-	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 )
 
 // Blizzard v22 layouts are documented at https://wowcoach.gg/docs/combat-log.
@@ -45,9 +41,7 @@ type advancedCombatSnapshot struct {
 }
 
 type transformReader struct {
-	pending                     string
-	metadata                    []messages.Message
-	observedAt                  time.Time
+	playerRealms                map[guid.GUID]map[string]PlayerRealmInfo
 	scanner                     *bufio.Scanner
 	guids                       *guidNormalizer
 	names                       map[string]string
@@ -74,6 +68,7 @@ func newHermesProxyTransformReader(r io.Reader) *transformReader {
 func newTransformReaderWithOptions(r io.Reader, preserveTimestamp, trimPlayerNameSuffix bool, advancedFields int) *transformReader {
 	return &transformReader{
 		scanner:              logscanner.New(r),
+		playerRealms:         make(map[guid.GUID]map[string]PlayerRealmInfo),
 		guids:                newGUIDNormalizer(),
 		names:                make(map[string]string),
 		preserveTimestamp:    preserveTimestamp,
@@ -82,28 +77,14 @@ func newTransformReaderWithOptions(r io.Reader, preserveTimestamp, trimPlayerNam
 	}
 }
 
-// NextRecord keeps metadata with its physical input, independent of scanner
-// read-ahead. Only the first emitted line owns metadata; telemetry owns none.
-func (r *transformReader) NextRecord() (wotlk.InputRecord, error) {
-	for {
-		if r.pending != "" {
-			line, rest, _ := strings.Cut(r.pending, "\n")
-			r.pending = rest
-			metadata := r.metadata
-			r.metadata = nil
-			return wotlk.InputRecord{Line: line, Metadata: metadata}, nil
-		}
-		if r.err != nil {
-			return wotlk.InputRecord{}, r.err
-		}
+func (r *transformReader) Read(p []byte) (int, error) {
+	for r.buf.Len() == 0 && r.err == nil {
 		if !r.scanner.Scan() {
 			r.err = r.scanner.Err()
 			if r.err == nil {
 				r.err = io.EOF
-			} else {
-				r.err = parseerrors.AsFatalError(r.err)
 			}
-			return wotlk.InputRecord{}, r.err
+			break
 		}
 		line := strings.TrimSpace(r.scanner.Text())
 		if line == "" || malformedPhysicalLine(line) {
@@ -111,34 +92,18 @@ func (r *transformReader) NextRecord() (wotlk.InputRecord, error) {
 		}
 		converted, err := r.transform(line)
 		if err != nil {
-			r.metadata = nil
-			r.err = parseerrors.AsFatalError(err)
-			return wotlk.InputRecord{}, r.err
+			r.err = err
+			break
 		}
-		r.pending = converted
-		if converted == "" && len(r.metadata) > 0 {
-			metadata := r.metadata
-			r.metadata = nil
-			return wotlk.InputRecord{Metadata: metadata}, nil
+		if converted != "" {
+			r.buf.WriteString(converted)
+			r.buf.WriteByte('\n')
 		}
 	}
-}
-
-// Read retains the text adapter for callers that only consume transformed CLEU.
-// Typed metadata is deliberately available only through RecordSource.
-func (r *transformReader) Read(p []byte) (int, error) {
-	for r.buf.Len() == 0 {
-		record, err := r.NextRecord()
-		if err != nil {
-			return 0, err
-		}
-		if record.Line == "" {
-			continue
-		}
-		r.buf.WriteString(record.Line)
-		r.buf.WriteByte('\n')
+	if r.buf.Len() > 0 {
+		return r.buf.Read(p)
 	}
-	return r.buf.Read(p)
+	return 0, r.err
 }
 
 // malformedPhysicalLine identifies byte-corrupted or truncated records that
@@ -162,8 +127,6 @@ func malformedPhysicalLine(line string) bool {
 }
 
 func (r *transformReader) transform(line string) (string, error) {
-	r.metadata = nil
-	r.observedAt = time.Time{}
 	idx := strings.Index(line, "  ")
 	if idx < 0 {
 		return "", fmt.Errorf("modern Blizzard CLEU line has no separator: %q", truncate(line, 100))
@@ -174,7 +137,6 @@ func (r *transformReader) transform(line string) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		r.observedAt = ts.UTC().Truncate(time.Millisecond)
 		prefix = ts.UTC().Format("1/2 15:04:05.000") + "  "
 	}
 	fields := splitTopLevel(line[idx+2:])
@@ -450,7 +412,7 @@ func (r *transformReader) normalizeUnitName(rawGUID, quotedName string) string {
 	}
 	if r.combatLogVersion == 22 {
 		display := stripRealm(name)
-		r.capturePlayerRealm(rawGUID, name, display)
+		r.recordPlayerRealm(rawGUID, name, display)
 		return strconv.Quote(display)
 	}
 	return strconv.Quote(strings.TrimSuffix(name, "-"))
@@ -637,40 +599,4 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max] + "..."
-}
-
-// capturePlayerRealm reuses the already normalized GUID and decoded name. No
-// timestamp deduplication: each input observation retains its genuine time.
-func (r *transformReader) capturePlayerRealm(rawGUID, name, display string) {
-	raw := playerRealmName(name)
-	if raw == "" || r.observedAt.IsZero() {
-		return
-	}
-	value, ok := r.guids.rawToValue[rawGUID]
-	if !ok {
-		return
-	}
-	r.metadata = append(r.metadata, &messages.PlayerRealm{
-		MessageBase: messages.Base(r.observedAt), Player: guid.GUID(value), Name: display,
-		Realm: combatant.RealmObservation{RawName: raw, ObservedAt: r.observedAt},
-	})
-}
-
-func playerRealmName(name string) string {
-	name = strings.TrimSuffix(name, "-")
-	parts := strings.Split(name, "-")
-	count := 1
-	switch parts[len(parts)-1] {
-	case "US", "EU", "KR", "TW", "CN":
-		count = 2
-	}
-	if len(parts) <= count || parts[0] == "" {
-		return ""
-	}
-	for _, part := range parts[len(parts)-count:] {
-		if part == "" {
-			return ""
-		}
-	}
-	return strings.Join(parts[len(parts)-count:], "-")
 }

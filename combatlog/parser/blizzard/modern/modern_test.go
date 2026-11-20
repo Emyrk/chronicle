@@ -341,7 +341,6 @@ func TestTransformV22EmitsUnitTelemetry(t *testing.T) {
 	converted, err := r.transform(line)
 	require.NoError(t, err)
 	lines := strings.Split(converted, "\n")
-	require.Len(t, r.metadata, 1)
 	require.Len(t, lines, 3)
 	timestamp := strings.SplitN(lines[0], "  ", 2)[0]
 	assert.Equal(t, timestamp, strings.SplitN(lines[1], "  ", 2)[0])
@@ -398,7 +397,6 @@ func TestTransformV22EmitsTelemetryForMissingEventSource(t *testing.T) {
 	converted, err := r.transform(line)
 	require.NoError(t, err)
 	lines := strings.Split(converted, "\n")
-	require.Len(t, r.metadata, 1)
 	require.Len(t, lines, 3)
 	assert.Contains(t, lines[0], `SPELL_CAST_SUCCESS`)
 	assert.Contains(t, lines[1], `BLIZZARD_UNIT_POSITION,`)
@@ -416,7 +414,6 @@ func TestTransformV22SwingDamageLandedKeepsUnitTelemetry(t *testing.T) {
 	converted, err := r.transform(line)
 	require.NoError(t, err)
 	lines := strings.Split(converted, "\n")
-	require.Len(t, r.metadata, 1)
 	require.Len(t, lines, 2)
 	assert.Contains(t, lines[0], `BLIZZARD_UNIT_POSITION,`)
 	assert.Contains(t, lines[1], `BLIZZARD_UNIT_RESOURCES,`)
@@ -643,16 +640,6 @@ func TestTransformAbsorbedVariants(t *testing.T) {
 		require.NoError(t, err)
 		assert.Contains(t, converted, "BLIZZARD_SPELL_ABSORBED")
 		assert.Contains(t, converted, tc.expected)
-		if tc.version == 22 {
-			require.Len(t, r.metadata, 2, "target and absorb caster carry independent evidence")
-			for _, msg := range r.metadata {
-				realm := msg.(*messages.PlayerRealm)
-				assert.Equal(t, "Brother", realm.Name)
-				assert.Equal(t, "ClassicBetaPvE2", realm.Realm.RawName)
-			}
-		} else {
-			assert.NotContains(t, converted, "BLIZZARD_PLAYER_REALM")
-		}
 	}
 }
 
