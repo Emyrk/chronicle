@@ -15,6 +15,15 @@ describe("Lua panel packages", () => {
     expect(pkg.sources["main.lua"]).toBe("return true")
     expect(pkg.sources["chronicle/v1/events/damage.lua"]).toBeUndefined()
   })
+  it("defaults omitted filter_mode to none", async () => {
+    expect((await loadPanelPackage(archive())).filterMode).toBe("none")
+  })
+  it.each(["none", "prefilter", "manual"])("accepts filter_mode %s", async (mode) => {
+    expect((await loadPanelPackage(archive({ filter_mode: mode }))).filterMode).toBe(mode)
+  })
+  it.each(["invalid", "", null, 1, false, [], {}])("rejects invalid filter_mode %j", async (mode) => {
+    await expect(loadPanelPackage(archive({ filter_mode: mode }))).rejects.toThrow(/filter_mode/)
+  })
   it("keeps an optional README.md as text, never as a Lua source", async () => {
     expect((await loadPanelPackage(archive())).readme).toBeUndefined()
     const pkg = await loadPanelPackage(archive({}, { "README.md": strToU8("# Damage") }))

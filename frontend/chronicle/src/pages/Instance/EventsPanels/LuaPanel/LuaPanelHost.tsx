@@ -10,6 +10,8 @@ import type { EventStreams, PanelEvent, PanelStream, PanelStreamScope } from "..
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
 import { explainModuleError, type ModuleErrorContext, type ModuleErrorExplanation, type ModulePhase } from "../../../Guides/runtime/moduleErrors"
+import type { PanelFilterMode } from "../../../Guides/runtime/panelFilters"
+import type { ProcessorContext } from "../processorTypes"
 import { ModuleErrorCard } from "./ModuleErrorCard"
 
 /** Worker phases plus host-side wall time (includes copying the stream to the worker) and page drawing time. */
@@ -21,6 +23,8 @@ export interface LuaPanelHostProps {
   streams: PanelStream[]
   streamScope?: PanelStreamScope
   maxEvents?: number
+  filterMode?: PanelFilterMode
+  filterContext?: ProcessorContext
   capabilities: readonly GuideCapability[]
   events?: readonly PanelEvent[]
   /** Bytes for every declared stream; the replay starts once all of them are here. */
@@ -40,7 +44,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const sceneRef = useRef(scene)
   const [error, setError] = useState<ModuleErrorExplanation | null>(null)
@@ -108,10 +112,10 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     }
     runtime.onerror = () => stop("Panel worker failed")
     armWatchdog()
-    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents, units })
+    runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents, units, filterMode, filterContext })
     if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "streams", streams: eventStreams, encounterIds: [...encounterIds] }) }
     return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
-  }, [entrypoint, sources, streams, streamScope, maxEvents, capabilities, eventStreams, encounterIds, units])
+  }, [entrypoint, sources, streams, streamScope, maxEvents, filterMode, filterContext, capabilities, eventStreams, encounterIds, units])
 
   useEffect(() => {
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })

@@ -46,6 +46,7 @@ When the viewer changes the encounter selection, the module starts again from st
   "capabilities": ["ui"],
   "streams": ["damage"],
   "stream_scope": "selection",
+  "filter_mode": "none",
   "max_events": 2000000,
   "assets": [],
   "icon": "swords"
@@ -59,9 +60,32 @@ When the viewer changes the encounter selection, the module starts again from st
 | `capabilities` | yes | `"ui"` to draw; add `"input"` to handle clicks. |
 | `streams` | yes | The event streams to receive, e.g. `["damage", "heal", "aura"]`. Any of the streams in [Streams and fields](#streams-and-fields); `[]` for none. Each stream is a separate download, so declare only what you use. |
 | `stream_scope` | no | `"selection"` (default): only the encounters the viewer selected. `"instance"`: every encounter in the log, each tagged with `selected`. |
+| `filter_mode` | no | `"none"` (default), `"prefilter"`, or `"manual"`. See [Panel filters](#panel-filters). |
 | `max_events` | no | A positive integer. The module stops with an error after this many events. Omit it to receive everything. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
 | `icon` | no | The icon shown next to the module in the panel selector and on its page. One of the [icon names](#icons) below; omit it for the generic module icon. |
+
+### Panel filters
+
+`filter_mode` controls whether the instance page's built-in event filters affect your module:
+
+- `"none"` (default) preserves existing behavior. Every event in scope reaches your callbacks, and `Chronicle.Filter(message)` always returns `true` for a valid combat message.
+- `"prefilter"` sends only events that pass the built-in filters to your callbacks.
+- `"manual"` sends every event in scope. Call `Chronicle.Filter(message)` yourself to decide which events to count or display.
+
+`Chronicle.Filter(message)` returns a boolean using the same compiled predicate as Chronicle's built-in panels. With no active filters it returns `true`. Pass only valid combat messages received from event callbacks, not arbitrary tables or UI messages. The function does not mutate the message. Encounter selection and `stream_scope` still determine which encounters are replayed.
+
+For example, with `"filter_mode": "manual"`:
+
+```lua
+local damage = require("chronicle.v1.events.damage")
+local total = 0
+damage.onEvent(function(message)
+  if Chronicle.Filter(message) then total = total + message.amount end
+end)
+```
+
+Set `filter_mode` in the Workshop's **project.json** tab. Preview uses the current working-copy value; saving and publishing preserve it in the package manifest. Older manifests without this field keep `"none"` behavior. New browser-editor projects explicitly start with `"none"`.
 
 ### Icons
 
@@ -413,6 +437,16 @@ Set row height in pixels, from 12 through 128.
 #### `ChronicleButton:SetText(text: string)`
 
 Set the button label.
+
+### `Chronicle`
+
+#### `Chronicle.Filter(message: table)`
+
+Test a combat-event message against the viewer's panel filters without mutating it. No active filters, or filter_mode none, returns true. Invalid messages raise an API error.
+
+- `message`: A supported combat-event message received by Panel:OnEvent.
+
+**Returns:** `boolean` matches
 
 <!-- END GENERATED LUA API REFERENCE -->
 

@@ -43,6 +43,28 @@ describe("Lua browser source model", () => {
     ])
   })
 
+  it.each(["none", "prefilter", "manual"])("round-trips filter_mode %s through preview, ZIP and TAR", async (mode) => {
+    const working = { ...files, manifest: JSON.stringify({ ...JSON.parse(files.manifest), filter_mode: mode }) }
+    validateEditorFiles(project, working)
+    expect(panelPackageFromWorkingCopy(project, working).filterMode).toBe(mode)
+    expect((await readLuaDraftZip(zip(working.manifest), project)).manifest).toBe(working.manifest)
+    expect(tarEntries(new Uint8Array(await buildEditorTar(project, working).arrayBuffer()))[0].content).toBe(working.manifest)
+  })
+
+  it("defaults old manifests to none without changing their source", () => {
+    const manifest = JSON.parse(files.manifest)
+    delete manifest.filter_mode
+    const working = { ...files, manifest: JSON.stringify(manifest) }
+    expect(panelPackageFromWorkingCopy(project, working).filterMode).toBe("none")
+    expect(JSON.parse(working.manifest)).not.toHaveProperty("filter_mode")
+  })
+
+  it.each(["invalid", "", null, 1, false, [], {}])("rejects invalid filter_mode %j", (mode) => {
+    const working = { ...files, manifest: JSON.stringify({ ...JSON.parse(files.manifest), filter_mode: mode }) }
+    expect(() => validateEditorFiles(project, working)).toThrow(/filter_mode/)
+    expect(() => panelPackageFromWorkingCopy(project, working)).toThrow(/filter_mode/)
+  })
+
   it("accepts a listed icon and rejects any other", () => {
     const withIcon = (icon: unknown) => ({ ...files, manifest: JSON.stringify({ ...JSON.parse(files.manifest), icon }) })
     expect(() => validateEditorFiles(project, withIcon("heart-pulse"))).not.toThrow()
@@ -71,7 +93,7 @@ describe("Lua browser source model", () => {
   it("builds an in-memory preview package without server execution or dropped assets", () => {
     expect(panelPackageFromWorkingCopy(project, files)).toEqual({
       name: "Example", entrypoint: "main.lua", sources: { "main.lua": files.lua },
-      capabilities: ["ui"], streams: [], streamScope: "selection", assets: new Map(),
+      capabilities: ["ui"], streams: [], streamScope: "selection", filterMode: "none", assets: new Map(),
     })
     const wholeInstance = JSON.stringify({ ...JSON.parse(files.manifest), stream_scope: "instance", max_events: 2_000_000 })
     expect(panelPackageFromWorkingCopy(project, { ...files, manifest: wholeInstance })).toMatchObject({ streamScope: "instance", maxEvents: 2_000_000 })

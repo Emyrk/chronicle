@@ -4,6 +4,13 @@ import { useInstanceEventsContext } from "@/hooks/instanceEvents"
 import { loadPanelPackage } from "../../../Guides/package/panelLoader"
 import { channelSha, getPublicProject, publicPackageURL } from "../../../LuaProjects/api"
 import type { EventsPanelProps } from "../EventsPanel"
+import { Button } from "@/components/ui/button"
+import { Filter } from "lucide-react"
+import { useSyncModeContextOptional } from "../../SyncModeContext"
+import { PanelFilterEditor } from "../PanelFilterEditor"
+import type { PanelFilter } from "../processors/filters"
+import type { ProcessorContext } from "../processorTypes"
+import { toSerializableContext } from "../usePanelAggregation"
 import { PanelSelector } from "../PanelSelector"
 import { usePanelTiming, usePanelTimingContext } from "../PanelTimingContext"
 import { buildPanelUnits } from "../../../Guides/runtime/panelUnits"
@@ -12,6 +19,11 @@ import { LuaPanelHost, type LuaPanelRunMetrics } from "./LuaPanelHost"
 import { parseLuaPanelRef } from "./luaPanelRegistry"
 
 export default function LuaEventsPanel(props: EventsPanelProps) {
+  // Module identity owns its local edits. Never carry filters into another module.
+  return <LuaEventsPanelContent key={props.panelType} {...props} />
+}
+
+function LuaEventsPanelContent(props: EventsPanelProps) {
   const ref = parseLuaPanelRef(props.panelType)
   const { fetchStream } = useInstanceEventsContext()
   const channelQuery = useQuery({
@@ -39,6 +51,50 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
     },
   })
   const panel = packageQuery.data
+  const isSyncActive = useSyncModeContextOptional()?.enabled === true
+  const filteringSupported = panel?.filterMode === "prefilter" || panel?.filterMode === "manual"
+  const [filters, setFilters] = useState<PanelFilter[]>(props.seedFilters ?? [])
+  const [pendingFilters, setPendingFilters] = useState<PanelFilter[] | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [appliedSeedVersion, setAppliedSeedVersion] = useState(props.seedFiltersVersion)
+  // Only explicit layout imports/casts replace edits, not new array references.
+  // An empty seed is meaningful: it clears both applied and buffered filters.
+  if (props.seedFiltersVersion !== appliedSeedVersion) {
+    setAppliedSeedVersion(props.seedFiltersVersion)
+    setFilters(props.seedFilters ?? [])
+    setPendingFilters(null)
+    setEditing(false)
+  }
+  const editFilters = (next: PanelFilter[]) => {
+    setPendingFilters(next)
+    props.onFiltersChange?.(next)
+  }
+  const closeEditor = () => {
+    if (pendingFilters !== null) setFilters(pendingFilters)
+    setPendingFilters(null)
+    setEditing(false)
+  }
+  const resetFilters = () => {
+    setFilters([])
+    setPendingFilters(null)
+    props.onFiltersChange?.([])
+  }
+  const filterContext = useMemo<ProcessorContext | undefined>(() => {
+    if (!filteringSupported) return undefined
+    const mapped = toSerializableContext(props.context, null, null)
+    // Deliberately copy only clone-safe compiler inputs, never PanelContext's callbacks.
+    return {
+      players: mapped.players,
+      units: mapped.units,
+      vehicleControlIntervals: mapped.vehicleControlIntervals,
+      selectedEncounterIds: new Set(mapped.selectedEncounterIds),
+      entitySelection: {
+        playerIds: new Set(mapped.entitySelection.playerIds),
+        enemyIds: new Set(mapped.entitySelection.enemyIds),
+      },
+      filters,
+    }
+  }, [filteringSupported, props.context, filters])
   const { players, units: instanceUnits } = props.context.instance
   const units = useMemo(() => buildPanelUnits(players, instanceUnits), [players, instanceUnits])
   const selectedIds = useMemo(() => [...(props.context.selectedEncounterIds ?? [])], [props.context.selectedEncounterIds])
@@ -46,15 +102,20 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   const [streamError, setStreamError] = useState<string>()
   const [fetchMs, setFetchMs] = useState(0)
   useEffect(() => {
-    if (!panel?.streams.length) return
+    if (!panel) return
+    // Ownership updates support filter evaluation, but only panel.streams are delivered to Lua.
+    const requestedStreams = filteringSupported
+      ? [...new Set([...panel.streams, "unit_classification" as const])]
+      : panel.streams
+    if (!requestedStreams.length) return
     let active = true
     const started = performance.now()
     // slice() so posting to the worker clones only this stream, not a larger buffer it may view.
-    Promise.all(panel.streams.map(async (type) => [type, (await fetchStream(type)).data.slice()] as const)).then((entries) => {
+    Promise.all(requestedStreams.map(async (type) => [type, (await fetchStream(type)).data.slice()] as const)).then((entries) => {
       if (active) { setFetchMs(performance.now() - started); setEventStreams(Object.fromEntries(entries)); setStreamError(undefined) }
     }).catch((error: unknown) => { if (active) setStreamError(String(error)) })
     return () => { active = false; setEventStreams(undefined) }
-  }, [panel, fetchStream])
+  }, [panel, fetchStream, filteringSupported])
   // Report like built-in panels so Lua panels show up in the Metrics panel and the page's load timer.
   const reportPanelMetrics = usePanelTimingContext()?.reportPanelMetrics
   const [done, setDone] = useState(false)
@@ -79,12 +140,24 @@ export default function LuaEventsPanel(props: EventsPanelProps) {
   return <div data-panel-explorer-host className="relative flex h-full flex-col rounded-lg border border-border bg-card text-card-foreground">
     <div className="flex items-center justify-between gap-2 border-b border-border px-3 py-2 text-sm">
       <span className="truncate font-semibold">{panel?.name ?? "Module"} <span className="text-xs text-muted-foreground">({ref?.channel})</span></span>
-      <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />
+      <div className="flex items-center gap-2">
+        {filteringSupported && <Button size="sm" variant="ghost" disabled={isSyncActive}
+          aria-label="Edit panel filters" title={isSyncActive ? "Filter editing is unavailable during Sync" : "Edit panel filters"}
+          onClick={() => setEditing(true)}><Filter className="h-4 w-4" /></Button>}
+        <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />
+      </div>
     </div>
+    {editing && filteringSupported && !isSyncActive && <div className="min-h-0 flex-1 overflow-auto p-3 styled-scrollbar">
+      <PanelFilterEditor panelLabel={panel?.name} filters={pendingFilters ?? filters}
+        onChange={editFilters} onClose={closeEditor} onReset={resetFilters} />
+    </div>}
+    <div className={editing && filteringSupported && !isSyncActive ? "hidden" : "min-h-0 flex-1"}>
     {channelQuery.isPending || (hash && packageQuery.isPending) ? <div className="p-4 text-sm">Loading module...</div> :
       channelQuery.error || packageQuery.error || streamError || !hash ? <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div> :
-      panel && (panel.streams.length > 0 && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
+      panel && ((panel.streams.length > 0 || filteringSupported) && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
         <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
+          filterMode={panel.filterMode} filterContext={filterContext}
           eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics} />)}
+    </div>
   </div>
 }

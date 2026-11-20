@@ -36,6 +36,8 @@ export interface GuideRuntimeOptions {
   panelStreams?: readonly PanelStream[]
   /** Panel mode: units Lua can look up with Chronicle.GetUnit / Chronicle.GetPlayers. */
   units?: PanelUnits
+  /** Host-compiled predicate, evaluated against the supplied Lua event message. */
+  filter?: (message: Record<string, unknown>, eventIndex?: number) => boolean
   limits?: Partial<GuideRuntimeLimits>
   emitBatch?: (operations: SceneOperation[]) => void
   scheduleTimer?: (id: number, delayMs: number) => void
@@ -103,6 +105,8 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const panelCallbacks = new Map<PanelStream, number>()
   let anyEventCallback: number | undefined // Panel:OnEvent(fn), called for every declared stream.
   let completeCallback: number | undefined // Panel:OnComplete, called once after the host's last event.
+  // Weak keys preserve replay order for retained messages without retaining Lua tables.
+  const eventIndices = new WeakMap<object, number>()
   const allowedPanelStreams = new Set(options.panelStreams ?? [])
   if ([...allowedPanelStreams].some((stream) => !PANEL_STREAMS.includes(stream))) throw new GuideLuaError("unsupported panel stream")
   if (Object.keys(options.sources).some((path) => isReservedLuaPath(path.toLowerCase()))) throw new GuideLuaError("reserved Chronicle module path")
@@ -493,6 +497,47 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         if (unit) pushUnit(state, unit); else lua.lua_pushnil(state)
         return 1
       })
+      registerFunction(L, "Filter", (state) => {
+        // Read bounded plain data, never invoke Lua metamethods or retain a decoder object.
+        let entries = 0
+        const read = (index: number, depth: number): unknown => {
+          const type = lua.lua_type(state, index)
+          if (type === lua.LUA_TSTRING) return stringAt(state, index)
+          if (type === lua.LUA_TNUMBER) {
+            const value = lua.lua_tonumber(state, index) as number
+            if (!Number.isFinite(value)) return luaError(state, "invalid filter message number")
+            return value
+          }
+          if (type === lua.LUA_TBOOLEAN) return Boolean(lua.lua_toboolean(state, index))
+          if (type !== lua.LUA_TTABLE || depth > 4) return luaError(state, "invalid filter message")
+          const absolute = lua.lua_absindex(state, index)
+          const length = lua.lua_rawlen(state, absolute) as number
+          const result: Record<string, unknown> | unknown[] = length > 0 ? [] : Object.create(null)
+          lua.lua_pushnil(state)
+          while (lua.lua_next(state, absolute)) {
+            if (++entries > 4096) return luaError(state, "filter message is too large")
+            const keyType = lua.lua_type(state, -2)
+            const key = keyType === lua.LUA_TSTRING ? stringAt(state, -2) : keyType === lua.LUA_TNUMBER ? lua.lua_tonumber(state, -2) as number : null
+            if (Array.isArray(result)) {
+              if (typeof key !== "number" || !Number.isInteger(key) || key < 1 || key > length) return luaError(state, "invalid filter message array")
+              result[key - 1] = read(-1, depth + 1)
+            } else {
+              if (typeof key !== "string") return luaError(state, "invalid filter message field")
+              result[key] = read(-1, depth + 1)
+            }
+            lua.lua_pop(state, 1)
+          }
+          return result
+        }
+        const message = read(1, 0) as Record<string, unknown>
+        if (!message || Array.isArray(message) || typeof message.stream !== "string" || !allowedPanelStreams.has(message.stream as PanelStream) ||
+            typeof message.offsetMs !== "number" || message.offsetMs < 0 || typeof message.encounterId !== "string" || typeof message.selected !== "boolean") {
+          return luaError(state, "Chronicle.Filter expects a combat-event message")
+        }
+        try { pushBoolean(state, options.filter?.(message, eventIndices.get(lua.lua_topointer(state, 1) as object)) ?? true) }
+        catch (error) { return luaError(state, `invalid filter message: ${error instanceof Error ? error.message : String(error)}`) }
+        return 1
+      })
       registerFunction(L, "GetPlayers", (state) => {
         lua.lua_createtable(state, playerGuids.length, 0)
         playerGuids.forEach((guid, index) => { pushString(state, guid); lua.lua_rawseti(state, -2, index + 1) })
@@ -549,6 +594,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   }
   const pushStreamEvent = (state: LuaState, stream: PanelStream, event: object, encounterId: string, selected: boolean) => {
     pushEventTable(state, event, 0)
+    eventIndices.set(lua.lua_topointer(state, -1) as object, (event as { index: number }).index)
     pushString(state, stream); lua.lua_setfield(state, -2, key("stream"))
     pushNumber(state, (event as { offsetMilli: number }).offsetMilli); lua.lua_setfield(state, -2, key("offsetMs"))
     pushString(state, encounterId); lua.lua_setfield(state, -2, key("encounterId"))

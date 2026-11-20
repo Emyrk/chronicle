@@ -162,17 +162,18 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 		return nil, errors.New("missing or oversized project.json")
 	}
 	var manifest struct {
-		ManifestVersion int      `json:"manifest_version"`
-		Kind            string   `json:"kind"`
-		Name            string   `json:"name"`
-		Slug            string   `json:"slug"`
-		Entrypoint      string   `json:"entrypoint"`
-		Capabilities    []string `json:"capabilities"`
-		Streams         []string `json:"streams"`
-		StreamScope     string   `json:"stream_scope"`
-		MaxEvents       *int64   `json:"max_events"`
-		Assets          []string `json:"assets"`
-		Icon            string   `json:"icon"`
+		ManifestVersion int             `json:"manifest_version"`
+		Kind            string          `json:"kind"`
+		Name            string          `json:"name"`
+		Slug            string          `json:"slug"`
+		Entrypoint      string          `json:"entrypoint"`
+		Capabilities    []string        `json:"capabilities"`
+		Streams         []string        `json:"streams"`
+		StreamScope     string          `json:"stream_scope"`
+		FilterMode      json.RawMessage `json:"filter_mode"`
+		MaxEvents       *int64          `json:"max_events"`
+		Assets          []string        `json:"assets"`
+		Icon            string          `json:"icon"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(manifestBytes))
 	decoder.DisallowUnknownFields()
@@ -194,6 +195,12 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 	}
 	if manifest.StreamScope != "" && manifest.StreamScope != "selection" && manifest.StreamScope != "instance" {
 		return nil, fmt.Errorf("unsupported stream_scope %q", manifest.StreamScope)
+	}
+	if len(manifest.FilterMode) > 0 {
+		var mode string
+		if err := json.Unmarshal(manifest.FilterMode, &mode); err != nil || (mode != "none" && mode != "prefilter" && mode != "manual") {
+			return nil, errors.New("filter_mode must be one of: none, prefilter, manual")
+		}
 	}
 	// Panels replay every event in scope; max_events is the author's optional bound, never a host cap.
 	if manifest.MaxEvents != nil && (*manifest.MaxEvents < 1 || *manifest.MaxEvents > 1<<53) {

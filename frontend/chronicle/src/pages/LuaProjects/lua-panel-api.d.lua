@@ -199,3 +199,11 @@ function CreateFrame(frameType, id, parent) end
 
 ---@type ChronicleFrame
 UIParent = UIParent
+
+---@class Chronicle
+Chronicle = {}
+
+---Test a combat-event message against the viewer's panel filters without mutating it. No active filters, or filter_mode none, returns true. Invalid messages raise an API error.
+---@param message table A supported combat-event message received by Panel:OnEvent.
+---@return boolean matches
+function Chronicle.Filter(message) end

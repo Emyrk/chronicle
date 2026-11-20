@@ -41,8 +41,8 @@ interface Peekable {
  */
 export function replayStreams(
   streams: ReadonlyArray<{ stream: PanelStream; data: Uint8Array }>,
-  options: { selected: ReadonlySet<string>; selectedOnly: boolean },
-  onEvent: (stream: PanelStream, event: ReplayEvent, encounterId: string) => void,
+  options: { selected: ReadonlySet<string>; selectedOnly: boolean; unselectedStreams?: ReadonlySet<PanelStream> },
+  onEvent: (stream: PanelStream, event: ReplayEvent, encounterId: string, startMs: number) => void,
 ): Set<string> {
   const cursors: Peekable[] = streams.map(({ stream, data }) => ({ stream, cursor: new CURSORS[stream](data), event: null, encounterId: "", startMs: 0 }))
   const peek = (pc: Peekable): ReplayEvent | null => {
@@ -50,7 +50,7 @@ export function replayStreams(
       const header = pc.cursor.currentHeader
       if (!header) return null
       if (!pc.cursor.hasMoreInEncounter) { pc.cursor.nextEncounter(); continue }
-      if (options.selectedOnly && !options.selected.has(header.encounterID)) { pc.cursor.skipEncounter(); continue }
+      if (options.selectedOnly && !options.selected.has(header.encounterID) && !options.unselectedStreams?.has(pc.stream)) { pc.cursor.skipEncounter(); continue }
       pc.event = pc.cursor.next()
       pc.encounterId = header.encounterID
       pc.startMs = header.firstTimestamp.getTime()
@@ -73,7 +73,7 @@ export function replayStreams(
       if (!next) break
       const event = next.event!
       next.event = null
-      onEvent(next.stream, event, encounterId)
+      onEvent(next.stream, event, encounterId, next.startMs)
     }
   }
   return encounters

@@ -29,7 +29,7 @@ function fakeWorker(): PreviewWorker {
 }
 
 const panel = (lua: string, streams: PanelPackage["streams"] = ["damage"], maxEvents?: number): PanelPackage =>
-  ({ name: "Test", entrypoint: "main.lua", sources: { "main.lua": lua }, streams, capabilities: ["ui"], assets: new Map(), streamScope: "selection", maxEvents }) as PanelPackage
+  ({ name: "Test", entrypoint: "main.lua", sources: { "main.lua": lua }, streams, capabilities: ["ui"], assets: new Map(), streamScope: "selection", filterMode: "none", maxEvents }) as PanelPackage
 
 const totals = `
   local damage = require("chronicle.v1.events.damage")

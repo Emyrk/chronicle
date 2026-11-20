@@ -3,6 +3,7 @@ import { inspectArchive, normalizeExtractedFiles } from "./archive"
 import { normalizePackagePath } from "./paths"
 import { isReservedLuaPath } from "../runtime/trustedModules"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "../runtime/panelEvents"
+import { PANEL_FILTER_MODES, type PanelFilterMode } from "../runtime/panelFilters"
 import type { GuideCapability } from "../protocol/types"
 
 export interface PanelPackage {
@@ -12,6 +13,8 @@ export interface PanelPackage {
   streams: PanelStream[]
   /** project.json `stream_scope`; "selection" when omitted. */
   streamScope: PanelStreamScope
+  /** project.json `filter_mode`; "none" when omitted. */
+  filterMode: PanelFilterMode
   /** project.json `max_events`: the panel's own replay bound. Omitted means every event in scope. */
   maxEvents?: number
   capabilities: GuideCapability[]
@@ -63,6 +66,8 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
   if (streams.some((stream) => !STREAM_SET.has(stream))) throw new Error("unsupported panel stream")
   const streamScope = data.stream_scope ?? "selection"
   if (!PANEL_STREAM_SCOPES.includes(streamScope as PanelStreamScope)) throw new Error("unsupported panel stream scope")
+  const filterMode = data.filter_mode === undefined ? "none" : data.filter_mode
+  if (!PANEL_FILTER_MODES.includes(filterMode as PanelFilterMode)) throw new Error("unsupported panel filter_mode")
   const maxEvents = data.max_events
   if (maxEvents !== undefined && (typeof maxEvents !== "number" || !Number.isSafeInteger(maxEvents) || maxEvents < 1)) throw new Error("invalid panel max_events")
   const assets = names(data.assets, "assets").map((asset) => normalizePackagePath(asset))
@@ -81,5 +86,5 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
   }
   if (assetFiles.size !== assets.length) throw new Error("missing panel asset")
   const readme = files.get("README.md")
-  return { name: data.name, entrypoint, sources, ...(readme && { readme: decoder.decode(readme) }), streams: streams as PanelStream[], streamScope: streamScope as PanelStreamScope, ...(maxEvents !== undefined && { maxEvents }), capabilities: capabilities as GuideCapability[], assets: assetFiles }
+  return { name: data.name, entrypoint, sources, ...(readme && { readme: decoder.decode(readme) }), streams: streams as PanelStream[], streamScope: streamScope as PanelStreamScope, filterMode: filterMode as PanelFilterMode, ...(maxEvents !== undefined && { maxEvents }), capabilities: capabilities as GuideCapability[], assets: assetFiles }
 }
