@@ -313,11 +313,7 @@ func TestRazorgoreRankingsPhaseTwoOnly(t *testing.T) {
 			units.Info[add] = unitinfo.Info{Guid: add, Name: "Blackwing Legionnaire"}
 			h := instances.BlackwingLairFactory.New(ctx, slog.Default(), units,
 				zone.Zone{Name: "blackwing lair"}, flavor)
-			// A phase-one death is a failed pull, even with a player killing blow.
-			require.NoError(t, h.Process(eggCast(base, razor, destroyEggSpellID)))
-			require.NoError(t, h.Process(damage(base.Add(500*time.Millisecond), player, add)))
-			require.NoError(t, h.Process(slain(base.Add(time.Second), player, razor)))
-			second := base.Add(2 * time.Minute)
+			second := base
 			require.NoError(t, h.Process(eggCast(second, razor, destroyEggSpellID)))
 			require.NoError(t, h.Process(damage(second.Add(time.Second), player, razor)))
 			require.NoError(t, h.Process(damage(second.Add(2*time.Second), player, add)))
@@ -333,9 +329,8 @@ func TestRazorgoreRankingsPhaseTwoOnly(t *testing.T) {
 			require.NoError(t, h.Process(slain(end, player, razor)))
 			result, err := h.Finalize(context.Background())
 			require.NoError(t, err)
-			require.Len(t, result.Encounters, 2)
-			require.Equal(t, encounter.KillTypeReset, result.Encounters[0].KillType)
-			kill := result.Encounters[1]
+			require.Len(t, result.Encounters, 1)
+			kill := result.Encounters[0]
 			require.Equal(t, encounter.KillTypeClean, kill.KillType)
 			require.Equal(t, second, kill.Combat.Start, "full encounter remains intact")
 			require.Equal(t, &encounter.RankingWindow{Start: p2, End: end}, kill.RankingWindow)
@@ -355,7 +350,53 @@ func TestRazorgoreRankingsPhaseTwoOnly(t *testing.T) {
 	}
 }
 
-func TestRazorgoreDeathRequiresDestroyedEggs(t *testing.T) {
+// Missing egg casts must not turn a kill into a reset or invent a P2 boundary.
+func TestRazorgoreMissingPhaseTwoUsesWholeEncounter(t *testing.T) {
+	t.Parallel()
+	for _, tag := range []database.FlavorTag{database.FlavorNightmareOfUrsol, database.FlavorVanillaPlus} {
+		t.Run(string(tag), func(t *testing.T) {
+			t.Parallel()
+			base := time.Date(2026, time.January, 1, 0, 0, 0, 0, time.UTC)
+			player := guid.GUID(1)
+			razor := creatureGUID(razorgoreEntry, 1)
+			add := creatureGUID(blackwingLegionnaire, 2)
+			flavor := database.WoWFlavor{database.FlavorVanilla, tag}
+			ctx := parsectx.With(context.Background(), parsectx.Context{Flavor: flavor})
+			units := unitdb.New(flavor)
+			units.Info[player] = unitinfo.Info{Guid: player, Name: "Hunter", IsPlayer: true, CanCooperate: true}
+			units.Info[razor] = unitinfo.Info{Guid: razor, Name: "Razorgore the Untamed", Boss: true}
+			units.Info[add] = unitinfo.Info{Guid: add, Name: "Blackwing Legionnaire"}
+			h := instances.BlackwingLairFactory.New(ctx, slog.Default(), units,
+				zone.Zone{Name: "blackwing lair"}, flavor)
+			require.NoError(t, h.Process(eggCast(base, razor, destroyEggSpellID)))
+			require.NoError(t, h.Process(damage(base.Add(time.Second), player, razor)))
+			require.NoError(t, h.Process(damage(base.Add(2*time.Second), player, add)))
+			for i := 1; i < 17; i++ {
+				require.NoError(t, h.Process(eggCast(base.Add(time.Duration(i+2)*time.Second), razor, destroyEggSpellID)))
+			}
+			require.NoError(t, h.Process(damage(base.Add(20*time.Second), player, razor)))
+			end := base.Add(30 * time.Second)
+			require.NoError(t, h.Process(slain(end, player, razor)))
+			result, err := h.Finalize(context.Background())
+			require.NoError(t, err)
+			require.Len(t, result.Encounters, 1)
+			kill := result.Encounters[0]
+			require.Equal(t, encounter.KillTypeClean, kill.KillType)
+			require.Equal(t, base, kill.Combat.Start)
+			require.Equal(t, end, kill.Combat.End)
+			require.Nil(t, kill.RankingWindow, "no P2 boundary means use the whole encounter")
+			require.Len(t, kill.Phases, 1)
+			require.Equal(t, creatures.RazorgorePhaseKeyP1, kill.Phases[0].Key)
+			stats := result.Rankings.DPS[kill.Combat.EncounterID].Units[player]
+			require.NotNil(t, stats)
+			require.Equal(t, int64(3), stats.DamageDone)
+			require.Equal(t, int64(2), stats.RankedDamageDone, "boss damage counts across the whole encounter")
+			require.Equal(t, int64(1), stats.UnrankedDamageDone, "add damage remains excluded")
+		})
+	}
+}
+
+func TestRazorgoreDeathDoesNotRequireObservedEggs(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name   string
@@ -363,9 +404,9 @@ func TestRazorgoreDeathRequiresDestroyedEggs(t *testing.T) {
 		eggs   int
 		want   period.EndState
 	}{
-		{"ursol_before_threshold", database.FlavorNightmareOfUrsol, 19, period.EndStateReset},
+		{"ursol_before_threshold", database.FlavorNightmareOfUrsol, 19, period.EndStateSlain},
 		{"ursol_at_threshold", database.FlavorNightmareOfUrsol, 20, period.EndStateSlain},
-		{"vplus_before_threshold", database.FlavorVanillaPlus, 29, period.EndStateReset},
+		{"vplus_before_threshold", database.FlavorVanillaPlus, 29, period.EndStateSlain},
 		{"vplus_at_threshold", database.FlavorVanillaPlus, 30, period.EndStateSlain},
 		{"unsupported_preserves_legacy", database.FlavorVanilla, 0, period.EndStateSlain},
 	} {
@@ -405,6 +446,8 @@ func TestRazorgoreEggsResetAfterPhaseTwoTimeout(t *testing.T) {
 		require.NoError(t, err)
 	}
 	// A new pull after an inactivity timeout must not inherit phase two.
+	var transitions []phases.Transition
+	chars.SetPhaseTransitionCallback(func(tr phases.Transition) { transitions = append(transitions, tr) })
 	_, err := chars.Process(eggCast(base.Add(2*time.Minute), razor, destroyEggSpellID))
 	require.NoError(t, err)
 	_, err = chars.Process(slain(base.Add(2*time.Minute+time.Second), guid.GUID(1), razor))
@@ -412,7 +455,8 @@ func TestRazorgoreEggsResetAfterPhaseTwoTimeout(t *testing.T) {
 	boss, ok := chars.Get(razor)
 	require.True(t, ok)
 	require.Len(t, boss.Periods(), 2)
-	require.Equal(t, period.EndStateReset, boss.LastEndState())
+	require.Empty(t, transitions, "the new pull must not inherit the previous egg count")
+	require.Equal(t, period.EndStateSlain, boss.LastEndState())
 }
 
 func TestRazorgorePhaseOneAddActivityKeepsBossActive(t *testing.T) {
@@ -451,7 +495,7 @@ func TestRazorgorePhaseOneAddActivityKeepsBossActive(t *testing.T) {
 	require.True(t, ok)
 	require.False(t, razorChar.IsActive(), "add activity must not restart an inactive Razorgore")
 	require.Len(t, razorChar.Periods(), 1, "phase-one add activity must not split the Razorgore encounter")
-	require.Equal(t, period.EndStateReset, razorChar.Periods()[0].EndState)
+	require.Equal(t, period.EndStateSlain, razorChar.Periods()[0].EndState)
 }
 
 // TestRazorgoreEggs_UnsupportedFlavor_NoKill verifies that without an egg
