@@ -31,3 +31,28 @@ func TestPortalAndLightwellObjectCategories(t *testing.T) {
 		}
 	}
 }
+
+func TestOrgrimmarPortalGlobalObjectCategory(t *testing.T) {
+	t.Parallel()
+	sample, err := guid.FromString("0xF11002B1734D39A8")
+	require.NoError(t, err)
+	require.True(t, sample.IsObject())
+	entry, ok := sample.GetEntry()
+	require.True(t, ok)
+	require.Equal(t, uint32(176499), entry)
+	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla}, {database.FlavorTurtle}, {database.FlavorNightmareOfUrsol}, {database.FlavorWrath}} {
+		units := unitdb.New(flavor)
+		require.Equal(t, unitdb.CategoryObject, units.Category(sample))
+		for _, high := range []uint64{0xF110000000000000, 0xF130000000000000, 0xF140000000000000, 0xF150000000000000} {
+			id := guid.GUID(high | uint64(entry)<<24 | 1)
+			want := unitdb.CategoryUnknown
+			if id.IsObject() {
+				want = unitdb.CategoryObject
+			}
+			if id.IsPet() {
+				want = unitdb.CategoryPet
+			}
+			require.Equal(t, want, units.Category(id))
+		}
+	}
+}

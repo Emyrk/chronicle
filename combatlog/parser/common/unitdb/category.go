@@ -33,6 +33,7 @@ var knownObjects = map[uint32]Category{
 	2061:   CategoryEnvironment, // Campfire
 	176296: CategoryObject,      // Portal to Stormwind
 	176497: CategoryObject,      // Portal to Ironforge
+	176499: CategoryObject,      // Portal to Orgrimmar
 }
 
 // knownUrsolObjects recognizes gameobjects specific to Nightmare of Ursol.

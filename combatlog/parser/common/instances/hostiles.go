@@ -579,6 +579,11 @@ func OnyxiaHostiles(fl database.WoWFlavor) *identifier.Identifier {
 	}
 
 	idf := identifier.NewIdentifier(hostile)
+	// Shared Onyxia Lava Fissure gameobjects. Classification only; these do not
+	// gain hostile affiliation or become encounter combatants.
+	for _, entry := range []uint32{176827, 176828, 176829, 176830} {
+		idf.AddObjectEntryId(entry, Identity{Category: unitdb.CategoryEnvironment, Affiliation: types.AffiliationUnknown})
+	}
 	if fl.Has(database.FlavorTurtle) {
 		// Observed Lava Fissure gameobjects. Category only: do not use LoadAdds,
 		// which would change affiliation and make these encounter combatants.
