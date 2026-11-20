@@ -12,6 +12,11 @@ import (
 	"unicode/utf8"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/logscanner"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/parseerrors"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/combatlog/parser/wotlk"
 )
 
 // Blizzard v22 layouts are documented at https://wowcoach.gg/docs/combat-log.
@@ -40,6 +45,9 @@ type advancedCombatSnapshot struct {
 }
 
 type transformReader struct {
+	pending                     string
+	metadata                    []messages.Message
+	observedAt                  time.Time
 	scanner                     *bufio.Scanner
 	guids                       *guidNormalizer
 	names                       map[string]string
@@ -79,14 +87,28 @@ func newTransformReaderWithOptions(r io.Reader, preserveTimestamp, trimPlayerNam
 	}
 }
 
-func (r *transformReader) Read(p []byte) (int, error) {
-	for r.buf.Len() == 0 && r.err == nil {
+// NextRecord keeps metadata with its physical input, independent of scanner
+// read-ahead. Only the first emitted line owns metadata; telemetry owns none.
+func (r *transformReader) NextRecord() (wotlk.InputRecord, error) {
+	for {
+		if r.pending != "" {
+			line, rest, _ := strings.Cut(r.pending, "\n")
+			r.pending = rest
+			metadata := r.metadata
+			r.metadata = nil
+			return wotlk.InputRecord{Line: line, Metadata: metadata}, nil
+		}
+		if r.err != nil {
+			return wotlk.InputRecord{}, r.err
+		}
 		if !r.scanner.Scan() {
 			r.err = r.scanner.Err()
 			if r.err == nil {
 				r.err = io.EOF
+			} else {
+				r.err = parseerrors.AsFatalError(r.err)
 			}
-			break
+			return wotlk.InputRecord{}, r.err
 		}
 		line := strings.TrimSpace(r.scanner.Text())
 		if line == "" || malformedPhysicalLine(line) {
@@ -94,18 +116,34 @@ func (r *transformReader) Read(p []byte) (int, error) {
 		}
 		converted, err := r.transform(line)
 		if err != nil {
-			r.err = err
-			break
+			r.metadata = nil
+			r.err = parseerrors.AsFatalError(err)
+			return wotlk.InputRecord{}, r.err
 		}
-		if converted != "" {
-			r.buf.WriteString(converted)
-			r.buf.WriteByte('\n')
+		r.pending = converted
+		if converted == "" && len(r.metadata) > 0 {
+			metadata := r.metadata
+			r.metadata = nil
+			return wotlk.InputRecord{Metadata: metadata}, nil
 		}
 	}
-	if r.buf.Len() > 0 {
-		return r.buf.Read(p)
+}
+
+// Read retains the text adapter for callers that only consume transformed CLEU.
+// Typed metadata is deliberately available only through RecordSource.
+func (r *transformReader) Read(p []byte) (int, error) {
+	for r.buf.Len() == 0 {
+		record, err := r.NextRecord()
+		if err != nil {
+			return 0, err
+		}
+		if record.Line == "" {
+			continue
+		}
+		r.buf.WriteString(record.Line)
+		r.buf.WriteByte('\n')
 	}
-	return 0, r.err
+	return r.buf.Read(p)
 }
 
 // malformedPhysicalLine identifies byte-corrupted or truncated records that
@@ -128,7 +166,9 @@ func malformedPhysicalLine(line string) bool {
 	return quoted
 }
 
-func (r *transformReader) transform(line string) (result string, resultErr error) {
+func (r *transformReader) transform(line string) (string, error) {
+	r.metadata = nil
+	r.observedAt = time.Time{}
 	idx := strings.Index(line, "  ")
 	if idx < 0 {
 		return "", fmt.Errorf("modern Blizzard CLEU line has no separator: %q", truncate(line, 100))
@@ -139,6 +179,7 @@ func (r *transformReader) transform(line string) (result string, resultErr error
 		if err != nil {
 			return "", err
 		}
+		r.observedAt = ts.UTC().Truncate(time.Millisecond)
 		prefix = ts.UTC().Format("1/2 15:04:05.000") + "  "
 	}
 	fields := splitTopLevel(line[idx+2:])
@@ -147,25 +188,6 @@ func (r *transformReader) transform(line string) (result string, resultErr error
 	}
 	event := fields[0]
 	args := fields[1:]
-	// Capture before normalizeUnitName discards Forever realm suffixes. Keep
-	// evidence in the line stream (not a read-ahead map) so timestamps stay real.
-	defer func() {
-		if resultErr != nil || r.combatLogVersion != 22 {
-			return
-		}
-		observations, err := r.playerRealmLines(prefix, event, args)
-		if err != nil {
-			result, resultErr = "", err
-			return
-		}
-		if len(observations) == 0 {
-			return
-		}
-		if result != "" {
-			observations = append(observations, result)
-		}
-		result = strings.Join(observations, "\n")
-	}()
 
 	switch event {
 	case "COMBAT_LOG_VERSION":
@@ -208,14 +230,6 @@ func (r *transformReader) transform(line string) (result string, resultErr error
 	}
 
 	base := make([]string, 0, 6)
-	sourceName := r.normalizeUnitName(args[0], args[1])
-	destName := r.normalizeUnitName(args[4], args[5])
-	if strings.HasPrefix(args[0], "Player-") && sourceName != "nil" {
-		r.names[args[0]] = strings.Trim(sourceName, "\"")
-	}
-	if strings.HasPrefix(args[4], "Player-") && destName != "nil" {
-		r.names[args[4]] = strings.Trim(destName, "\"")
-	}
 	source, err := r.guids.normalize(args[0])
 	if err != nil {
 		return "", err
@@ -223,6 +237,14 @@ func (r *transformReader) transform(line string) (result string, resultErr error
 	dest, err := r.guids.normalize(args[4])
 	if err != nil {
 		return "", err
+	}
+	sourceName := r.normalizeUnitName(args[0], args[1])
+	destName := r.normalizeUnitName(args[4], args[5])
+	if strings.HasPrefix(args[0], "Player-") && sourceName != "nil" {
+		r.names[args[0]] = strings.Trim(sourceName, "\"")
+	}
+	if strings.HasPrefix(args[4], "Player-") && destName != "nil" {
+		r.names[args[4]] = strings.Trim(destName, "\"")
 	}
 	base = append(base, source, sourceName, args[2], dest, destName, args[6])
 	copyChange := r.observeCopy(prefix, args[0], args[4])
@@ -471,7 +493,9 @@ func (r *transformReader) normalizeUnitName(rawGUID, quotedName string) string {
 		return quotedName
 	}
 	if r.combatLogVersion == 22 {
-		return strconv.Quote(stripRealm(name))
+		display := stripRealm(name)
+		r.capturePlayerRealm(rawGUID, name, display)
+		return strconv.Quote(display)
 	}
 	return strconv.Quote(strings.TrimSuffix(name, "-"))
 }
@@ -533,6 +557,11 @@ func (r *transformReader) transformAbsorbed(prefix string, args []string) (strin
 	caster, err := r.guids.normalize(args[index])
 	if err != nil {
 		return "", err
+	}
+	if r.combatLogVersion == 22 {
+		r.normalizeUnitName(args[0], args[1])
+		r.normalizeUnitName(args[4], args[5])
+		r.normalizeUnitName(args[index], args[index+1])
 	}
 	absorbSpellID := args[index+4]
 	absorbSpellName := args[index+5]
@@ -654,38 +683,21 @@ func truncate(s string, max int) string {
 	return s[:max] + "..."
 }
 
-// playerRealmLines only consumes quoted player names; unrelated record layouts
-// and unqualified names carry no evidence. No catalog resolution happens here.
-func (r *transformReader) playerRealmLines(prefix, event string, args []string) ([]string, error) {
-	positions := []int{0, 4}
-	if event == "SPELL_ABSORBED" {
-		if len(args) == 18 {
-			positions = append(positions, 8)
-		}
-		if len(args) == 21 {
-			positions = append(positions, 11)
-		}
+// capturePlayerRealm reuses the already normalized GUID and decoded name. No
+// timestamp deduplication: each input observation retains its genuine time.
+func (r *transformReader) capturePlayerRealm(rawGUID, name, display string) {
+	raw := playerRealmName(name)
+	if raw == "" || r.observedAt.IsZero() {
+		return
 	}
-	var lines []string
-	for _, i := range positions {
-		if i+1 >= len(args) || !strings.HasPrefix(args[i], "Player-") {
-			continue
-		}
-		name, err := strconv.Unquote(args[i+1])
-		if err != nil {
-			continue
-		}
-		raw := playerRealmName(name)
-		if raw == "" {
-			continue
-		}
-		id, err := r.guids.normalize(args[i])
-		if err != nil {
-			return nil, err
-		}
-		lines = append(lines, prefix+"BLIZZARD_PLAYER_REALM,"+id+","+strconv.Quote(stripRealm(name))+","+strconv.Quote(raw))
+	value, ok := r.guids.rawToValue[rawGUID]
+	if !ok {
+		return
 	}
-	return lines, nil
+	r.metadata = append(r.metadata, &messages.PlayerRealm{
+		MessageBase: messages.Base(r.observedAt), Player: guid.GUID(value), Name: display,
+		Realm: combatant.RealmObservation{RawName: raw, ObservedAt: r.observedAt},
+	})
 }
 
 func playerRealmName(name string) string {

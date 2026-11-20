@@ -22,7 +22,22 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
+// InputRecord binds adapter metadata to exactly one transformed line. An empty
+// Line with Metadata is a metadata-only record; EOF must be returned separately.
+type InputRecord struct {
+	Line     string
+	Metadata []messages.Message
+}
+
+// RecordSource bypasses text buffering for adapters with typed metadata. Sources
+// must not return a record and an error together. Metadata uses original input
+// timestamps and is emitted before that record's parsed event messages.
+type RecordSource interface {
+	NextRecord() (InputRecord, error)
+}
+
 type Parser struct {
+	records RecordSource
 	logger  *slog.Logger
 	wowDB   gamedb.SpellFetcher
 	gameDB  gamedb.GameDB
@@ -71,8 +86,10 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		return nil, fmt.Errorf("wowDB cannot be nil")
 	}
 	gn := NewGUIDNames()
+	records, _ := r.(RecordSource)
 	format, _ := parsectx.Format(ctx)
 	return &Parser{
+		records:                records,
 		eventHook:              map[string]func(ts time.Time, m *Matched, raw string) ([]messages.Message, error){},
 		logger:                 logger,
 		wowDB:                  wowDB,
@@ -204,16 +221,31 @@ func (p *Parser) Advance(ctx context.Context) ([]messages.Message, error) {
 }
 
 func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) {
-	ok := p.scanner.Scan()
-	if !ok {
-		if err := p.scanner.Err(); err != nil {
-			// Scanner errors are permanent. Retrying Advance would only return the
-			// same error forever, so tell consumers to stop processing this log.
-			return nil, parseerrors.AsFatalError(err)
+	var record InputRecord
+	if p.records != nil {
+		var err error
+		record, err = p.records.NextRecord()
+		if err != nil {
+			return nil, err
 		}
-		return nil, io.EOF
+	} else {
+		if !p.scanner.Scan() {
+			if err := p.scanner.Err(); err != nil {
+				return nil, parseerrors.AsFatalError(err)
+			}
+			return nil, io.EOF
+		}
+		record.Line = p.scanner.Text()
 	}
-	next := p.scanner.Text()
+	for _, metadata := range record.Metadata {
+		if err := p.checkTimestamp(metadata.Date()); err != nil {
+			return nil, err
+		}
+	}
+	next := record.Line
+	if next == "" && len(record.Metadata) > 0 {
+		return record.Metadata, nil
+	}
 	if next == "" {
 		return messages.Unparsed(time.Time{}, next), nil
 	}
@@ -243,16 +275,30 @@ func (p *Parser) advance(_ context.Context) (_ []messages.Message, final error) 
 	}
 
 	if _, excluded := p.timestampOrderingExcludedEvents[event]; !excluded {
-		if !p.lastDate.IsZero() && ts.Before(p.lastDate.Add(-p.maxTimestampRegression)) {
-			diff := ts.Sub(p.lastDate)
-			return nil, parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: latest %v, current %v", diff.String(), p.lastDate, ts))
-		}
-		if ts.After(p.lastDate) {
-			p.lastDate = ts
+		if err := p.checkTimestamp(ts); err != nil {
+			return nil, err
 		}
 	}
 
-	return p.dispatch(ts, event, m, next)
+	msgs, err := p.dispatch(ts, event, m, next)
+	if err != nil {
+		return nil, err
+	}
+	if len(record.Metadata) > 0 {
+		return append(record.Metadata, msgs...), nil
+	}
+	return msgs, nil
+}
+
+func (p *Parser) checkTimestamp(ts time.Time) error {
+	if !p.lastDate.IsZero() && ts.Before(p.lastDate.Add(-p.maxTimestampRegression)) {
+		diff := ts.Sub(p.lastDate)
+		return parseerrors.AsFatalError(fmt.Errorf("log dates went backwards by %s: latest %v, current %v", diff.String(), p.lastDate, ts))
+	}
+	if ts.After(p.lastDate) {
+		p.lastDate = ts
+	}
+	return nil
 }
 
 func (p *Parser) Spell(ctx context.Context, id chrondbc.SpellID) (*chrondbc.Spell, error) {
