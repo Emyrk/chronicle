@@ -2,6 +2,8 @@ import { entityAttributes } from "@/components/EntityMenu/entity";
 import { useState, type MouseEvent, type ReactNode } from "react";
 import { format } from "date-fns";
 import { useArmoryGearHistory } from "@/api/queries";
+import { useItemTooltip } from "@/api/gamedata";
+import { ItemTooltip } from "@/components/ui/ItemTooltip";
 import { iconUrl } from "@/config/iconUrl";
 import { useIconBaseUrl } from "@/hooks/useDatasetId";
 import { cn } from "@/lib/utils";
@@ -110,6 +112,11 @@ function PlayerGearTimeline({
   const history = useArmoryGearHistory(player.realmName, player.id);
   const iconBaseUrl = useIconBaseUrl();
   const [hovered, setHovered] = useState<{ segment: GearSegment; slot: GearSlotTimeline; pos: CursorPos } | null>(null);
+
+  const tooltip = useItemTooltip(hovered ? {
+    itemId: hovered.segment.item.item_id,
+    enchant: hovered.segment.item.enchant_id,
+  } : null);
 
   if (history.isLoading) return <div className="py-10 text-center text-sm text-muted-foreground">Loading gear history…</div>;
 
@@ -270,15 +277,22 @@ function PlayerGearTimeline({
 
       {hovered && (
         <CursorTooltip pos={hovered.pos}>
-          <div className="w-64 rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 shadow-xl">
-            <div className={cn("text-sm font-semibold", getQualityTextClass(hovered.segment.item.item_quality ?? 1))}>
-              {hovered.segment.item.item_name ?? `Item ${hovered.segment.item.item_id}`}
-            </div>
-            <div className="mt-0.5 text-zinc-400">
-              {hovered.slot.label}
-              {hovered.segment.item.item_level != null && ` · item level ${hovered.segment.item.item_level}`}
-            </div>
-            <div className="mt-1.5">
+          <div className="w-72 space-y-1">
+            {tooltip.data ? (
+              <ItemTooltip item={tooltip.data} gemEnchantIds={hovered.segment.item.gem_enchant_ids} showItemLevel />
+            ) : (
+              <div className="rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 shadow-xl">
+                <div className={cn("text-sm font-semibold", getQualityTextClass(hovered.segment.item.item_quality ?? 1))}>
+                  {hovered.segment.item.item_name ?? `Item ${hovered.segment.item.item_id}`}
+                </div>
+                <div className="mt-0.5 text-zinc-400">
+                  {hovered.slot.label}
+                  {hovered.segment.item.item_level != null && ` · item level ${hovered.segment.item.item_level}`}
+                </div>
+                <div className="mt-1 text-zinc-400">{tooltip.isError ? "Item details unavailable." : "Loading item details…"}</div>
+              </div>
+            )}
+            <div className="rounded-md border border-white/10 bg-zinc-950 px-3 py-2 text-xs text-zinc-200 shadow-xl">
               Worn {format(new Date(hovered.segment.start), "MMM d")}
               {hovered.segment.lastSeen !== hovered.segment.start && ` – ${format(new Date(hovered.segment.lastSeen), "MMM d")}`}
               {" "}· {hovered.segment.snapshotCount} {hovered.segment.snapshotCount === 1 ? "log" : "logs"}
