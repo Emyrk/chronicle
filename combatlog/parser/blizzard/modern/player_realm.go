@@ -59,3 +59,14 @@ func playerRealmName(name string) string {
 	}
 	return strings.Join(parts[len(parts)-count:], "-")
 }
+
+// LookupPlayerRealm returns parse-wide raw evidence for an exact normalized
+// name, never a GUID-only guess. Buffered input may already have populated it;
+// this is not an as-of-time observation or a canonical realm identifier.
+func (p *Parser) LookupPlayerRealm(id guid.GUID, name string) (string, bool) {
+	if p == nil {
+		return "", false
+	}
+	info, ok := p.playerRealms[id][name]
+	return info.RawRealm, ok
+}
