@@ -57,6 +57,7 @@ func TestNormalizeUnitNameRealmIndex(t *testing.T) {
 	t.Parallel()
 	r := newTransformReader(strings.NewReader(""))
 	r.combatLogVersion = 22
+	r.playerRealms = make(map[guid.GUID]map[string]PlayerRealmInfo)
 	raw := "Player-4618-00C7EC79"
 	_, err := r.guids.normalize(raw)
 	require.NoError(t, err)
@@ -92,9 +93,40 @@ func TestAbsorbPlayerRealmIndex(t *testing.T) {
 	t.Parallel()
 	r := newTransformReader(strings.NewReader(""))
 	r.combatLogVersion = 22
+	r.playerRealms = make(map[guid.GUID]map[string]PlayerRealmInfo)
 	converted, err := r.transform(`9/23/2026 11:12:27.557-4  SPELL_ABSORBED,Creature-0-4615-0-10340-267006-0000B3EC43,"Dark Neophyte",0xa28,0x80000000,Player-4620-00D5496D,"Target-Normal-US",0x518,0x80000000,Player-4620-00D5496D,"Caster-Normal-EU",0x518,0x80000000,1310927,"Light's Fury",0x2,4,16,nil`)
 	require.NoError(t, err)
 	require.Contains(t, converted, "BLIZZARD_SPELL_ABSORBED")
 	id := guid.GUID(r.guids.rawToValue["Player-4620-00D5496D"])
 	require.Equal(t, map[string]PlayerRealmInfo{"Target": {RawRealm: "Normal-US"}, "Caster": {RawRealm: "Normal-EU"}}, r.playerRealms[id])
+}
+
+func TestRealmIndexDisabledOutsideForever(t *testing.T) {
+	t.Parallel()
+	for _, r := range []*transformReader{
+		newHermesProxyTransformReader(strings.NewReader("")),
+		newTransformReader(strings.NewReader("")),
+	} {
+		require.Nil(t, r.playerRealms)
+		// A v22-looking name cannot enable an index in a reader not opted in by New.
+		r.combatLogVersion = 22
+		raw := "Player-4618-00C7EC79"
+		_, err := r.guids.normalize(raw)
+		require.NoError(t, err)
+		require.Equal(t, `"Player"`, r.normalizeUnitName(raw, `"Player-Normal-US"`))
+		require.Nil(t, r.playerRealms)
+	}
+	const header = "10/7/2026 22:00:00.000  COMBAT_LOG_VERSION,9,ADVANCED_LOG_ENABLED,1"
+	p, err := New(context.Background(), slog.Default(), strings.NewReader(header), hermesProxyTestDB{}, hermesProxyTestDB{}, nil, database.LogFormatV9Cleu)
+	require.NoError(t, err)
+	require.Nil(t, p.playerRealms)
+	_, err = p.Advance(context.Background())
+	require.NoError(t, err)
+	require.Nil(t, p.playerRealms)
+	p, err = NewHermesProxy(context.Background(), slog.Default(), strings.NewReader("10/7 22:00:00.000  COMBAT_LOG_VERSION,9,ADVANCED_LOG_ENABLED,1"), hermesProxyTestDB{}, hermesProxyTestDB{}, nil)
+	require.NoError(t, err)
+	require.Nil(t, p.playerRealms)
+	_, err = p.Advance(context.Background())
+	require.NoError(t, err)
+	require.Nil(t, p.playerRealms)
 }
