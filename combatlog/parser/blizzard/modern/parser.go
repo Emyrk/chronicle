@@ -130,6 +130,7 @@ func newParser(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB game
 		flavor:      flavor,
 		owners:      make(map[guid.GUID]guid.GUID),
 	}
+	inner.WithEventHook("BLIZZARD_PLAYER_REALM", p.playerRealm)
 	inner.WithEventHook("BLIZZARD_COMBAT_LOG_VERSION", p.combatLogVersion)
 	inner.WithEventHook("BLIZZARD_ZONE_CHANGE", p.zoneChange)
 	inner.WithEventHook("BLIZZARD_COMBATANT_INFO", p.combatantInfo)
@@ -172,6 +173,15 @@ func (p *Parser) SawRaidGroup() bool {
 
 func (p *Parser) DetailedTimes() map[string]time.Duration {
 	return p.inner.DetailedTimes()
+}
+
+func (p *Parser) playerRealm(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {
+	player, name, raw := m.Guid(), m.String(), m.String()
+	if err := m.Error(); err != nil {
+		return nil, err
+	}
+	observation := combatant.RealmObservation{RawName: raw, ObservedAt: ts}
+	return []messages.Message{&messages.PlayerRealm{MessageBase: messages.Base(ts), Player: player, Name: name, Realm: observation}}, nil
 }
 
 func (p *Parser) combatLogVersion(ts time.Time, m *wotlk.Matched, _ string) ([]messages.Message, error) {

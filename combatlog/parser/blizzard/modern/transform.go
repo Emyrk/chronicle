@@ -123,7 +123,7 @@ func malformedPhysicalLine(line string) bool {
 	return quoted
 }
 
-func (r *transformReader) transform(line string) (string, error) {
+func (r *transformReader) transform(line string) (result string, resultErr error) {
 	idx := strings.Index(line, "  ")
 	if idx < 0 {
 		return "", fmt.Errorf("modern Blizzard CLEU line has no separator: %q", truncate(line, 100))
@@ -142,6 +142,25 @@ func (r *transformReader) transform(line string) (string, error) {
 	}
 	event := fields[0]
 	args := fields[1:]
+	// Capture before normalizeUnitName discards Forever realm suffixes. Keep
+	// evidence in the line stream (not a read-ahead map) so timestamps stay real.
+	defer func() {
+		if resultErr != nil || r.combatLogVersion != 22 {
+			return
+		}
+		observations, err := r.playerRealmLines(prefix, event, args)
+		if err != nil {
+			result, resultErr = "", err
+			return
+		}
+		if len(observations) == 0 {
+			return
+		}
+		if result != "" {
+			observations = append(observations, result)
+		}
+		result = strings.Join(observations, "\n")
+	}()
 
 	switch event {
 	case "COMBAT_LOG_VERSION":
@@ -589,4 +608,57 @@ func truncate(s string, max int) string {
 		return s
 	}
 	return s[:max] + "..."
+}
+
+// playerRealmLines only consumes quoted player names; unrelated record layouts
+// and unqualified names carry no evidence. No catalog resolution happens here.
+func (r *transformReader) playerRealmLines(prefix, event string, args []string) ([]string, error) {
+	positions := []int{0, 4}
+	if event == "SPELL_ABSORBED" {
+		if len(args) == 18 {
+			positions = append(positions, 8)
+		}
+		if len(args) == 21 {
+			positions = append(positions, 11)
+		}
+	}
+	var lines []string
+	for _, i := range positions {
+		if i+1 >= len(args) || !strings.HasPrefix(args[i], "Player-") {
+			continue
+		}
+		name, err := strconv.Unquote(args[i+1])
+		if err != nil {
+			continue
+		}
+		raw := playerRealmName(name)
+		if raw == "" {
+			continue
+		}
+		id, err := r.guids.normalize(args[i])
+		if err != nil {
+			return nil, err
+		}
+		lines = append(lines, prefix+"BLIZZARD_PLAYER_REALM,"+id+","+strconv.Quote(stripRealm(name))+","+strconv.Quote(raw))
+	}
+	return lines, nil
+}
+
+func playerRealmName(name string) string {
+	name = strings.TrimSuffix(name, "-")
+	parts := strings.Split(name, "-")
+	count := 1
+	switch parts[len(parts)-1] {
+	case "US", "EU", "KR", "TW", "CN":
+		count = 2
+	}
+	if len(parts) <= count || parts[0] == "" {
+		return ""
+	}
+	for _, part := range parts[len(parts)-count:] {
+		if part == "" {
+			return ""
+		}
+	}
+	return strings.Join(parts[len(parts)-count:], "-")
 }

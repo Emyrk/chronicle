@@ -196,6 +196,18 @@ type Unit struct {
 func (u Unit) Affects() []guid.GUID { return []guid.GUID{u.Guid} }
 func (*Unit) isMessage()            {}
 
+// PlayerRealm carries identity metadata only. It must not create encounter
+// membership, gear snapshots, or synthetic combatants through Affects.
+type PlayerRealm struct {
+	MessageBase
+	Player guid.GUID
+	Name   string
+	Realm  combatant.RealmObservation
+}
+
+func (PlayerRealm) Affects() []guid.GUID { return nil }
+func (*PlayerRealm) isMessage()          {}
+
 type Combatant struct {
 	MessageBase
 	combatant.Combatant
