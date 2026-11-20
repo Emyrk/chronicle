@@ -19,7 +19,7 @@ export interface BrowserTool {
   confirmation: ClientToolConfirmation
 }
 export interface BrowserPage { url: string; generation: string; sessionId: string }
-export interface BrowserCommand { id: string; type: "tool"; generation: string; toolName: string; arguments: unknown; capability: ClientToolCapability }
+export interface BrowserCommand { ownershipRevision: number; id: string; type: "tool"; generation: string; toolName: string; arguments: unknown; capability: ClientToolCapability }
 
 export function availableBrowserTools(catalog: readonly CatalogTool[], capabilities: readonly InferenceCapabilityDescriptor[]): BrowserTool[] {
   return catalog.flatMap(tool => {

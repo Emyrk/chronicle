@@ -76,7 +76,7 @@ describe("page guidance", () => {
     const { runtime } = setup()
     const tool: BrowserTool = { name: "gen_page_context", description: "Page guidance", inputSchema: {}, effect: "read", confirmation: "never", capability: { id: "page-guidance", version: 1, scopeType: "page", scopeId: page.generation } }
     let current = page
-    const call = executeBrowserCommand({ id: "call", type: "tool", generation: page.generation, toolName: tool.name, arguments: {}, capability: tool.capability }, page, [tool], runtime, () => current, context().signal, async () => ({}))
+    const call = executeBrowserCommand({ ownershipRevision: 1, id: "call", type: "tool", generation: page.generation, toolName: tool.name, arguments: {}, capability: tool.capability }, page, [tool], runtime, () => current, context().signal, async () => ({}))
     await vi.waitFor(() => expect(fetcher).toHaveBeenCalledOnce())
     current = { ...page, generation: "visit-2" }
     resolve(Response.json({ prompt: "Old page prompt" }))

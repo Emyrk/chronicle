@@ -8,7 +8,7 @@ const catalog: CatalogTool[] = [{ name: "save_lua_files", description: "Save bro
 const capability = { id: "lua-editor", version: 1, scope_type: "lua_project", scope_id: "project" }
 const tools = availableBrowserTools(catalog, [capability])
 const page: BrowserPage = { url: "http://localhost:4000/modules/author/module/edit", generation: "page-1", sessionId: "session" }
-const command: BrowserCommand = { id: "call", type: "tool", toolName: "save_lua_files", generation: page.generation, arguments: { expected_revision: 3 }, capability: tools[0].capability }
+const command: BrowserCommand = { ownershipRevision: 1, id: "call", type: "tool", toolName: "save_lua_files", generation: page.generation, arguments: { expected_revision: 3 }, capability: tools[0].capability }
 const validate = vi.fn(async (_tool, args) => args)
 const signal = () => new AbortController().signal
 
