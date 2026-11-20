@@ -6,6 +6,7 @@ import (
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database"
@@ -13,6 +14,10 @@ import (
 )
 
 type Units struct {
+	// QualifiedPlayers is the realm-qualified identity path. Players remains the
+	// legacy GUID-only compatibility view and is not safe for mixed-realm identity.
+	QualifiedPlayers map[combatant.PlayerIdentity]combatant.Combatant
+
 	flavor database.WoWFlavor
 	// TODO: Slain to remove units?
 	Info         map[guid.GUID]unitinfo.Info
@@ -99,6 +104,19 @@ func (us *Units) ProcessMessage(m messages.Message) error {
 	us.expirePossessions(m.Date())
 
 	switch msg := m.(type) {
+	case *messages.PlayerRealm:
+		if msg.Realm.RawName == "" || msg.Player.IsZero() || !msg.Player.IsPlayer() {
+			break
+		}
+		identity := combatant.PlayerIdentity{GUID: msg.Player, Realm: msg.Realm.RawName}
+		if existing, ok := us.QualifiedPlayers[identity]; ok && !msg.Realm.ObservedAt.After(existing.Realm.ObservedAt) {
+			break
+		}
+		us.UpdatePlayer(combatant.Combatant{
+			Guid: msg.Player, Name: msg.Name, Seen: msg.Date(), Realm: msg.Realm,
+			HeroClass: types.HeroClassesUNKNOWN, Race: types.HeroRacesUnknown,
+			Gender: types.HeroGenderUnknown,
+		})
 	case *messages.Combatant:
 		us.UpdatePlayer(msg.Combatant)
 	case *messages.Unit:
@@ -337,6 +355,20 @@ func (us *Units) UpdatePlayerTalents(gid guid.GUID, talents *combatant.Talents) 
 }
 
 func (us *Units) UpdatePlayer(c combatant.Combatant) {
+	if identity, qualified := c.Identity(); qualified {
+		if us.QualifiedPlayers == nil {
+			us.QualifiedPlayers = make(map[combatant.PlayerIdentity]combatant.Combatant)
+		}
+		if existing, ok := us.QualifiedPlayers[identity]; ok {
+			c.MergeExisting(existing)
+		}
+		us.QualifiedPlayers[identity] = c
+		return
+	}
+	// Unqualified records stay in the compatibility view. In particular, modern
+	// COMBATANT_INFO contains no realm; a cached name is not identity evidence and
+	// must never assign its gear/class to whichever realm was most recently seen.
+
 	existing, ok := us.Players[c.Guid]
 	if ok {
 		c.MergeExisting(existing)
