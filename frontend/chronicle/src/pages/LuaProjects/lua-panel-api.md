@@ -281,18 +281,29 @@ local chart = ui.lineChart(UIParent, "dps-over-time", {
   width = 640, height = 260,
   xFormat = "seconds", yFormat = "compact",
   xLabel = "Fight time", yLabel = "DPS",
-  markers = { { x = 95, label = "Phase 2" } },
+  bands = {
+    { from = 0, to = 95, label = "Phase 1" },
+    { from = 95, to = 180, label = "Phase 2", color = "#6366f1", tooltip = "Whelps" },
+  },
+  markers = {
+    { x = 120, color = "#ef4444", style = "dotted", icon = "triangle", tooltip = "Jaina died\nThrall died" },
+  },
   series = {
-    { name = "Jaina", color = "#69ccf0", points = { {0, 0}, {5, 1200}, {10, 1850} } },
+    { name = "Jaina", color = "#69ccf0", suffix = "/s", points = { {0, 0}, {5, 1200}, {10, 1850} } },
     { name = "Thrall", points = { {0, 0}, {5, 900}, {10, 1400} } },
   },
 })
 -- Later: chart:SetSeries(newSeries)
 ```
 
-A chart holds at most 12 series and 2,000 points in total, plus up to 32 markers. Points are `{x, y}` or `{x = x, y = y}`. Colors are `"#rrggbb"` strings or `{r, g, b, a}` tables; series without one get a palette color. Formats are `"number"`, `"compact"` (1.2k, 3.4M), `"seconds"` (12s), `"duration"` (1:05) and `"percent"` (values from 0 to 100). Curves are `"linear"`, `"monotoneX"` (default), `"step"`, `"natural"` and `"basis"`.
+A chart holds at most 12 series and 2,000 points in total, plus up to 64 bands and 32 markers.
 
-The chart also supports `SetSeries`, `SetMarkers`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
+- **Bands** shade an x range behind the lines, like the Line Chart panel's phases or its raid durability background. A band's `label` is drawn along the top. Its `label` and `tooltip` also appear in the hover readout while the pointer is inside it. `opacity` defaults to 0.08.
+- **Markers** draw a vertical line, such as a death or a phase change. `style` is `"dashed"` (default), `"solid"` or `"dotted"`. `icon` is `"none"` (default), `"triangle"` or `"dot"`. A marker with a `tooltip` shows it in a card when the pointer is on the line.
+- A series' **`suffix`**, such as `"/s"`, is appended to its values in the hover readout.
+- **`fillParent = true`** (or `chart:SetFillParent()`) sizes the chart to its parent frame, or to the whole panel, and follows it as it resizes. `SetPoint` and `SetSize` are then ignored. Points are `{x, y}` or `{x = x, y = y}`. Colors are `"#rrggbb"` strings or `{r, g, b, a}` tables; series without one get a palette color. Formats are `"number"`, `"compact"` (1.2k, 3.4M), `"seconds"` (12s), `"duration"` (1:05) and `"percent"` (values from 0 to 100). Curves are `"linear"`, `"monotoneX"` (default), `"step"`, `"natural"` and `"basis"`.
+
+The chart also supports `SetSeries`, `SetBands`, `SetMarkers`, `SetFillParent`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
 
 ### Lua Language Server definitions
 
@@ -488,6 +499,10 @@ Replace every series. At most 12 series and 2000 points in total.
 
 Replace the vertical marker lines, such as phase changes. At most 32.
 
+#### `ChronicleLineChart:SetBands(bands: ChronicleLineBand[])`
+
+Replace the shaded x ranges drawn behind the lines, such as phases or a background measure. At most 64.
+
 #### `ChronicleLineChart:SetXFormat(xFormat: ChronicleLineChartFormat)`
 
 Choose how x values are written on the axis and in the hover readout. Defaults to "number".
@@ -517,6 +532,12 @@ Draw a dot at every point.
 Stack series on top of each other. Stacked charts are always filled.
 
 - `stacked`: Defaults to true.
+
+#### `ChronicleLineChart:SetFillParent(fillParent?: boolean)`
+
+Size the chart to fill its parent frame (or the whole panel), ignoring SetPoint and SetSize.
+
+- `fillParent`: Defaults to true.
 
 #### `ChronicleLineChart:SetLegend(legend?: boolean)`
 

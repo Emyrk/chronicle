@@ -161,12 +161,24 @@ function ChronicleButton:SetText(text) end
 ---@class ChronicleLineSeries
 ---@field name string Unique series name, shown in the legend and hover readout.
 ---@field color? string|number[] "#rrggbb" or {r, g, b, a} with components from 0 through 1. Defaults to a palette color.
+---@field suffix? string Appended to this series' values in the hover readout, such as "/s". Up to 16 characters.
 ---@field points number[][] Points as {x, y} or {x = x, y = y}. At most 2000 points across all series.
 
 ---@class ChronicleLineMarker
 ---@field x number Position on the x axis.
 ---@field label? string Text drawn beside the marker line.
 ---@field color? string|number[] "#rrggbb" or {r, g, b, a}.
+---@field tooltip? string Hover text; newlines start new lines. Hovering the marker shows it.
+---@field style? "dashed"|"solid"|"dotted" Line style. Defaults to "dashed".
+---@field icon? "none"|"triangle"|"dot" Drawn at the top of the line. Defaults to "none".
+
+---@class ChronicleLineBand
+---@field from number Start of the shaded range on the x axis.
+---@field to number End of the range; at least `from`.
+---@field label? string Drawn at the top of the band, such as a phase name.
+---@field color? string|number[] "#rrggbb" or {r, g, b, a}. Defaults to violet.
+---@field opacity? number Fill opacity from 0 through 1. Defaults to 0.08.
+---@field tooltip? string Shown in the hover readout while the pointer is inside the band.
 
 ---@alias ChronicleLineChartFormat "number"|"compact"|"seconds"|"duration"|"percent"
 
@@ -224,6 +236,10 @@ function ChronicleLineChart:SetSeries(series) end
 ---@param markers ChronicleLineMarker[]
 function ChronicleLineChart:SetMarkers(markers) end
 
+---Replace the shaded x ranges drawn behind the lines, such as phases or a background measure. At most 64.
+---@param bands ChronicleLineBand[]
+function ChronicleLineChart:SetBands(bands) end
+
 ---Choose how x values are written on the axis and in the hover readout. Defaults to "number".
 ---@param xFormat ChronicleLineChartFormat
 function ChronicleLineChart:SetXFormat(xFormat) end
@@ -247,6 +263,10 @@ function ChronicleLineChart:SetShowPoints(showPoints) end
 ---Stack series on top of each other. Stacked charts are always filled.
 ---@param stacked? boolean Defaults to true.
 function ChronicleLineChart:SetStacked(stacked) end
+
+---Size the chart to fill its parent frame (or the whole panel), ignoring SetPoint and SetSize.
+---@param fillParent? boolean Defaults to true.
+function ChronicleLineChart:SetFillParent(fillParent) end
 
 ---Show or hide the legend. Shown by default.
 ---@param legend? boolean Defaults to true.

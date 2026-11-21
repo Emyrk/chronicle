@@ -63,6 +63,37 @@ describe("GuideUiScene", () => {
     expect(markup).toContain("10s")
   })
 
+  it("draws line chart bands and styled markers, and fills the parent when asked", () => {
+    const scene = applySceneBatch(createInitialScene(), [{
+      op: "create",
+      id: "fight",
+      kind: "line-chart",
+      parentId: UI_ROOT_ID,
+      props: {
+        x: 10, y: -20, width: 480, height: 240, anchor: "top-left",
+        series: [{ name: "Raid", suffix: "/s", points: [{ x: 0, y: 0 }, { x: 100, y: 5000 }] }],
+        bands: [{ from: 0, to: 40, label: "Phase 1" }, { from: 40, to: 100, label: "Phase 2", color: "#6366f1" }],
+        markers: [{ x: 60, label: "Wipe call", icon: "triangle", style: "dotted", color: "#ef4444", tooltip: "Jaina died" }],
+      },
+    }, {
+      op: "create",
+      id: "filled",
+      kind: "line-chart",
+      parentId: UI_ROOT_ID,
+      props: { x: 10, y: -20, width: 480, height: 240, anchor: "top-left", series: [], fillParent: true },
+    }])
+
+    const markup = renderToStaticMarkup(<GuideUiScene scene={scene} assets={new Map()} onNodeClick={() => {}} />)
+
+    expect(markup).toContain("Phase 1")
+    expect(markup).toContain("Phase 2")
+    expect(markup).toContain("Wipe call")
+    expect(markup).toContain('stroke-dasharray="1 3"')
+    expect(markup).toMatch(/<path d="M[\d.]+,0 L[\d.]+,0 L[\d.]+,7 Z" fill="#ef4444"/)
+    expect(markup).toContain("data-line-chart-marker")
+    expect(markup).toMatch(/data-guide-node="filled"[^>]*left:0;top:0;width:100%;height:100%/)
+  })
+
   it("makes nodes with hover text receive the pointer", () => {
     const scene = applySceneBatch(createInitialScene(), [
       { op: "create", id: "plain", kind: "frame", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 10, height: 10, anchor: "top-left" } },
