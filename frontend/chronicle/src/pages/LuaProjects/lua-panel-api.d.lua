@@ -137,7 +137,15 @@ function ChronicleTexture:SetItem(itemId, tooltip) end
 ---@param iconName string Example: "inv_sword_39".
 function ChronicleTexture:SetIcon(iconName) end
 
----@alias ChroniclePlayerMetricChartType "damage"|"healing"|"taken"|"mitigation"
+---@class ChronicleButton: ChronicleFrame
+local ChronicleButton = {}
+
+---Set the button label.
+---@param text string
+function ChronicleButton:SetText(text) end
+
+-- BEGIN GENERATED WIDGET DEFINITIONS
+-- Generated from src/pages/Guides/widgets. Run pnpm generate:lua-api after changing a widget spec.
 
 ---@class ChroniclePlayerMetricRow
 ---@field playerID string Player GUID used for Chronicle specialization and cosmetic enrichment.
@@ -148,6 +156,23 @@ function ChronicleTexture:SetIcon(iconName) end
 ---@field stackedValue? number Optional secondary total, such as overhealing.
 ---@field dimmed? boolean Reduce this row's visual prominence.
 
+---@alias ChroniclePlayerMetricChartType "damage"|"healing"|"taken"|"mitigation"
+
+---@class ChronicleLineSeries
+---@field name string Unique series name, shown in the legend and hover readout.
+---@field color? string|number[] "#rrggbb" or {r, g, b, a} with components from 0 through 1. Defaults to a palette color.
+---@field points number[][] Points as {x, y} or {x = x, y = y}. At most 2000 points across all series.
+
+---@class ChronicleLineMarker
+---@field x number Position on the x axis.
+---@field label? string Text drawn beside the marker line.
+---@field color? string|number[] "#rrggbb" or {r, g, b, a}.
+
+---@alias ChronicleLineChartFormat "number"|"compact"|"seconds"|"duration"|"percent"
+
+---@alias ChronicleLineChartCurve "linear"|"monotoneX"|"step"|"natural"|"basis"
+
+---Chronicle's standard player meter, with class colors and icons.
 ---@class ChroniclePlayerMetricChart: ChronicleRegion
 local ChroniclePlayerMetricChart = {}
 
@@ -156,54 +181,42 @@ local ChroniclePlayerMetricChart = {}
 function ChroniclePlayerMetricChart:SetData(data) end
 
 ---Choose the standard Chronicle player metric presentation.
----@param chartType ChroniclePlayerMetricChartType
-function ChroniclePlayerMetricChart:SetChartType(chartType) end
+---@param type ChroniclePlayerMetricChartType
+function ChroniclePlayerMetricChart:SetChartType(type) end
 
 ---Display values per second using the configured duration.
----@param enabled boolean
-function ChroniclePlayerMetricChart:SetPerSecond(enabled) end
+---@param perSecond? boolean
+function ChroniclePlayerMetricChart:SetPerSecond(perSecond) end
 
 ---Set the duration used for per-second conversion, in milliseconds.
 ---@param durationMillis number
 function ChroniclePlayerMetricChart:SetDuration(durationMillis) end
 
 ---Set the title used by Chronicle-owned chart surfaces.
----@param title string
-function ChroniclePlayerMetricChart:SetPanelTitle(title) end
+---@param panelTitle string
+function ChroniclePlayerMetricChart:SetPanelTitle(panelTitle) end
 
 ---Set the label for stacked secondary values.
----@param label string
-function ChroniclePlayerMetricChart:SetStackedLabel(label) end
+---@param stackedLabel string
+function ChroniclePlayerMetricChart:SetStackedLabel(stackedLabel) end
 
 ---Override the value suffix.
----@param suffix string
-function ChroniclePlayerMetricChart:SetValueSuffix(suffix) end
+---@param valueSuffix string
+function ChroniclePlayerMetricChart:SetValueSuffix(valueSuffix) end
 
 ---Hide primary value badges whose value is zero.
----@param hidden boolean
-function ChroniclePlayerMetricChart:SetHideZeroValue(hidden) end
+---@param hideZeroValue? boolean
+function ChroniclePlayerMetricChart:SetHideZeroValue(hideZeroValue) end
 
 ---Set row height in pixels, from 12 through 128.
----@param height number
-function ChroniclePlayerMetricChart:SetRowHeight(height) end
+---@param rowHeight number
+function ChroniclePlayerMetricChart:SetRowHeight(rowHeight) end
 
----@alias ChronicleLineChartFormat "number"|"compact"|"seconds"|"duration"|"percent"
----@alias ChronicleLineChartCurve "linear"|"monotoneX"|"step"|"natural"|"basis"
-
----@class ChronicleLineSeries
----@field name string Unique series name, shown in the legend and hover readout.
----@field color? string|number[] "#rrggbb" or {r, g, b, a} with components from 0 through 1. Defaults to a Chronicle palette color.
----@field points number[][] Points as {x, y} or {x = x, y = y}. At most 2,000 points across all series.
-
----@class ChronicleLineMarker
----@field x number Position on the x axis.
----@field label? string Text drawn beside the marker line.
----@field color? string|number[] "#rrggbb" or {r, g, b, a}.
-
+---Numeric series drawn with Chronicle's line chart, the Timeline panel's renderer. Hovering shows every visible series' value at that x; viewers can click legend entries to hide series.
 ---@class ChronicleLineChart: ChronicleRegion
 local ChronicleLineChart = {}
 
----Replace every series. At most 12 series and 2,000 points in total. Hovering shows each series' value at that x.
+---Replace every series. At most 12 series and 2000 points in total.
 ---@param series ChronicleLineSeries[]
 function ChronicleLineChart:SetSeries(series) end
 
@@ -212,32 +225,32 @@ function ChronicleLineChart:SetSeries(series) end
 function ChronicleLineChart:SetMarkers(markers) end
 
 ---Choose how x values are written on the axis and in the hover readout. Defaults to "number".
----@param format ChronicleLineChartFormat
-function ChronicleLineChart:SetXFormat(format) end
+---@param xFormat ChronicleLineChartFormat
+function ChronicleLineChart:SetXFormat(xFormat) end
 
 ---Choose how y values are written. Defaults to "compact" (1.2k, 3.4M).
----@param format ChronicleLineChartFormat
-function ChronicleLineChart:SetYFormat(format) end
+---@param yFormat ChronicleLineChartFormat
+function ChronicleLineChart:SetYFormat(yFormat) end
 
 ---Set the line interpolation. Defaults to "monotoneX".
 ---@param curve ChronicleLineChartCurve
 function ChronicleLineChart:SetCurve(curve) end
 
 ---Fill the area under each line.
----@param enabled? boolean Defaults to true.
-function ChronicleLineChart:SetArea(enabled) end
+---@param area? boolean Defaults to true.
+function ChronicleLineChart:SetArea(area) end
 
 ---Draw a dot at every point.
----@param enabled? boolean Defaults to true.
-function ChronicleLineChart:SetShowPoints(enabled) end
+---@param showPoints? boolean Defaults to true.
+function ChronicleLineChart:SetShowPoints(showPoints) end
 
 ---Stack series on top of each other. Stacked charts are always filled.
----@param enabled? boolean Defaults to true.
-function ChronicleLineChart:SetStacked(enabled) end
+---@param stacked? boolean Defaults to true.
+function ChronicleLineChart:SetStacked(stacked) end
 
----Show the legend. Viewers can click legend entries to hide series. Shown by default.
----@param enabled? boolean Defaults to true.
-function ChronicleLineChart:SetLegend(enabled) end
+---Show or hide the legend. Shown by default.
+---@param legend? boolean Defaults to true.
+function ChronicleLineChart:SetLegend(legend) end
 
 ---Label the axes. nil or "" removes a label.
 ---@param xLabel? string
@@ -245,21 +258,14 @@ function ChronicleLineChart:SetLegend(enabled) end
 function ChronicleLineChart:SetAxisLabels(xLabel, yLabel) end
 
 ---Fix the x axis range. nil means fit the data.
----@param min? number
----@param max? number
-function ChronicleLineChart:SetXRange(min, max) end
+---@param xMin? number
+---@param xMax? number
+function ChronicleLineChart:SetXRange(xMin, xMax) end
 
 ---Fix the y axis range. nil means fit the data. The minimum defaults to 0.
----@param min? number
----@param max? number
-function ChronicleLineChart:SetYRange(min, max) end
-
----@class ChronicleButton: ChronicleFrame
-local ChronicleButton = {}
-
----Set the button label.
----@param text string
-function ChronicleButton:SetText(text) end
+---@param yMin? number
+---@param yMax? number
+function ChronicleLineChart:SetYRange(yMin, yMax) end
 
 ---Create a retained UI object. parent defaults to UIParent.
 ---@param frameType "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart"|"LineChart"
@@ -267,6 +273,8 @@ function ChronicleButton:SetText(text) end
 ---@param parent? ChronicleFrame
 ---@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart|ChronicleLineChart object
 function CreateFrame(frameType, id, parent) end
+
+-- END GENERATED WIDGET DEFINITIONS
 
 ---@type ChronicleFrame
 UIParent = UIParent

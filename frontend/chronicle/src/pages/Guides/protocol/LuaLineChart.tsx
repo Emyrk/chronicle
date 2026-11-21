@@ -1,21 +1,20 @@
 import { useState } from "react";
 import { Line, type LineSeries, type SliceTooltipProps } from "@nivo/line";
-import { formatChartValue, type LineChartFormat } from "./lineChartFormat";
+import type { LineChartCurve, LineChartFormat, LineMarker, LineSeries as LuaSeries } from "../widgets/lineChart";
+import { formatChartValue } from "./lineChartFormat";
 import type { SceneNode } from "./types";
 
 /** Series colors used when Lua does not set one; picked to read on the dark panel background. */
 const PALETTE = ["#60a5fa", "#f97316", "#34d399", "#f472b6", "#facc15", "#a78bfa", "#2dd4bf", "#f87171", "#a3e635", "#38bdf8", "#fb923c", "#c084fc"];
 const AXIS_TEXT = "#a1a1aa";
 
-interface LuaSeries { name: string; color?: string; points: Array<{ x: number; y: number }> }
-interface LuaMarker { x: number; label?: string; color?: string }
 interface ChartSeries extends LineSeries { id: string; color: string; data: Array<{ x: number; y: number }> }
 
 function asFormat(value: unknown, fallback: LineChartFormat): LineChartFormat {
   return value === "number" || value === "compact" || value === "seconds" || value === "duration" || value === "percent" ? value : fallback;
 }
 
-function asCurve(value: unknown): "linear" | "monotoneX" | "step" | "natural" | "basis" {
+function asCurve(value: unknown): LineChartCurve {
   return value === "linear" || value === "step" || value === "natural" || value === "basis" ? value : "monotoneX";
 }
 
@@ -61,7 +60,7 @@ export function LuaLineChart({ node }: { node: SceneNode }) {
     data: series.points,
   }));
   const visible = all.filter((series) => !hidden.has(series.id));
-  const markers = (Array.isArray(props.markers) ? props.markers as LuaMarker[] : []).map((marker) => ({
+  const markers = (Array.isArray(props.markers) ? props.markers as LineMarker[] : []).map((marker) => ({
     axis: "x" as const,
     value: marker.x,
     lineStyle: { stroke: marker.color ?? "#71717a", strokeWidth: 1, strokeDasharray: "4 3" },

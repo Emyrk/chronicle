@@ -1,35 +1,28 @@
+import { boolean, bounded, color, displayText, exact, finite, id, record, SceneValidationError, string } from "./validators"
+import { WIDGETS, widgetArgs, widgetProps, widgetRequiredProps } from "../widgets"
 import { NODE_KINDS, type GuideEvent, type NodeKind, type RetainedScene, type SceneNode, type SceneOperation } from "./types"
+
+export { MAX_ID_LENGTH, MAX_STRING_LENGTH, SceneValidationError } from "./validators"
 
 export const UI_ROOT_ID = "__chronicle_ui_root__"
 export const MAX_NODES = 2_000
 export const MAX_OPERATIONS = 2_000
 export const MAX_NESTING = 64
-export const MAX_STRING_LENGTH = 4_096
-export const MAX_ID_LENGTH = 128
 export const MAX_POINTS = 256
-export const MAX_PLAYER_METRIC_ROWS = 100
-export const MAX_LINE_CHART_SERIES = 12
-/** Points across every series of one line chart. */
-export const MAX_LINE_CHART_POINTS = 2_000
-export const MAX_LINE_CHART_MARKERS = 32
-export const LINE_CHART_FORMATS = ["number", "compact", "seconds", "duration", "percent"] as const
-export const LINE_CHART_CURVES = ["linear", "monotoneX", "step", "natural", "basis"] as const
 /** Largest content size UIParent:SetSize accepts, in pixels. */
 export const MAX_CANVAS_SIZE = 16_384
 
 const MAP_KINDS = new Set<NodeKind>(["unit", "icon", "map-text", "line", "arrow", "circle", "cone", "polygon"])
 const ANCHORS = new Set(["top-left", "top", "top-right", "left", "center", "right", "bottom-left", "bottom", "bottom-right"])
-const COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
 const COMMON_UI = ["x", "y", "anchor", "visible", "alpha", "zIndex"]
 const COMMON_MAP = ["visible", "alpha"]
 
-const PROPERTIES: Record<NodeKind, readonly string[]> = {
+// Widget kinds (charts and other Chronicle-owned widgets) come from their specs in ../widgets.
+const BASE_PROPERTIES: Partial<Record<NodeKind, readonly string[]>> = {
   frame: [...COMMON_UI, "width", "height", "color", "backgroundColor", "borderColor", "tooltipText"],
   text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText"],
   texture: [...COMMON_UI, "width", "height", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor", "tooltipText"],
   button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText"],
-  "player-metric-chart": [...COMMON_UI, "width", "height", "data", "type", "perSecond", "durationMillis", "panelTitle", "stackedLabel", "valueSuffix", "hideZeroValue", "rowHeight"],
-  "line-chart": [...COMMON_UI, "width", "height", "series", "markers", "xFormat", "yFormat", "curve", "area", "showPoints", "stacked", "legend", "xLabel", "yLabel", "xMin", "xMax", "yMin", "yMax"],
   unit: [...COMMON_MAP, "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"],
   icon: [...COMMON_MAP, "x", "y", "size", "asset", "label", "color", "facing"],
   "map-text": [...COMMON_MAP, "x", "y", "text", "fontSize", "color", "align"],
@@ -40,13 +33,11 @@ const PROPERTIES: Record<NodeKind, readonly string[]> = {
   polygon: [...COMMON_MAP, "points", "color", "fillColor", "width"],
 }
 
-const REQUIRED: Record<NodeKind, readonly string[]> = {
+const BASE_REQUIRED: Partial<Record<NodeKind, readonly string[]>> = {
   frame: ["x", "y", "width", "height", "anchor"],
   text: ["x", "y", "text", "fontSize", "color", "anchor"],
   texture: ["x", "y", "width", "height", "asset", "anchor"],
   button: ["x", "y", "width", "height", "text", "anchor"],
-  "player-metric-chart": ["x", "y", "width", "height", "anchor", "data", "type"],
-  "line-chart": ["x", "y", "width", "height", "anchor", "series"],
   unit: ["x", "y", "size", "unit"],
   icon: ["x", "y", "size", "asset"],
   "map-text": ["x", "y", "text", "fontSize", "color"],
@@ -57,12 +48,9 @@ const REQUIRED: Record<NodeKind, readonly string[]> = {
   polygon: ["points", "color", "width"],
 }
 
-export class SceneValidationError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = "SceneValidationError"
-  }
-}
+const PROPERTIES = { ...BASE_PROPERTIES, ...Object.fromEntries(WIDGETS.map((spec) => [spec.kind, widgetProps(spec)])) } as Record<NodeKind, readonly string[]>
+const REQUIRED = { ...BASE_REQUIRED, ...Object.fromEntries(WIDGETS.map((spec) => [spec.kind, widgetRequiredProps(spec)])) } as Record<NodeKind, readonly string[]>
+const WIDGET_ARGS = new Map<NodeKind, ReturnType<typeof widgetArgs>>(WIDGETS.map((spec) => [spec.kind, widgetArgs(spec)]))
 
 class ImmutableMap<K, V> implements ReadonlyMap<K, V> {
   readonly #values: Map<K, V>
@@ -80,60 +68,6 @@ class ImmutableMap<K, V> implements ReadonlyMap<K, V> {
   get [Symbol.toStringTag]() { return "ImmutableMap" }
 }
 
-function record(value: unknown, label: string): Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new SceneValidationError(`${label} must be an object`)
-  return value as Record<string, unknown>
-}
-
-function exact(value: Record<string, unknown>, fields: readonly string[], label: string) {
-  for (const key of Object.keys(value)) if (!fields.includes(key)) throw new SceneValidationError(`${label} has unknown property ${key}`)
-}
-
-function finite(value: unknown, label: string): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) throw new SceneValidationError(`${label} must be a finite number`)
-  return value
-}
-
-function bounded(value: unknown, min: number, max: number, label: string): number {
-  const result = finite(value, label)
-  if (result < min || result > max) throw new SceneValidationError(`${label} must be between ${min} and ${max}`)
-  return result
-}
-
-function hasControlCharacters(value: string): boolean {
-  return [...value].some((character) => {
-    const code = character.charCodeAt(0)
-    return code <= 31 || code === 127
-  })
-}
-
-function string(value: unknown, label: string, max = MAX_STRING_LENGTH): string {
-  if (typeof value !== "string" || value.length === 0 || value.length > max || hasControlCharacters(value)) {
-    throw new SceneValidationError(`${label} must be a non-empty safe string of at most ${max} characters`)
-  }
-  return value
-}
-
-/** Display text may be empty (SetText("") clears a label) and may contain newlines and tabs. */
-function displayText(value: unknown, label: string): string {
-  if (typeof value !== "string" || value.length > MAX_STRING_LENGTH || hasControlCharacters(value.replace(/[\n\t]/g, ""))) {
-    throw new SceneValidationError(`${label} must be text of at most ${MAX_STRING_LENGTH} characters without control characters other than newlines and tabs`)
-  }
-  return value
-}
-
-function id(value: unknown, label = "id"): string { return string(value, label, MAX_ID_LENGTH) }
-
-function color(value: unknown, label: string): string {
-  if (typeof value !== "string" || !COLOR.test(value)) throw new SceneValidationError(`${label} must be a hex color`)
-  return value
-}
-
-function boolean(value: unknown, label: string): boolean {
-  if (typeof value !== "boolean") throw new SceneValidationError(`${label} must be a boolean`)
-  return value
-}
-
 function validatePoint(value: unknown, label: string) {
   const point = record(value, label)
   exact(point, ["x", "y"], label)
@@ -141,85 +75,16 @@ function validatePoint(value: unknown, label: string) {
   bounded(point.y, 0, 1, `${label}.y`)
 }
 
-function validatePlayerMetricData(value: unknown, label: string) {
-  if (!Array.isArray(value) || value.length > MAX_PLAYER_METRIC_ROWS) {
-    throw new SceneValidationError(`${label} must be an array of at most ${MAX_PLAYER_METRIC_ROWS} rows`)
-  }
-  value.forEach((rawRow, index) => {
-    const rowLabel = `${label}[${index}]`
-    const row = record(rawRow, rowLabel)
-    exact(row, ["playerID", "playerName", "className", "specialization", "value", "stackedValue", "dimmed"], rowLabel)
-    string(row.playerID, `${rowLabel}.playerID`, MAX_ID_LENGTH)
-    displayText(row.playerName, `${rowLabel}.playerName`)
-    string(row.className, `${rowLabel}.className`, 32)
-    if (row.specialization !== undefined) displayText(row.specialization, `${rowLabel}.specialization`)
-    bounded(row.value, 0, Number.MAX_SAFE_INTEGER, `${rowLabel}.value`)
-    if (row.stackedValue !== undefined) bounded(row.stackedValue, 0, Number.MAX_SAFE_INTEGER, `${rowLabel}.stackedValue`)
-    if (row.dimmed !== undefined) boolean(row.dimmed, `${rowLabel}.dimmed`)
-  })
-}
-
-function validateLineSeries(value: unknown, label: string) {
-  if (!Array.isArray(value) || value.length > MAX_LINE_CHART_SERIES) {
-    throw new SceneValidationError(`${label} must be an array of at most ${MAX_LINE_CHART_SERIES} series`)
-  }
-  const names = new Set<string>()
-  let points = 0
-  value.forEach((rawSeries, index) => {
-    const seriesLabel = `${label}[${index}]`
-    const series = record(rawSeries, seriesLabel)
-    exact(series, ["name", "color", "points"], seriesLabel)
-    const name = string(series.name, `${seriesLabel}.name`, 128)
-    if (names.has(name)) throw new SceneValidationError(`${seriesLabel}.name must be unique`)
-    names.add(name)
-    if (series.color !== undefined) color(series.color, `${seriesLabel}.color`)
-    if (!Array.isArray(series.points)) throw new SceneValidationError(`${seriesLabel}.points must be an array`)
-    points += series.points.length
-    if (points > MAX_LINE_CHART_POINTS) throw new SceneValidationError(`${label} exceeds ${MAX_LINE_CHART_POINTS} points`)
-    series.points.forEach((rawPoint, pointIndex) => {
-      const pointLabel = `${seriesLabel}.points[${pointIndex}]`
-      const point = record(rawPoint, pointLabel)
-      exact(point, ["x", "y"], pointLabel)
-      finite(point.x, `${pointLabel}.x`)
-      finite(point.y, `${pointLabel}.y`)
-    })
-  })
-}
-
-function validateLineMarkers(value: unknown, label: string) {
-  if (!Array.isArray(value) || value.length > MAX_LINE_CHART_MARKERS) {
-    throw new SceneValidationError(`${label} must be an array of at most ${MAX_LINE_CHART_MARKERS} markers`)
-  }
-  value.forEach((rawMarker, index) => {
-    const markerLabel = `${label}[${index}]`
-    const marker = record(rawMarker, markerLabel)
-    exact(marker, ["x", "label", "color"], markerLabel)
-    finite(marker.x, `${markerLabel}.x`)
-    if (marker.label !== undefined) displayText(marker.label, `${markerLabel}.label`)
-    if (marker.color !== undefined) color(marker.color, `${markerLabel}.color`)
-  })
-}
-
 function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record<string, unknown> {
   const props = record(input, `${kind} props`)
   exact(props, PROPERTIES[kind], `${kind} props`)
   if (!partial) for (const key of REQUIRED[kind]) if (!(key in props)) throw new SceneValidationError(`${kind} props require ${key}`)
 
+  const widget = WIDGET_ARGS.get(kind)
   for (const [key, value] of Object.entries(props)) {
-    if (key === "text") displayText(value, `${kind}.text`)
-    else if (key === "data") validatePlayerMetricData(value, `${kind}.data`)
-    else if (key === "series") validateLineSeries(value, `${kind}.series`)
-    else if (key === "markers") validateLineMarkers(value, `${kind}.markers`)
-    else if (key === "xFormat" || key === "yFormat") {
-      if (!(LINE_CHART_FORMATS as readonly unknown[]).includes(value)) throw new SceneValidationError(`${kind}.${key} must be one of ${LINE_CHART_FORMATS.join(", ")}`)
-    } else if (key === "curve") {
-      if (!(LINE_CHART_CURVES as readonly unknown[]).includes(value)) throw new SceneValidationError(`${kind}.curve must be one of ${LINE_CHART_CURVES.join(", ")}`)
-    } else if (key === "xMin" || key === "xMax" || key === "yMin" || key === "yMax") {
-      if (value !== "auto") finite(value, `${kind}.${key}`)
-    } else if (key === "tooltipText" || key === "xLabel" || key === "yLabel") displayText(value, `${kind}.${key}`)
-    else if (key === "type") {
-      if (value !== "damage" && value !== "healing" && value !== "taken" && value !== "mitigation") throw new SceneValidationError(`${kind}.type is invalid`)
-    } else if (key === "panelTitle" || key === "stackedLabel" || key === "valueSuffix") displayText(value, `${kind}.${key}`)
+    const arg = widget?.get(key)
+    if (arg) arg.type.validate(value, `${kind}.${key}`)
+    else if (key === "text" || key === "tooltipText") displayText(value, `${kind}.${key}`)
     else if (key === "asset") {
       const asset = string(value, `${kind}.asset`, 255)
       const segments = asset.split("/")
@@ -238,9 +103,7 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
       const iconName = string(value, "texture.iconName", 128)
       if (!/^[a-z0-9][a-z0-9_-]{0,127}$/.test(iconName)) throw new SceneValidationError("texture.iconName is invalid")
     } else if (["color", "fillColor", "tint", "backgroundColor", "borderColor"].includes(key)) color(value, `${kind}.${key}`)
-    else if (["visible", "enabled", "tooltip", "perSecond", "hideZeroValue", "area", "showPoints", "stacked", "legend"].includes(key)) boolean(value, `${kind}.${key}`)
-    else if (key === "durationMillis") bounded(value, 0, Number.MAX_SAFE_INTEGER, `${kind}.durationMillis`)
-    else if (key === "rowHeight") bounded(value, 12, 128, `${kind}.rowHeight`)
+    else if (["visible", "enabled", "tooltip"].includes(key)) boolean(value, `${kind}.${key}`)
     else if (key === "alpha") bounded(value, 0, 1, `${kind}.alpha`)
     else if (key === "anchor") {
       if (typeof value !== "string" || !ANCHORS.has(value)) throw new SceneValidationError(`${kind}.anchor is invalid`)

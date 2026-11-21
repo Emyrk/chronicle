@@ -1,5 +1,5 @@
 /** Value formats Lua can pick by name; Nivo's own format functions cannot cross the worker boundary. */
-export type LineChartFormat = "number" | "compact" | "seconds" | "duration" | "percent";
+import type { LineChartFormat } from "../widgets/lineChart";
 
 const numberFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 });
 

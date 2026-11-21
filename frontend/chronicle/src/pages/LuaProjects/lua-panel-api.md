@@ -434,17 +434,23 @@ Render a named icon from Chronicle's current dataset CDN. Names contain only ASC
 
 - `iconName`: Example: "inv_sword_39".
 
+### `ChronicleButton` extends `ChronicleFrame`
+
+#### `ChronicleButton:SetText(text: string)`
+
+Set the button label.
+
 ### `ChroniclePlayerMetricChart` extends `ChronicleRegion`
 
 #### `ChroniclePlayerMetricChart:SetData(data: ChroniclePlayerMetricRow[])`
 
 Replace every row in the chart. At most 100 rows.
 
-#### `ChroniclePlayerMetricChart:SetChartType(chartType: ChroniclePlayerMetricChartType)`
+#### `ChroniclePlayerMetricChart:SetChartType(type: ChroniclePlayerMetricChartType)`
 
 Choose the standard Chronicle player metric presentation.
 
-#### `ChroniclePlayerMetricChart:SetPerSecond(enabled: boolean)`
+#### `ChroniclePlayerMetricChart:SetPerSecond(perSecond?: boolean)`
 
 Display values per second using the configured duration.
 
@@ -452,23 +458,23 @@ Display values per second using the configured duration.
 
 Set the duration used for per-second conversion, in milliseconds.
 
-#### `ChroniclePlayerMetricChart:SetPanelTitle(title: string)`
+#### `ChroniclePlayerMetricChart:SetPanelTitle(panelTitle: string)`
 
 Set the title used by Chronicle-owned chart surfaces.
 
-#### `ChroniclePlayerMetricChart:SetStackedLabel(label: string)`
+#### `ChroniclePlayerMetricChart:SetStackedLabel(stackedLabel: string)`
 
 Set the label for stacked secondary values.
 
-#### `ChroniclePlayerMetricChart:SetValueSuffix(suffix: string)`
+#### `ChroniclePlayerMetricChart:SetValueSuffix(valueSuffix: string)`
 
 Override the value suffix.
 
-#### `ChroniclePlayerMetricChart:SetHideZeroValue(hidden: boolean)`
+#### `ChroniclePlayerMetricChart:SetHideZeroValue(hideZeroValue?: boolean)`
 
 Hide primary value badges whose value is zero.
 
-#### `ChroniclePlayerMetricChart:SetRowHeight(height: number)`
+#### `ChroniclePlayerMetricChart:SetRowHeight(rowHeight: number)`
 
 Set row height in pixels, from 12 through 128.
 
@@ -476,17 +482,17 @@ Set row height in pixels, from 12 through 128.
 
 #### `ChronicleLineChart:SetSeries(series: ChronicleLineSeries[])`
 
-Replace every series. At most 12 series and 2,000 points in total. Hovering shows each series' value at that x.
+Replace every series. At most 12 series and 2000 points in total.
 
 #### `ChronicleLineChart:SetMarkers(markers: ChronicleLineMarker[])`
 
 Replace the vertical marker lines, such as phase changes. At most 32.
 
-#### `ChronicleLineChart:SetXFormat(format: ChronicleLineChartFormat)`
+#### `ChronicleLineChart:SetXFormat(xFormat: ChronicleLineChartFormat)`
 
 Choose how x values are written on the axis and in the hover readout. Defaults to "number".
 
-#### `ChronicleLineChart:SetYFormat(format: ChronicleLineChartFormat)`
+#### `ChronicleLineChart:SetYFormat(yFormat: ChronicleLineChartFormat)`
 
 Choose how y values are written. Defaults to "compact" (1.2k, 3.4M).
 
@@ -494,47 +500,41 @@ Choose how y values are written. Defaults to "compact" (1.2k, 3.4M).
 
 Set the line interpolation. Defaults to "monotoneX".
 
-#### `ChronicleLineChart:SetArea(enabled?: boolean)`
+#### `ChronicleLineChart:SetArea(area?: boolean)`
 
 Fill the area under each line.
 
-- `enabled`: Defaults to true.
+- `area`: Defaults to true.
 
-#### `ChronicleLineChart:SetShowPoints(enabled?: boolean)`
+#### `ChronicleLineChart:SetShowPoints(showPoints?: boolean)`
 
 Draw a dot at every point.
 
-- `enabled`: Defaults to true.
+- `showPoints`: Defaults to true.
 
-#### `ChronicleLineChart:SetStacked(enabled?: boolean)`
+#### `ChronicleLineChart:SetStacked(stacked?: boolean)`
 
 Stack series on top of each other. Stacked charts are always filled.
 
-- `enabled`: Defaults to true.
+- `stacked`: Defaults to true.
 
-#### `ChronicleLineChart:SetLegend(enabled?: boolean)`
+#### `ChronicleLineChart:SetLegend(legend?: boolean)`
 
-Show the legend. Viewers can click legend entries to hide series. Shown by default.
+Show or hide the legend. Shown by default.
 
-- `enabled`: Defaults to true.
+- `legend`: Defaults to true.
 
 #### `ChronicleLineChart:SetAxisLabels(xLabel?: string, yLabel?: string)`
 
 Label the axes. nil or "" removes a label.
 
-#### `ChronicleLineChart:SetXRange(min?: number, max?: number)`
+#### `ChronicleLineChart:SetXRange(xMin?: number, xMax?: number)`
 
 Fix the x axis range. nil means fit the data.
 
-#### `ChronicleLineChart:SetYRange(min?: number, max?: number)`
+#### `ChronicleLineChart:SetYRange(yMin?: number, yMax?: number)`
 
 Fix the y axis range. nil means fit the data. The minimum defaults to 0.
-
-### `ChronicleButton` extends `ChronicleFrame`
-
-#### `ChronicleButton:SetText(text: string)`
-
-Set the button label.
 
 ### `Chronicle`
 
