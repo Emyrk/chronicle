@@ -64,6 +64,8 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     sceneRef.current = createInitialScene()
     setScene(sceneRef.current); setError(null); setMetrics(null); setProgress(replaying ? 0 : null)
     let watchdog: ReturnType<typeof setTimeout> | undefined
+    // Only the replay is watched. Batches from later clicks must not re-arm it, or an idle panel stops 10s after a click.
+    let replayDone = false
     const stop = (reason: string, context?: ModuleErrorContext) => {
       clearTimeout(watchdog)
       runtime.terminate()
@@ -80,6 +82,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
           stop(String("message" in data ? data.message : "Panel failed"), { phase: context.phase, events: context.events }); return
         }
         if (data && typeof data === "object" && "type" in data && data.type === "replay-complete") {
+          replayDone = true
           clearTimeout(watchdog)
           if ("metrics" in data && data.metrics && typeof data.metrics === "object") {
             const run = { ...(data.metrics as PanelReplayMetrics), wallMs: performance.now() - postedAt, drawMs: drawMs.current }
@@ -95,7 +98,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
         }
         const message = parseWorkerMessage(data)
         if (message.type === "ready") {
-          if (replaying) armWatchdog()
+          if (replaying && !replayDone) armWatchdog()
           else clearTimeout(watchdog)
         }
         if (message.type === "batch") {
@@ -104,7 +107,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
           sceneRef.current = applySceneBatch(sceneRef.current, message.operations)
           drawMs.current += performance.now() - drawStart
           setScene(sceneRef.current)
-          if (replaying) armWatchdog()
+          if (replaying && !replayDone) armWatchdog()
         }
       } catch (caught) {
         stop(caught instanceof Error ? caught.message : "Invalid panel output")

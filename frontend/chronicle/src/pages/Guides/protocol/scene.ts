@@ -8,6 +8,12 @@ export const MAX_STRING_LENGTH = 4_096
 export const MAX_ID_LENGTH = 128
 export const MAX_POINTS = 256
 export const MAX_PLAYER_METRIC_ROWS = 100
+export const MAX_LINE_CHART_SERIES = 12
+/** Points across every series of one line chart. */
+export const MAX_LINE_CHART_POINTS = 2_000
+export const MAX_LINE_CHART_MARKERS = 32
+export const LINE_CHART_FORMATS = ["number", "compact", "seconds", "duration", "percent"] as const
+export const LINE_CHART_CURVES = ["linear", "monotoneX", "step", "natural", "basis"] as const
 /** Largest content size UIParent:SetSize accepts, in pixels. */
 export const MAX_CANVAS_SIZE = 16_384
 
@@ -18,11 +24,12 @@ const COMMON_UI = ["x", "y", "anchor", "visible", "alpha", "zIndex"]
 const COMMON_MAP = ["visible", "alpha"]
 
 const PROPERTIES: Record<NodeKind, readonly string[]> = {
-  frame: [...COMMON_UI, "width", "height", "color", "backgroundColor", "borderColor"],
-  text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor"],
-  texture: [...COMMON_UI, "width", "height", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor"],
-  button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor"],
+  frame: [...COMMON_UI, "width", "height", "color", "backgroundColor", "borderColor", "tooltipText"],
+  text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText"],
+  texture: [...COMMON_UI, "width", "height", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor", "tooltipText"],
+  button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText"],
   "player-metric-chart": [...COMMON_UI, "width", "height", "data", "type", "perSecond", "durationMillis", "panelTitle", "stackedLabel", "valueSuffix", "hideZeroValue", "rowHeight"],
+  "line-chart": [...COMMON_UI, "width", "height", "series", "markers", "xFormat", "yFormat", "curve", "area", "showPoints", "stacked", "legend", "xLabel", "yLabel", "xMin", "xMax", "yMin", "yMax"],
   unit: [...COMMON_MAP, "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"],
   icon: [...COMMON_MAP, "x", "y", "size", "asset", "label", "color", "facing"],
   "map-text": [...COMMON_MAP, "x", "y", "text", "fontSize", "color", "align"],
@@ -39,6 +46,7 @@ const REQUIRED: Record<NodeKind, readonly string[]> = {
   texture: ["x", "y", "width", "height", "asset", "anchor"],
   button: ["x", "y", "width", "height", "text", "anchor"],
   "player-metric-chart": ["x", "y", "width", "height", "anchor", "data", "type"],
+  "line-chart": ["x", "y", "width", "height", "anchor", "series"],
   unit: ["x", "y", "size", "unit"],
   icon: ["x", "y", "size", "asset"],
   "map-text": ["x", "y", "text", "fontSize", "color"],
@@ -151,6 +159,47 @@ function validatePlayerMetricData(value: unknown, label: string) {
   })
 }
 
+function validateLineSeries(value: unknown, label: string) {
+  if (!Array.isArray(value) || value.length > MAX_LINE_CHART_SERIES) {
+    throw new SceneValidationError(`${label} must be an array of at most ${MAX_LINE_CHART_SERIES} series`)
+  }
+  const names = new Set<string>()
+  let points = 0
+  value.forEach((rawSeries, index) => {
+    const seriesLabel = `${label}[${index}]`
+    const series = record(rawSeries, seriesLabel)
+    exact(series, ["name", "color", "points"], seriesLabel)
+    const name = string(series.name, `${seriesLabel}.name`, 128)
+    if (names.has(name)) throw new SceneValidationError(`${seriesLabel}.name must be unique`)
+    names.add(name)
+    if (series.color !== undefined) color(series.color, `${seriesLabel}.color`)
+    if (!Array.isArray(series.points)) throw new SceneValidationError(`${seriesLabel}.points must be an array`)
+    points += series.points.length
+    if (points > MAX_LINE_CHART_POINTS) throw new SceneValidationError(`${label} exceeds ${MAX_LINE_CHART_POINTS} points`)
+    series.points.forEach((rawPoint, pointIndex) => {
+      const pointLabel = `${seriesLabel}.points[${pointIndex}]`
+      const point = record(rawPoint, pointLabel)
+      exact(point, ["x", "y"], pointLabel)
+      finite(point.x, `${pointLabel}.x`)
+      finite(point.y, `${pointLabel}.y`)
+    })
+  })
+}
+
+function validateLineMarkers(value: unknown, label: string) {
+  if (!Array.isArray(value) || value.length > MAX_LINE_CHART_MARKERS) {
+    throw new SceneValidationError(`${label} must be an array of at most ${MAX_LINE_CHART_MARKERS} markers`)
+  }
+  value.forEach((rawMarker, index) => {
+    const markerLabel = `${label}[${index}]`
+    const marker = record(rawMarker, markerLabel)
+    exact(marker, ["x", "label", "color"], markerLabel)
+    finite(marker.x, `${markerLabel}.x`)
+    if (marker.label !== undefined) displayText(marker.label, `${markerLabel}.label`)
+    if (marker.color !== undefined) color(marker.color, `${markerLabel}.color`)
+  })
+}
+
 function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record<string, unknown> {
   const props = record(input, `${kind} props`)
   exact(props, PROPERTIES[kind], `${kind} props`)
@@ -159,6 +208,15 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
   for (const [key, value] of Object.entries(props)) {
     if (key === "text") displayText(value, `${kind}.text`)
     else if (key === "data") validatePlayerMetricData(value, `${kind}.data`)
+    else if (key === "series") validateLineSeries(value, `${kind}.series`)
+    else if (key === "markers") validateLineMarkers(value, `${kind}.markers`)
+    else if (key === "xFormat" || key === "yFormat") {
+      if (!(LINE_CHART_FORMATS as readonly unknown[]).includes(value)) throw new SceneValidationError(`${kind}.${key} must be one of ${LINE_CHART_FORMATS.join(", ")}`)
+    } else if (key === "curve") {
+      if (!(LINE_CHART_CURVES as readonly unknown[]).includes(value)) throw new SceneValidationError(`${kind}.curve must be one of ${LINE_CHART_CURVES.join(", ")}`)
+    } else if (key === "xMin" || key === "xMax" || key === "yMin" || key === "yMax") {
+      if (value !== "auto") finite(value, `${kind}.${key}`)
+    } else if (key === "tooltipText" || key === "xLabel" || key === "yLabel") displayText(value, `${kind}.${key}`)
     else if (key === "type") {
       if (value !== "damage" && value !== "healing" && value !== "taken" && value !== "mitigation") throw new SceneValidationError(`${kind}.type is invalid`)
     } else if (key === "panelTitle" || key === "stackedLabel" || key === "valueSuffix") displayText(value, `${kind}.${key}`)
@@ -180,7 +238,7 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
       const iconName = string(value, "texture.iconName", 128)
       if (!/^[a-z0-9][a-z0-9_-]{0,127}$/.test(iconName)) throw new SceneValidationError("texture.iconName is invalid")
     } else if (["color", "fillColor", "tint", "backgroundColor", "borderColor"].includes(key)) color(value, `${kind}.${key}`)
-    else if (["visible", "enabled", "tooltip", "perSecond", "hideZeroValue"].includes(key)) boolean(value, `${kind}.${key}`)
+    else if (["visible", "enabled", "tooltip", "perSecond", "hideZeroValue", "area", "showPoints", "stacked", "legend"].includes(key)) boolean(value, `${kind}.${key}`)
     else if (key === "durationMillis") bounded(value, 0, Number.MAX_SAFE_INTEGER, `${kind}.durationMillis`)
     else if (key === "rowHeight") bounded(value, 12, 128, `${kind}.rowHeight`)
     else if (key === "alpha") bounded(value, 0, 1, `${kind}.alpha`)

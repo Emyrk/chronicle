@@ -59,8 +59,12 @@ function ChronicleRegion:Hide() end
 ---@return boolean shown
 function ChronicleRegion:IsShown() end
 
----Remove this object and its callbacks.
+---Remove this object, every object parented to it, and their callbacks. Their IDs can be reused afterwards.
 function ChronicleRegion:Destroy() end
+
+---Show plain text when the pointer rests on this object. Chronicle draws it, so hovering never runs Lua. Works on Frame, FontString, Texture and Button; newlines start new lines. nil or "" removes it.
+---@param text? string Up to 4 KiB.
+function ChronicleRegion:SetTooltip(text) end
 
 ---@class ChronicleFrame: ChronicleRegion
 local ChronicleFrame = {}
@@ -183,6 +187,73 @@ function ChroniclePlayerMetricChart:SetHideZeroValue(hidden) end
 ---@param height number
 function ChroniclePlayerMetricChart:SetRowHeight(height) end
 
+---@alias ChronicleLineChartFormat "number"|"compact"|"seconds"|"duration"|"percent"
+---@alias ChronicleLineChartCurve "linear"|"monotoneX"|"step"|"natural"|"basis"
+
+---@class ChronicleLineSeries
+---@field name string Unique series name, shown in the legend and hover readout.
+---@field color? string|number[] "#rrggbb" or {r, g, b, a} with components from 0 through 1. Defaults to a Chronicle palette color.
+---@field points number[][] Points as {x, y} or {x = x, y = y}. At most 2,000 points across all series.
+
+---@class ChronicleLineMarker
+---@field x number Position on the x axis.
+---@field label? string Text drawn beside the marker line.
+---@field color? string|number[] "#rrggbb" or {r, g, b, a}.
+
+---@class ChronicleLineChart: ChronicleRegion
+local ChronicleLineChart = {}
+
+---Replace every series. At most 12 series and 2,000 points in total. Hovering shows each series' value at that x.
+---@param series ChronicleLineSeries[]
+function ChronicleLineChart:SetSeries(series) end
+
+---Replace the vertical marker lines, such as phase changes. At most 32.
+---@param markers ChronicleLineMarker[]
+function ChronicleLineChart:SetMarkers(markers) end
+
+---Choose how x values are written on the axis and in the hover readout. Defaults to "number".
+---@param format ChronicleLineChartFormat
+function ChronicleLineChart:SetXFormat(format) end
+
+---Choose how y values are written. Defaults to "compact" (1.2k, 3.4M).
+---@param format ChronicleLineChartFormat
+function ChronicleLineChart:SetYFormat(format) end
+
+---Set the line interpolation. Defaults to "monotoneX".
+---@param curve ChronicleLineChartCurve
+function ChronicleLineChart:SetCurve(curve) end
+
+---Fill the area under each line.
+---@param enabled? boolean Defaults to true.
+function ChronicleLineChart:SetArea(enabled) end
+
+---Draw a dot at every point.
+---@param enabled? boolean Defaults to true.
+function ChronicleLineChart:SetShowPoints(enabled) end
+
+---Stack series on top of each other. Stacked charts are always filled.
+---@param enabled? boolean Defaults to true.
+function ChronicleLineChart:SetStacked(enabled) end
+
+---Show the legend. Viewers can click legend entries to hide series. Shown by default.
+---@param enabled? boolean Defaults to true.
+function ChronicleLineChart:SetLegend(enabled) end
+
+---Label the axes. nil or "" removes a label.
+---@param xLabel? string
+---@param yLabel? string
+function ChronicleLineChart:SetAxisLabels(xLabel, yLabel) end
+
+---Fix the x axis range. nil means fit the data.
+---@param min? number
+---@param max? number
+function ChronicleLineChart:SetXRange(min, max) end
+
+---Fix the y axis range. nil means fit the data. The minimum defaults to 0.
+---@param min? number
+---@param max? number
+function ChronicleLineChart:SetYRange(min, max) end
+
 ---@class ChronicleButton: ChronicleFrame
 local ChronicleButton = {}
 
@@ -191,10 +262,10 @@ local ChronicleButton = {}
 function ChronicleButton:SetText(text) end
 
 ---Create a retained UI object. parent defaults to UIParent.
----@param frameType "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart"
+---@param frameType "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart"|"LineChart"
 ---@param id? string
 ---@param parent? ChronicleFrame
----@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart object
+---@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart|ChronicleLineChart object
 function CreateFrame(frameType, id, parent) end
 
 ---@type ChronicleFrame

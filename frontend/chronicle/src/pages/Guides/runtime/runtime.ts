@@ -1,12 +1,12 @@
 import { lauxlib, lua, lualib, to_luastring } from "fengari"
-import { MAX_CANVAS_SIZE, UI_ROOT_ID } from "../protocol/scene"
+import { LINE_CHART_CURVES, LINE_CHART_FORMATS, MAX_CANVAS_SIZE, MAX_LINE_CHART_MARKERS, MAX_LINE_CHART_POINTS, MAX_LINE_CHART_SERIES, UI_ROOT_ID } from "../protocol/scene"
 import type { GuideCapability, NodeKind, SceneOperation } from "../protocol/types"
 import { trustedLuaModule, isReservedLuaPath } from "./trustedModules"
 import { PANEL_STREAMS, validatePanelEvent, type PanelEvent, type PanelStream } from "./panelEvents"
 import type { PanelUnit, PanelUnits } from "./panelUnits"
 
 const encoder = new TextEncoder()
-const UI_KINDS = new Map<string, NodeKind>([["Frame", "frame"], ["FontString", "text"], ["Texture", "texture"], ["Button", "button"], ["PlayerMetricChart", "player-metric-chart"]])
+const UI_KINDS = new Map<string, NodeKind>([["Frame", "frame"], ["FontString", "text"], ["Texture", "texture"], ["Button", "button"], ["PlayerMetricChart", "player-metric-chart"], ["LineChart", "line-chart"]])
 const MAP_KINDS = new Map<string, NodeKind>([
   ["CreateUnit", "unit"], ["CreateUnitMarker", "unit"], ["CreateIcon", "icon"], ["CreateText", "map-text"],
   ["CreateLine", "line"], ["CreateArrow", "arrow"], ["CreateCircle", "circle"], ["CreateCone", "cone"], ["CreatePolygon", "polygon"],
@@ -56,14 +56,15 @@ const DEFAULT_LIMITS: GuideRuntimeLimits = {
 
 type LuaState = object
 type LuaFunction = (state: LuaState) => number
-interface ObjectState { kind: NodeKind | "root"; shown: boolean }
+interface ObjectState { kind: NodeKind | "root"; shown: boolean; parentId: string | null }
 
 const SUPPORTED_PROPS: Record<NodeKind, ReadonlySet<string>> = Object.fromEntries([
-  ["frame", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "color", "backgroundColor", "borderColor"]],
-  ["text", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "fontSize", "color", "align", "backgroundColor", "borderColor"]],
-  ["texture", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor"]],
-  ["button", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "enabled", "color", "backgroundColor", "borderColor"]],
+  ["frame", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "color", "backgroundColor", "borderColor", "tooltipText"]],
+  ["text", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText"]],
+  ["texture", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor", "tooltipText"]],
+  ["button", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText"]],
   ["player-metric-chart", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "data", "type", "perSecond", "durationMillis", "panelTitle", "stackedLabel", "valueSuffix", "hideZeroValue", "rowHeight"]],
+  ["line-chart", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "series", "markers", "xFormat", "yFormat", "curve", "area", "showPoints", "stacked", "legend", "xLabel", "yLabel", "xMin", "xMax", "yMin", "yMax"]],
   ["unit", ["visible", "alpha", "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"]],
   ["icon", ["visible", "alpha", "x", "y", "size", "asset", "label", "color", "facing"]],
   ["map-text", ["visible", "alpha", "x", "y", "text", "fontSize", "color", "align"]],
@@ -81,6 +82,7 @@ function defaultProps(kind: NodeKind): Record<string, unknown> {
     case "texture": return { x: 0, y: 0, width: 1, height: 1, asset: "unset", textureType: "asset", tooltip: false, anchor: "center", visible: true }
     case "button": return { x: 0, y: 0, width: 1, height: 1, text: " ", anchor: "center", visible: true }
     case "player-metric-chart": return { x: 0, y: 0, width: 320, height: 240, anchor: "top-left", visible: true, data: [], type: "damage", perSecond: false, hideZeroValue: false, rowHeight: 30 }
+    case "line-chart": return { x: 0, y: 0, width: 480, height: 240, anchor: "top-left", visible: true, series: [] }
     case "unit": return { x: 0, y: 0, size: 1, unit: "unknown", visible: true }
     case "icon": return { x: 0, y: 0, size: 1, asset: "unset", visible: true }
     case "map-text": return { x: 0, y: 0, text: " ", fontSize: 14, color: "#ffffffff", visible: true }
@@ -97,7 +99,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const capabilities = new Set<GuideCapability>(options.capabilities ?? ["ui", "map", "input", "timers"])
   const L = lauxlib.luaL_newstate()
   const operations: SceneOperation[] = []
-  const objects = new Map<string, ObjectState>([[UI_ROOT_ID, { kind: "root", shown: true }]])
+  const objects = new Map<string, ObjectState>([[UI_ROOT_ID, { kind: "root", shown: true, parentId: null }]])
   let canvas: { width: number | null; height: number | null } = { width: null, height: null }
   const callbacks = new Map<string, number>()
   const timers = new Map<number, number>()
@@ -257,6 +259,118 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     }
     return rows
   }
+  const HEX_COLOR = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{4}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/
+  // Reads a table field as a "#rrggbb" string or an {r, g, b[, a]} table of 0-1 components.
+  const readColorField = (state: LuaState, tableIndex: number, field: string, label: string): string | undefined => {
+    lua.lua_getfield(state, tableIndex, to_luastring(field))
+    if (lua.lua_isnil(state, -1)) { lua.lua_pop(state, 1); return undefined }
+    if (lua.lua_type(state, -1) === lua.LUA_TSTRING) {
+      const value = stringAt(state, -1, label)
+      if (!HEX_COLOR.test(value)) luaError(state, `${label} must be a hex color like "#ff8800"`)
+      lua.lua_pop(state, 1)
+      return value
+    }
+    if (!lua.lua_istable(state, -1)) luaError(state, `${label} must be a hex string or {r, g, b, a} table`)
+    const colorIndex = lua.lua_gettop(state)
+    const components = [1, 2, 3, 4].map((position) => {
+      lua.lua_rawgeti(state, colorIndex, position)
+      const missing = lua.lua_isnil(state, -1)
+      if (!missing && !lua.lua_isnumber(state, -1)) luaError(state, `${label} components must be numbers`)
+      const value = missing ? (position === 4 ? 1 : NaN) : lua.lua_tonumber(state, -1) as number
+      lua.lua_pop(state, 1)
+      return value
+    })
+    if (components.some((value) => !(value >= 0 && value <= 1))) luaError(state, `${label} components must be between 0 and 1`)
+    lua.lua_pop(state, 1)
+    return `#${components.map((value) => Math.round(value * 255).toString(16).padStart(2, "0")).join("")}`
+  }
+  const readNumberField = (state: LuaState, tableIndex: number, field: string | number, label: string) => {
+    if (typeof field === "number") lua.lua_rawgeti(state, tableIndex, field)
+    else lua.lua_getfield(state, tableIndex, to_luastring(field))
+    if (!lua.lua_isnumber(state, -1)) luaError(state, `${label} must be a number`)
+    const value = lua.lua_tonumber(state, -1) as number
+    lua.lua_pop(state, 1)
+    if (!Number.isFinite(value)) luaError(state, `${label} must be finite`)
+    return value
+  }
+  const readOptionalStringField = (state: LuaState, tableIndex: number, field: string, label: string): string | undefined => {
+    lua.lua_getfield(state, tableIndex, to_luastring(field))
+    if (lua.lua_isnil(state, -1)) { lua.lua_pop(state, 1); return undefined }
+    if (!lua.lua_isstring(state, -1)) luaError(state, `${label} must be a string`)
+    const value = stringAt(state, -1, label); lua.lua_pop(state, 1); return value
+  }
+  /** LineChart:SetSeries({ { name = "Damage", color = "#ff8800", points = { {0, 10}, {5, 20} } }, ... }) */
+  const readLineSeries = (state: LuaState, index: number) => {
+    lauxlib.luaL_checktype(state, index, lua.LUA_TTABLE)
+    const length = lua.lua_rawlen(state, index) as number
+    if (length > MAX_LINE_CHART_SERIES) luaError(state, `line chart supports at most ${MAX_LINE_CHART_SERIES} series`)
+    const result: Array<Record<string, unknown>> = []
+    const names = new Set<string>()
+    let total = 0
+    for (let i = 1; i <= length; i++) {
+      lua.lua_rawgeti(state, index, i)
+      if (!lua.lua_istable(state, -1)) luaError(state, "line chart series must be tables")
+      const seriesIndex = lua.lua_gettop(state)
+      const name = readOptionalStringField(state, seriesIndex, "name", "series name")
+      if (!name) luaError(state, `line chart series ${i} needs a name`)
+      if (names.has(name!)) luaError(state, `line chart series name '${name}' is used twice`)
+      names.add(name!)
+      const series: Record<string, unknown> = { name }
+      const seriesColor = readColorField(state, seriesIndex, "color", `series '${name}' color`)
+      if (seriesColor !== undefined) series.color = seriesColor
+      lua.lua_getfield(state, seriesIndex, to_luastring("points"))
+      if (!lua.lua_istable(state, -1)) luaError(state, `series '${name}' points must be a table`)
+      const pointsIndex = lua.lua_gettop(state)
+      const count = lua.lua_rawlen(state, pointsIndex) as number
+      total += count
+      if (total > MAX_LINE_CHART_POINTS) luaError(state, `line chart supports at most ${MAX_LINE_CHART_POINTS} points across all series`)
+      const points: Array<{ x: number; y: number }> = []
+      for (let p = 1; p <= count; p++) {
+        lua.lua_rawgeti(state, pointsIndex, p)
+        if (!lua.lua_istable(state, -1)) luaError(state, `series '${name}' points must be {x, y} tables`)
+        const pointIndex = lua.lua_gettop(state)
+        lua.lua_getfield(state, pointIndex, to_luastring("x"))
+        const keyed = !lua.lua_isnil(state, -1); lua.lua_pop(state, 1)
+        points.push({
+          x: readNumberField(state, pointIndex, keyed ? "x" : 1, `series '${name}' point ${p} x`),
+          y: readNumberField(state, pointIndex, keyed ? "y" : 2, `series '${name}' point ${p} y`),
+        })
+        lua.lua_pop(state, 1)
+      }
+      lua.lua_pop(state, 1)
+      series.points = points
+      result.push(series)
+      lua.lua_pop(state, 1)
+    }
+    return result
+  }
+  /** LineChart:SetMarkers({ { x = 30, label = "Phase 2", color = "#ffcc00" }, ... }) */
+  const readLineMarkers = (state: LuaState, index: number) => {
+    lauxlib.luaL_checktype(state, index, lua.LUA_TTABLE)
+    const length = lua.lua_rawlen(state, index) as number
+    if (length > MAX_LINE_CHART_MARKERS) luaError(state, `line chart supports at most ${MAX_LINE_CHART_MARKERS} markers`)
+    const result: Array<Record<string, unknown>> = []
+    for (let i = 1; i <= length; i++) {
+      lua.lua_rawgeti(state, index, i)
+      if (!lua.lua_istable(state, -1)) luaError(state, "line chart markers must be tables")
+      const markerIndex = lua.lua_gettop(state)
+      const marker: Record<string, unknown> = { x: readNumberField(state, markerIndex, "x", `marker ${i} x`) }
+      const label = readOptionalStringField(state, markerIndex, "label", `marker ${i} label`)
+      if (label !== undefined) marker.label = label
+      const markerColor = readColorField(state, markerIndex, "color", `marker ${i} color`)
+      if (markerColor !== undefined) marker.color = markerColor
+      result.push(marker)
+      lua.lua_pop(state, 1)
+    }
+    return result
+  }
+  const enumAt = <T extends string>(state: LuaState, index: number, values: readonly T[], label: string): T => {
+    const value = stringAt(state, index, label)
+    const match = values.find((candidate) => candidate.toLowerCase() === value.toLowerCase())
+    if (!match) luaError(state, `${label} must be one of ${values.join(", ")}`)
+    return match!
+  }
+  const rangeAt = (state: LuaState, index: number): number | "auto" => lua.lua_isnoneornil(state, index) ? "auto" : numberAt(state, index)
   const kindAt = (id: string) => objects.get(id)!.kind
 
   function releaseCallback(key: string) {
@@ -282,7 +396,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   }
   const makeObject = (state: LuaState, id: string) => {
     lua.lua_createtable(state, 0, 30); pushString(state, id); setField(state, -2, "__guide_id")
-    registerFunction(state, "SetParent", (inner) => { const objectId = objectIdAt(inner); const parentId = objectIdAt(inner, 2); addOperation({ op: "set", id: objectId, parentId, props: {} }); return 0 })
+    registerFunction(state, "SetParent", (inner) => { const objectId = objectIdAt(inner); const parentId = objectIdAt(inner, 2); objects.get(objectId)!.parentId = parentId; addOperation({ op: "set", id: objectId, parentId, props: {} }); return 0 })
     registerFunction(state, "SetPoint", propertyMethod((inner) => {
       const rawAnchor = stringAt(inner, 2, "anchor").toUpperCase(); const anchor = ANCHORS[rawAnchor]
       if (!anchor) luaError(inner, `unsupported anchor '${rawAnchor}'`)
@@ -292,7 +406,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       const kind = kindAt(objectIdAt(inner))
       const width = numberAt(inner, 2); const height = numberAt(inner, 3)
       if (kind === "unit" || kind === "icon") return { size: Math.max(width, height) }
-      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button" || kind === "player-metric-chart" || kind === "root") return { width, height }
+      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button" || kind === "player-metric-chart" || kind === "line-chart" || kind === "root") return { width, height }
       return luaError(inner, `SetSize is not supported for ${kind}`)
     }))
     registerFunction(state, "SetWidth", propertyMethod((inner) => ({ width: numberAt(inner, 2) })))
@@ -347,12 +461,33 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     registerFunction(state, "SetValueSuffix", propertyMethod((inner) => ({ valueSuffix: stringAt(inner, 2, "value suffix") })))
     registerFunction(state, "SetHideZeroValue", propertyMethod((inner) => ({ hideZeroValue: optionalBoolean(inner, 2, false, "hideZeroValue") })))
     registerFunction(state, "SetRowHeight", propertyMethod((inner) => ({ rowHeight: numberAt(inner, 2) })))
+    registerFunction(state, "SetSeries", propertyMethod((inner) => ({ series: readLineSeries(inner, 2) })))
+    registerFunction(state, "SetMarkers", propertyMethod((inner) => ({ markers: readLineMarkers(inner, 2) })))
+    registerFunction(state, "SetXFormat", propertyMethod((inner) => ({ xFormat: enumAt(inner, 2, LINE_CHART_FORMATS, "x format") })))
+    registerFunction(state, "SetYFormat", propertyMethod((inner) => ({ yFormat: enumAt(inner, 2, LINE_CHART_FORMATS, "y format") })))
+    registerFunction(state, "SetCurve", propertyMethod((inner) => ({ curve: enumAt(inner, 2, LINE_CHART_CURVES, "curve") })))
+    registerFunction(state, "SetArea", propertyMethod((inner) => ({ area: optionalBoolean(inner, 2, true, "area") })))
+    registerFunction(state, "SetShowPoints", propertyMethod((inner) => ({ showPoints: optionalBoolean(inner, 2, true, "showPoints") })))
+    registerFunction(state, "SetStacked", propertyMethod((inner) => ({ stacked: optionalBoolean(inner, 2, true, "stacked") })))
+    registerFunction(state, "SetLegend", propertyMethod((inner) => ({ legend: optionalBoolean(inner, 2, true, "legend") })))
+    registerFunction(state, "SetAxisLabels", propertyMethod((inner) => ({ xLabel: optionalString(inner, 2, ""), yLabel: optionalString(inner, 3, "") })))
+    registerFunction(state, "SetXRange", propertyMethod((inner) => ({ xMin: rangeAt(inner, 2), xMax: rangeAt(inner, 3) })))
+    registerFunction(state, "SetYRange", propertyMethod((inner) => ({ yMin: rangeAt(inner, 2), yMax: rangeAt(inner, 3) })))
+    // Hover text drawn by the host: hovering never runs Lua. nil or "" removes it.
+    registerFunction(state, "SetTooltip", propertyMethod((inner) => ({ tooltipText: optionalString(inner, 2, "") })))
     registerFunction(state, "Show", (inner) => { const objectId = objectIdAt(inner); objects.get(objectId)!.shown = true; setProps(objectId, { visible: true }); return 0 })
     registerFunction(state, "Hide", (inner) => { const objectId = objectIdAt(inner); objects.get(objectId)!.shown = false; setProps(objectId, { visible: false }); return 0 })
     registerFunction(state, "IsShown", (inner) => { pushBoolean(inner, objects.get(objectIdAt(inner))!.shown); return 1 })
     registerFunction(state, "Destroy", (inner) => {
       const objectId = objectIdAt(inner); if (objectId === UI_ROOT_ID) luaError(inner, "UIParent cannot be destroyed")
-      objects.delete(objectId); for (const key of [...callbacks.keys()]) if (key.startsWith(`${objectId}:`)) releaseCallback(key)
+      // The scene removes descendants too, so free them here: they no longer count toward the
+      // object limit, their IDs can be reused, and their callbacks are released.
+      const children = new Map<string, string[]>()
+      for (const [id, object] of objects) if (object.parentId !== null) children.set(object.parentId, [...children.get(object.parentId) ?? [], id])
+      const doomed = new Set([objectId])
+      for (const id of doomed) for (const child of children.get(id) ?? []) doomed.add(child)
+      for (const id of doomed) objects.delete(id)
+      for (const key of [...callbacks.keys()]) if (doomed.has(key.slice(0, key.lastIndexOf(":")))) releaseCallback(key)
       addOperation({ op: "destroy", id: objectId }); return 0
     })
     registerFunction(state, "SetScript", setScript)
@@ -362,7 +497,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const createObject = (state: LuaState, kind: NodeKind, id: string, parentId: string | null = null) => {
     if (objects.size - 1 >= limits.maxObjects) luaError(state, "object limit exceeded")
     if (objects.has(id)) luaError(state, `duplicate object '${id}'`)
-    objects.set(id, { kind, shown: true }); addOperation({ op: "create", id, kind, parentId, props: defaultProps(kind) })
+    objects.set(id, { kind, shown: true, parentId }); addOperation({ op: "create", id, kind, parentId, props: defaultProps(kind) })
     return makeObject(state, id)
   }
 
