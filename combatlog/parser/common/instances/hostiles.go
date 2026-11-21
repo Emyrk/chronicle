@@ -2252,3 +2252,46 @@ func KrolDokStrongholdHostiles() map[uint32]Identity {
 	})
 	return hostile
 }
+
+func DalaranHostiles() map[uint32]Identity {
+	hostile := make(map[uint32]Identity)
+	LoadAdds(hostile, map[uint32]string{
+		15214:  "Invisible Stalker",
+		246600: "Mana Echo",
+		246602: "Mana Fiend",
+		246664: "Fragmented Sentry",
+		246748: "Archmage Modera",
+		246888: "Arcane Elemental",
+		246890: "Arcane Manaling",
+		246931: "Mana Wraith",
+		246992: "Arcane Echo",
+		246993: "Mana Stalker",
+		247001: "Saturated Remnant",
+		247003: "Seeking Remnant",
+		247016: "Suffused Treant",
+		254856: "Angry Tome",
+		255065: "Risen Terror",
+		255066: "Fallen Mage",
+		255068: "Mindless Horror",
+		255069: "Fallen Warrior",
+		255070: "Skeletal Warder",
+		255071: "Sewer Fiend",
+		255072: "Dark Caster",
+		269133: "Skeleton",
+		269134: "Kirin Tor Necromancer",
+		269467: "Arcane Manaling",
+		269475: "Mana Phantom",
+	})
+	LoadBosses(hostile, map[uint32]string{
+		245999: "Arcane Anomaly",
+		246016: "Arcanic Enigma",
+		247032: "Lyn the Ignored",
+		247126: "Atrexis the Grave Knight",
+		246003: "Fel Ancient",
+		246008: "Mana Devourer",
+		246020: "Shade of the Archmage",
+		246017: "Unstable Sentinel",
+	})
+
+	return hostile
+}

@@ -20,7 +20,7 @@ const (
 	v22AdvancedCombatFields = 19
 )
 
-type advancedCombatSnapshot struct {
+type advancedCombatSnapshot struct  {
 	unit             string
 	owner            string
 	currentHealth    int64

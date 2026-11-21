@@ -42,6 +42,11 @@ var knownUrsolObjects = map[uint32]Category{
 	181102: CategoryObject, // Lightwell
 }
 
+var knownForeverObjects = map[uint32]Category{
+	656243: CategoryObject, // Portal To the Violet Chamber in the City of Dalaran
+	214589: CategoryObject, // Cozy Sleeping Bag
+}
+
 // knownForeverCreatures provides semantic categories only, not affiliation,
 // ownership, boss roles, or activity/lifetime rules.
 var knownForeverCreatures = map[uint32]Category{

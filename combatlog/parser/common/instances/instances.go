@@ -503,6 +503,14 @@ var (
 		MapIDs:    []uint32{2999},
 		Hostiles:  FromMap(RuinsOfLordaeronHostiles()),
 	}
+
+	DalaranFactory = &CommonFactory{
+		Name:      "City of Dalaran",
+		Category:  InstanceCategoryDungeon,
+		ZoneNames: []string{"dalaran"},
+		MapIDs:    []uint32{2959},
+		Hostiles:  FromMap(DalaranHostiles()),
+	}
 )
 
 var (
