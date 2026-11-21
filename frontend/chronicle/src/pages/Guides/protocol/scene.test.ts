@@ -47,6 +47,7 @@ describe("retained guide scene reducer", () => {
     ["texture", { x: 0, y: 0, width: 20, height: 20, asset: "icon.png", anchor: "center" }],
     ["button", { x: 0, y: 0, width: 80, height: 24, text: "Go", anchor: "bottom-right" }],
     ["player-metric-chart", { x: 0, y: 0, width: 320, height: 240, anchor: "top-left", type: "damage", data: [{ playerID: "p1", playerName: "Jaina", className: "MAGE", value: 42 }] }],
+    ["line-chart", { x: 0, y: 0, width: 480, height: 240, anchor: "top-left", series: [{ name: "Jaina", color: "#69ccf0", points: [{ x: 0, y: 1 }] }], markers: [{ x: 5, label: "P2" }], xFormat: "seconds", curve: "step", yMin: "auto", stacked: true }],
     ["unit", { x: 0.5, y: 0.5, size: 20, unit: "boss" }],
     ["icon", { x: 0.5, y: 0.5, size: 20, asset: "icon.png" }],
     ["map-text", { x: 0.5, y: 0.5, text: "Stack", fontSize: 12, color: "#ffffff" }],
@@ -56,7 +57,7 @@ describe("retained guide scene reducer", () => {
     ["cone", { x: 0.5, y: 0.5, radius: 0.2, facing: Math.PI, angle: Math.PI / 2, color: "#fff", width: 2 }],
     ["polygon", { points: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0.5, y: 1 }], color: "#fff", width: 2 }],
   ] as const)("accepts the %s node kind", (kind, props) => {
-    const parentId = ["frame", "text", "texture", "button", "player-metric-chart"].includes(kind) ? UI_ROOT_ID : null
+    const parentId = ["frame", "text", "texture", "button", "player-metric-chart", "line-chart"].includes(kind) ? UI_ROOT_ID : null
     const next = applySceneBatch(createInitialScene(), [{ op: "create", id: `node-${kind}`, kind, parentId, props }])
     expect(next.nodes.get(`node-${kind}`)?.kind).toBe(kind)
   })
@@ -67,6 +68,26 @@ describe("retained guide scene reducer", () => {
     expect(initial.nodes.size).toBe(0)
     expect(() => applySceneBatch(initial, [{ op: "set", id: "missing", props: { x: 1 } }])).toThrow(/unknown ID/)
     expect(() => applySceneBatch(initial, [{ ...create(UI_ROOT_ID), id: UI_ROOT_ID }])).toThrow(/reserved/)
+  })
+
+  it("validates line chart data and hover text", () => {
+    const chart = (props: Record<string, unknown>) => applySceneBatch(createInitialScene(), [{ op: "create", id: "c", kind: "line-chart", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 480, height: 240, anchor: "top-left", series: [], ...props } }])
+    expect(() => chart({ series: [{ name: "a", points: [] }, { name: "a", points: [] }] })).toThrow(/unique/)
+    expect(() => chart({ series: [{ name: "a", points: [{ x: 0, y: Number.NaN }] }] })).toThrow(/finite/)
+    expect(() => chart({ series: Array.from({ length: 13 }, (_, i) => ({ name: `s${i}`, points: [] })) })).toThrow(/12 series/)
+    expect(() => chart({ series: [{ name: "a", points: Array.from({ length: 2_001 }, (_, x) => ({ x, y: 0 })) }] })).toThrow(/2000 points/)
+    expect(() => chart({ xFormat: "currency" })).toThrow(/xFormat/)
+    expect(() => chart({ curve: "cardinal" })).toThrow(/curve/)
+    expect(() => chart({ markers: [{ x: 1, color: "red" }] })).toThrow(/hex color/)
+    expect(() => chart({ tooltipText: "no" })).toThrow(/unknown property/)
+    expect(() => chart({ bands: [{ from: 10, to: 5 }] })).toThrow(/to must be at least from/)
+    expect(() => chart({ bands: [{ from: 0, to: 5, opacity: 2 }] })).toThrow(/opacity/)
+    expect(() => chart({ markers: [{ x: 1, style: "wavy" }] })).toThrow(/style/)
+    expect(() => chart({ series: [{ name: "a", suffix: "x".repeat(17), points: [] }] })).toThrow(/suffix/)
+    expect(chart({ bands: [{ from: 0, to: 5, label: "P1", tooltip: "Line\nTwo", opacity: 0.2 }], markers: [{ x: 1, icon: "triangle", style: "dotted", tooltip: "Died" }], fillParent: true }).nodes.get("c")?.kind).toBe("line-chart")
+    const frame = (tooltipText: unknown) => applySceneBatch(createInitialScene(), [{ op: "create", id: "f", kind: "frame", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 10, height: 10, anchor: "top-left", tooltipText } }])
+    expect(frame("Line one\nLine two").nodes.get("f")?.props.tooltipText).toBe("Line one\nLine two")
+    expect(() => frame("bad\u0007")).toThrow(/tooltipText/)
   })
 
   it("rejects invalid and kind-inappropriate properties", () => {

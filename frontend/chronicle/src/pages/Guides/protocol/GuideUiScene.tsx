@@ -7,7 +7,8 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { useDatasetId, useIconBaseUrl } from "@/hooks/useDatasetId";
 import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
-import { PlayerMetricChart, type ChartType, type PlayerMetricChartData } from "@/components/ui/PlayerMetricChart/PlayerMetricChart";
+import { isWidgetKind } from "../widgets";
+import { renderWidget } from "./widgetRenderers";
 import { UI_ROOT_ID } from "./scene";
 import type { RetainedScene, SceneNode } from "./types";
 
@@ -66,8 +67,25 @@ function nodeStyle(node: SceneNode): CSSProperties {
     borderWidth: props.borderColor ? 1 : undefined,
     fontSize: px(props.fontSize),
     textAlign: props.align === "left" || props.align === "center" || props.align === "right" ? props.align : undefined,
-    pointerEvents: node.kind === "button" || node.listeners.includes("click") || node.props.tooltip === true ? "auto" : "none",
+    pointerEvents: node.kind === "button" || node.listeners.includes("click") || node.props.tooltip === true || hoverText(node) !== undefined ? "auto" : "none",
   };
+}
+
+/** Text set with SetTooltip; drawn by the host so hovering never runs Lua. */
+function hoverText(node: SceneNode): string | undefined {
+  return typeof node.props.tooltipText === "string" && node.props.tooltipText.length > 0 ? node.props.tooltipText : undefined;
+}
+
+function TextTooltip({ text: content, children }: { text: string | undefined; children: ReactNode }) {
+  if (content === undefined) return children;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>{children}</TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6} className="z-[10000] max-w-xs whitespace-pre-line text-xs">
+        {content}
+      </TooltipContent>
+    </Tooltip>
+  );
 }
 
 function nodeClassName(node: SceneNode): string | undefined {
@@ -137,12 +155,10 @@ function GuideTextureNode({
       onClick={onClick}
     />
   );
-  if (node.props.tooltip !== true) return image;
-
-  const tooltip = type === "spell" && spell.data
+  const tooltip = node.props.tooltip !== true ? null : type === "spell" && spell.data
     ? <SpellTooltip spell={spell.data} />
     : type === "item" && item.data ? <ItemTooltip item={item.data} /> : null;
-  if (!tooltip) return image;
+  if (!tooltip) return <TextTooltip text={hoverText(node)}>{image}</TextTooltip>;
 
   return (
     <Tooltip>
@@ -152,22 +168,6 @@ function GuideTextureNode({
       </TooltipContent>
     </Tooltip>
   );
-}
-
-function playerMetricChartData(value: unknown): PlayerMetricChartData[] {
-  if (!Array.isArray(value)) return [];
-  return (value as Array<Omit<PlayerMetricChartData, "specialization"> & { specialization?: string }>).map((row) => ({
-    ...row,
-    specialization: row.specialization ?? "",
-  }));
-}
-
-function chartType(value: unknown): ChartType {
-  return value === "healing" || value === "taken" || value === "mitigation" ? value : "damage";
-}
-
-function optionalText(value: unknown): string | undefined {
-  return typeof value === "string" ? value : undefined;
 }
 
 interface GuideUiSceneProps {
@@ -191,44 +191,28 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
     const style = nodeStyle(node);
     const click = node.listeners.includes("click") ? (event: ReactMouseEvent) => onNodeClick(node, event) : undefined;
     const children = childrenByParent.get(node.id)?.map(renderNode);
-    if (node.kind === "frame") return <div key={node.id} data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{children}</div>;
+    if (node.kind === "frame") {
+      return <TextTooltip key={node.id} text={hoverText(node)}><div data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{children}</div></TextTooltip>;
+    }
     if (node.kind === "text") {
-      return <div key={node.id} data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</div>;
+      return <TextTooltip key={node.id} text={hoverText(node)}><div data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</div></TextTooltip>;
     }
     if (node.kind === "texture") return <GuideTextureNode key={node.id} node={node} assets={assets} style={style} onClick={click} />;
-    if (node.kind === "player-metric-chart") {
-      return (
-        <div key={node.id} data-guide-node={node.id} style={style}>
-          <PlayerMetricChart
-            className="h-full"
-            data={playerMetricChartData(node.props.data)}
-            type={chartType(node.props.type)}
-            perSecond={node.props.perSecond === true}
-            duration_millis={px(node.props.durationMillis)}
-            panelTitle={optionalText(node.props.panelTitle)}
-            stackedLabel={optionalText(node.props.stackedLabel)}
-            valueSuffix={optionalText(node.props.valueSuffix)}
-            hideZeroValue={node.props.hideZeroValue === true}
-            rowHeight={px(node.props.rowHeight)}
-            disableInteractions
-            animateValues={false}
-          />
-        </div>
-      );
-    }
+    if (isWidgetKind(node.kind)) return renderWidget(node.kind, node, style);
     if (node.kind === "button") {
       return (
-        <button
-          key={node.id}
-          data-guide-node={node.id}
-          type="button"
-          disabled={node.props.enabled === false}
-          style={style}
-          onClick={(event) => onNodeClick(node, event)}
-          className={nodeClassName(node)}
-        >
-          {text(node.props.text)}
-        </button>
+        <TextTooltip key={node.id} text={hoverText(node)}>
+          <button
+            data-guide-node={node.id}
+            type="button"
+            disabled={node.props.enabled === false}
+            style={style}
+            onClick={(event) => onNodeClick(node, event)}
+            className={nodeClassName(node)}
+          >
+            {text(node.props.text)}
+          </button>
+        </TextTooltip>
       );
     }
     return null;

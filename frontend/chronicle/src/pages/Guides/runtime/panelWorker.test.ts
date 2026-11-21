@@ -180,3 +180,29 @@ describe("Lua panel worker multi-stream replay", () => {
     expect(run(draw(`Panel:OnEvent("aura", function() end)`), ["damage"])).toContainEqual(expect.objectContaining({ type: "error", message: expect.stringContaining("'aura' is not allowed") }))
   })
 })
+
+describe("Lua panel worker time range", () => {
+  it("forwards a click's time range request and gives Lua the page's range", () => {
+    const messages: unknown[] = []
+    const handle = createPanelWorkerHandler((message) => messages.push(message))
+    handle({ type: "start", entrypoint: "main.lua", capabilities: ["ui", "input"], streams: [], sources: { "main.lua": `
+      local label = CreateFrame("FontString", "label", UIParent)
+      local button = CreateFrame("Button", "b", UIParent)
+      button:SetScript("OnClick", function()
+        local startMs = Chronicle.GetTimeRange()
+        label:SetText(tostring(startMs))
+        Chronicle.SetTimeRange(1000, 2000)
+      end)
+      local idle = CreateFrame("Button", "idle", UIParent)
+      idle:SetScript("OnClick", function() end)
+    ` } })
+    handle({ type: "time-range", range: { startMs: 500, endMs: null } })
+    messages.length = 0
+    handle({ type: "click", nodeId: "b" })
+    expect(messages).toContainEqual(expect.objectContaining({ type: "batch", operations: [{ op: "set", id: "label", props: { text: "500" } }] }))
+    expect(messages).toContainEqual({ type: "set-time-range", range: { startMs: 1000, endMs: 2000 } })
+    messages.length = 0
+    handle({ type: "click", nodeId: "idle" })
+    expect(messages).not.toContainEqual(expect.objectContaining({ type: "set-time-range" }))
+  })
+})

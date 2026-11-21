@@ -1,3 +1,4 @@
+import { widgetHelpersLua } from "../widgets"
 import { PANEL_STREAMS, type PanelStream } from "./panelEvents"
 
 /** chronicle.v1.events.<stream>: onEvent for one stream, plus the shared onComplete. */
@@ -46,6 +47,7 @@ const MODULES: Readonly<Record<string, string>> = Object.freeze({
     end
     return M
   `,
+  // Widget helpers (playerMetricChart, lineChart, ...) are generated from ../widgets specs.
   "chronicle/v1/ui.lua": `
     local M = {}
     function M.metric(parent, id, label, value, x, y)
@@ -89,22 +91,7 @@ const MODULES: Readonly<Record<string, string>> = Object.freeze({
       end
       return frame
     end
-    function M.playerMetricChart(parent, id, options)
-      options = options or {}
-      local chart = CreateFrame("PlayerMetricChart", id, parent or UIParent)
-      chart:SetPoint("TOPLEFT", parent or UIParent, "TOPLEFT", options.x or 0, options.y or 0)
-      chart:SetSize(options.width or 320, options.height or 240)
-      chart:SetChartType(options.type or "damage")
-      chart:SetPerSecond(options.perSecond or false)
-      chart:SetHideZeroValue(options.hideZeroValue or false)
-      chart:SetRowHeight(options.rowHeight or 30)
-      if options.durationMillis ~= nil then chart:SetDuration(options.durationMillis) end
-      if options.panelTitle ~= nil then chart:SetPanelTitle(options.panelTitle) end
-      if options.stackedLabel ~= nil then chart:SetStackedLabel(options.stackedLabel) end
-      if options.valueSuffix ~= nil then chart:SetValueSuffix(options.valueSuffix) end
-      chart:SetData(options.data or {})
-      return chart
-    end
+${widgetHelpersLua()}
     return M
   `,
 })

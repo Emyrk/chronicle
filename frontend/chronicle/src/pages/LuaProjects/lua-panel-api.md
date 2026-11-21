@@ -194,7 +194,7 @@ local image = frame:CreateTexture("my-icon")
 local button = CreateFrame("Button", "my-button", UIParent)
 ```
 
-`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"`, `"Button"` and the Chronicle-owned `"PlayerMetricChart"`. `id` must be unique within the module; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
+`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"`, `"Button"` and the Chronicle-owned `"PlayerMetricChart"` and `"LineChart"`. `id` must be unique within the module; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
 
 ### Panel size and scrolling
 
@@ -226,7 +226,8 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 | `SetLayer(layer)` | all | `"BACKGROUND"`, `"ARTWORK"`, `"OVERLAY"`, or a number. |
 | `Show()`, `Hide()`, `IsShown()` | all | |
 | `SetParent(frame)` | all | |
-| `Destroy()` | all except UIParent | Removes the object and its click handler. |
+| `SetTooltip(text)` | Frame, FontString, Texture, Button | Plain hover text drawn by Chronicle; hovering never runs Lua. Newlines start new lines. `nil` or `""` removes it. A Texture with a spell or item tooltip shows that instead. |
+| `Destroy()` | all except UIParent | Removes the object, everything parented to it, and their click handlers. Their IDs can be reused. |
 | `SetScript("OnClick", fn)` | Button, Frame | Needs the `input` capability. `fn(self)` runs on click. |
 
 `UIParent` supports only `SetSize`, `SetWidth`, `SetHeight` and `SetScript`.
@@ -260,6 +261,72 @@ Each row requires `playerID`, `playerName`, `className` and a non-negative `valu
 
 The returned chart also supports `SetChartType`, `SetPerSecond`, `SetDuration`, `SetPanelTitle`, `SetStackedLabel`, `SetValueSuffix`, `SetHideZeroValue`, `SetRowHeight` and `SetData`.
 
+### Hover tooltips
+
+`SetTooltip(text)` attaches hover text to a Frame, FontString, Texture or Button. Chronicle draws it, so it costs no Lua time and works without the `input` capability:
+
+```lua
+local cell = CreateFrame("Frame", "dps-cell", UIParent)
+cell:SetSize(80, 20)
+cell:SetTooltip("Jaina\n1,240 DPS\n42% of raid damage")
+```
+
+### Line chart
+
+`LineChart` draws numeric series with Chronicle's line chart, the same renderer as the Timeline panel. Hovering shows every visible series' value at that point, and viewers can click legend entries to hide series.
+
+```lua
+local ui = require("chronicle.v1.ui")
+local chart = ui.lineChart(UIParent, "dps-over-time", {
+  width = 640, height = 260,
+  xFormat = "seconds", yFormat = "compact",
+  xLabel = "Fight time", yLabel = "DPS",
+  bands = {
+    { from = 0, to = 95, label = "Phase 1" },
+    { from = 95, to = 180, label = "Phase 2", color = "#6366f1", tooltip = "Whelps" },
+  },
+  markers = {
+    { x = 120, color = "#ef4444", style = "dotted", icon = "triangle", tooltip = "Jaina died\nThrall died" },
+  },
+  series = {
+    { name = "Jaina", color = "#69ccf0", suffix = "/s", points = { {0, 0}, {5, 1200}, {10, 1850} } },
+    { name = "Thrall", points = { {0, 0}, {5, 900}, {10, 1400} } },
+  },
+})
+-- Later: chart:SetSeries(newSeries)
+```
+
+A chart holds at most 12 series and 2,000 points in total, plus up to 64 bands and 32 markers.
+
+- **Bands** shade an x range behind the lines, like the Line Chart panel's phases or its raid durability background. A band's `label` is drawn along the top. Its `label` and `tooltip` also appear in the hover readout while the pointer is inside it. `opacity` defaults to 0.08.
+- **Markers** draw a vertical line, such as a death or a phase change. `style` is `"dashed"` (default), `"solid"` or `"dotted"`. `icon` is `"none"` (default), `"triangle"` or `"dot"`. A marker with a `tooltip` shows it in a card when the pointer is on the line.
+- A series' **`suffix`**, such as `"/s"`, is appended to its values in the hover readout.
+- **`fillParent = true`** (or `chart:SetFillParent()`) sizes the chart to its parent frame, or to the whole panel, and follows it as it resizes. `SetPoint` and `SetSize` are then ignored. Points are `{x, y}` or `{x = x, y = y}`. Colors are `"#rrggbb"` strings or `{r, g, b, a}` tables; series without one get a palette color. Formats are `"number"`, `"compact"` (1.2k, 3.4M), `"seconds"` (12s), `"duration"` (1:05) and `"percent"` (values from 0 to 100). Curves are `"linear"`, `"monotoneX"` (default), `"step"`, `"natural"` and `"basis"`.
+
+The chart also supports `SetSeries`, `SetBands`, `SetMarkers`, `SetFillParent`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
+
+### Page time range
+
+The instance page has one time range filter that every panel uses. The Line Chart panel sets it when you drag across it. A module can set it from a click handler, for example when a viewer clicks a phase or a timeline column:
+
+```lua
+local phase2 = CreateFrame("Button", "phase-2", UIParent)
+phase2:SetText("Phase 2")
+phase2:SetScript("OnClick", function()
+  Chronicle.SetTimeRange(95000, 180000)   -- ms from encounter start, like event.offsetMs
+end)
+
+local reset = CreateFrame("Button", "reset", UIParent)
+reset:SetText("Whole fight")
+reset:SetScript("OnClick", function() Chronicle.ClearTimeRange() end)
+```
+
+- `Chronicle.SetTimeRange(startMs, endMs)` takes milliseconds from encounter start. `nil` leaves a bound open, so `SetTimeRange(60000)` means "from 1:00 onward". Values past the end of the selected encounters are clamped.
+- `Chronicle.ClearTimeRange()` removes the filter.
+- `Chronicle.GetTimeRange()` returns `startMs, endMs`. A bound is `nil` when it is open, and both are `nil` when no range is set.
+
+Setting or clearing the range needs the `input` capability and works only inside an `OnClick` handler, so a module cannot change other panels without a viewer's click. In the Module Workshop preview there is no page range: `SetTimeRange` does nothing and `GetTimeRange` returns `nil, nil`. The module's own events are not filtered by the range.
+
 ### Lua Language Server definitions
 
 The repository includes `lua-panel-api.d.lua`, a documentation-only [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file. Download it from the **LuaLS definitions** button at the top of this page and copy it into your editor workspace for completion, parameter hints and type checking. Chronicle generates the technical reference below from that file so the editor contract and published documentation stay aligned.
@@ -272,11 +339,11 @@ Every global and method below comes from `lua-panel-api.d.lua`, the [EmmyLua/Lua
 
 ### Globals
 
-#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart", id?: string, parent?: ChronicleFrame)`
+#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart"|"LineChart", id?: string, parent?: ChronicleFrame)`
 
 Create a retained UI object. parent defaults to UIParent.
 
-**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart` object
+**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart|ChronicleLineChart` object
 
 ### `ChronicleRegion`
 
@@ -328,7 +395,13 @@ Return whether this object is shown.
 
 #### `ChronicleRegion:Destroy()`
 
-Remove this object and its callbacks.
+Remove this object, every object parented to it, and their callbacks. Their IDs can be reused afterwards.
+
+#### `ChronicleRegion:SetTooltip(text?: string)`
+
+Show plain text when the pointer rests on this object. Chronicle draws it, so hovering never runs Lua. Works on Frame, FontString, Texture and Button; newlines start new lines. nil or "" removes it.
+
+- `text`: Up to 4 KiB.
 
 ### `ChronicleFrame` extends `ChronicleRegion`
 
@@ -394,17 +467,23 @@ Render a named icon from Chronicle's current dataset CDN. Names contain only ASC
 
 - `iconName`: Example: "inv_sword_39".
 
+### `ChronicleButton` extends `ChronicleFrame`
+
+#### `ChronicleButton:SetText(text: string)`
+
+Set the button label.
+
 ### `ChroniclePlayerMetricChart` extends `ChronicleRegion`
 
 #### `ChroniclePlayerMetricChart:SetData(data: ChroniclePlayerMetricRow[])`
 
 Replace every row in the chart. At most 100 rows.
 
-#### `ChroniclePlayerMetricChart:SetChartType(chartType: ChroniclePlayerMetricChartType)`
+#### `ChroniclePlayerMetricChart:SetChartType(type: ChroniclePlayerMetricChartType)`
 
 Choose the standard Chronicle player metric presentation.
 
-#### `ChroniclePlayerMetricChart:SetPerSecond(enabled: boolean)`
+#### `ChroniclePlayerMetricChart:SetPerSecond(perSecond?: boolean)`
 
 Display values per second using the configured duration.
 
@@ -412,31 +491,93 @@ Display values per second using the configured duration.
 
 Set the duration used for per-second conversion, in milliseconds.
 
-#### `ChroniclePlayerMetricChart:SetPanelTitle(title: string)`
+#### `ChroniclePlayerMetricChart:SetPanelTitle(panelTitle: string)`
 
 Set the title used by Chronicle-owned chart surfaces.
 
-#### `ChroniclePlayerMetricChart:SetStackedLabel(label: string)`
+#### `ChroniclePlayerMetricChart:SetStackedLabel(stackedLabel: string)`
 
 Set the label for stacked secondary values.
 
-#### `ChroniclePlayerMetricChart:SetValueSuffix(suffix: string)`
+#### `ChroniclePlayerMetricChart:SetValueSuffix(valueSuffix: string)`
 
 Override the value suffix.
 
-#### `ChroniclePlayerMetricChart:SetHideZeroValue(hidden: boolean)`
+#### `ChroniclePlayerMetricChart:SetHideZeroValue(hideZeroValue?: boolean)`
 
 Hide primary value badges whose value is zero.
 
-#### `ChroniclePlayerMetricChart:SetRowHeight(height: number)`
+#### `ChroniclePlayerMetricChart:SetRowHeight(rowHeight: number)`
 
 Set row height in pixels, from 12 through 128.
 
-### `ChronicleButton` extends `ChronicleFrame`
+### `ChronicleLineChart` extends `ChronicleRegion`
 
-#### `ChronicleButton:SetText(text: string)`
+#### `ChronicleLineChart:SetSeries(series: ChronicleLineSeries[])`
 
-Set the button label.
+Replace every series. At most 12 series and 2000 points in total.
+
+#### `ChronicleLineChart:SetMarkers(markers: ChronicleLineMarker[])`
+
+Replace the vertical marker lines, such as phase changes. At most 32.
+
+#### `ChronicleLineChart:SetBands(bands: ChronicleLineBand[])`
+
+Replace the shaded x ranges drawn behind the lines, such as phases or a background measure. At most 64.
+
+#### `ChronicleLineChart:SetXFormat(xFormat: ChronicleLineChartFormat)`
+
+Choose how x values are written on the axis and in the hover readout. Defaults to "number".
+
+#### `ChronicleLineChart:SetYFormat(yFormat: ChronicleLineChartFormat)`
+
+Choose how y values are written. Defaults to "compact" (1.2k, 3.4M).
+
+#### `ChronicleLineChart:SetCurve(curve: ChronicleLineChartCurve)`
+
+Set the line interpolation. Defaults to "monotoneX".
+
+#### `ChronicleLineChart:SetArea(area?: boolean)`
+
+Fill the area under each line.
+
+- `area`: Defaults to true.
+
+#### `ChronicleLineChart:SetShowPoints(showPoints?: boolean)`
+
+Draw a dot at every point.
+
+- `showPoints`: Defaults to true.
+
+#### `ChronicleLineChart:SetStacked(stacked?: boolean)`
+
+Stack series on top of each other. Stacked charts are always filled.
+
+- `stacked`: Defaults to true.
+
+#### `ChronicleLineChart:SetFillParent(fillParent?: boolean)`
+
+Size the chart to fill its parent frame (or the whole panel), ignoring SetPoint and SetSize.
+
+- `fillParent`: Defaults to true.
+
+#### `ChronicleLineChart:SetLegend(legend?: boolean)`
+
+Show or hide the legend. Shown by default.
+
+- `legend`: Defaults to true.
+
+#### `ChronicleLineChart:SetAxisLabels(xLabel?: string, yLabel?: string)`
+
+Label the axes. nil or "" removes a label.
+
+#### `ChronicleLineChart:SetXRange(xMin?: number, xMax?: number)`
+
+Fix the x axis range. nil means fit the data.
+
+#### `ChronicleLineChart:SetYRange(yMin?: number, yMax?: number)`
+
+Fix the y axis range. nil means fit the data. The minimum defaults to 0.
 
 ### `Chronicle`
 
@@ -447,6 +588,22 @@ Test a combat-event message against the viewer's panel filters without mutating 
 - `message`: A supported combat-event message received by Panel:OnEvent.
 
 **Returns:** `boolean` matches
+
+#### `Chronicle.SetTimeRange(startMs?: number, endMs?: number)`
+
+Set the page's time range filter, which every panel on the instance page uses. Times are milliseconds from encounter start, like event.offsetMs; nil leaves a bound open. Needs the input capability and works only inside an OnClick handler, so a module cannot move the range on its own. Ranges past the end of the selected encounters are clamped.
+
+- `endMs`: Must be at least startMs.
+
+#### `Chronicle.ClearTimeRange()`
+
+Clear the page's time range filter. Same rules as Chronicle.SetTimeRange.
+
+#### `Chronicle.GetTimeRange()`
+
+Return the page's current time range in milliseconds from encounter start. Either bound is nil when open; both are nil when no range is set.
+
+**Returns:** `number?` startMs; `number?` endMs
 
 <!-- END GENERATED LUA API REFERENCE -->
 
@@ -461,6 +618,7 @@ Load with `require`. The `chronicle` module names are reserved; you cannot ship 
   - `table(parent, id, rows, x, y)` draws up to 50 `{label, value}` rows as text.
   - `bars(parent, id, rows, x, y)` draws up to 50 `{label, value}` rows as bars. The bar width is `value` pixels, capped at 310, so scale your values first.
   - `playerMetricChart(parent, id, options)` renders Chronicle's standard player metric chart and returns the chart object. Call `chart:SetData(rows)` to replace its rows.
+  - `lineChart(parent, id, options)` renders a line chart and returns it. `options` takes `series`, `markers`, `width`, `height`, `x`, `y`, `xFormat`, `yFormat`, `curve`, `area`, `showPoints`, `stacked`, `legend`, `xLabel`, `yLabel`, `xMin`, `xMax`, `yMin` and `yMax`. Call `chart:SetSeries(series)` to replace its data.
   - `table` and `bars` return the frame; destroy it and create it again to refresh.
 
 Your own files can be loaded with `require("helpers")` (for `helpers.lua`) when they are in the package.

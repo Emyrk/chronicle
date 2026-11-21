@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { createGuideRuntime } from "./runtime"
+import { createGuideRuntime, type PanelTimeRange } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, validatePanelEvent, type PanelStream, type PanelStreamScope } from "./panelEvents"
 import { replayStreams } from "./panelReplay"
 import { PANEL_FILTER_MODES, type PanelFilterMode } from "./panelFilters"
@@ -38,6 +38,8 @@ type Input =
   /** Framed event bytes for every stream the panel declared, replayed together in log order. */
   | { type: "streams"; streams: Partial<Record<PanelStream, Uint8Array>>; encounterIds: string[] }
   | { type: "click"; nodeId: string }
+  /** The page's current time range filter; null when none is set. */
+  | { type: "time-range"; range: PanelTimeRange | null }
   | { type: "stop" }
 
 export function createPanelWorkerHandler(send: (value: unknown) => void) {
@@ -188,6 +190,11 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         if (!runtime) throw new Error("panel not started")
         phase = "click"
         runtime.event({ id: input.nodeId, event: "click" }); flush(runtime.flush())
+        // Chronicle.SetTimeRange / ClearTimeRange during the click; the host decides whether to apply it.
+        const request = runtime.takeTimeRangeRequest()
+        if (request) send({ type: "set-time-range", range: request.range })
+      } else if (input.type === "time-range") {
+        runtime?.setTimeRange(input.range)
       }
     } catch (error) {
       runtime?.stop(); runtime = null
