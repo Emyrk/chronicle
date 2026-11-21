@@ -173,7 +173,7 @@ describe("safe panel profile", () => {
       select:SetScript("OnClick", function() Chronicle.SetTimeRange(1000, 2000) end)
     `)
     runtime.start()
-    const texts = () => runtime.flush().filter((op) => op.op === "set" && op.id === "log").map((op) => (op as { props: { text: string } }).props.text)
+    const texts = () => runtime.flush().filter((op) => op.op === "set" && op.id === "log").map((op) => (op as unknown as { props: { text: string } }).props.text)
 
     runtime.setTimeRange({ startMs: 5000, endMs: null })
     expect(texts()).toEqual(["1:5000-nil"])
