@@ -19,6 +19,9 @@ const ANCHORS: Record<string, string> = {
   RIGHT: "right", BOTTOMLEFT: "bottom-left", BOTTOM: "bottom", BOTTOMRIGHT: "bottom-right",
 }
 
+/** The page's time range filter, in ms from encounter start. A null bound is open. */
+export interface PanelTimeRange { startMs: number | null; endMs: number | null }
+
 export interface GuideRuntimeLimits {
   startupInstructions: number
   callbackInstructions: number
@@ -118,6 +121,10 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   if ([...allowedPanelStreams].some((stream) => !PANEL_STREAMS.includes(stream))) throw new GuideLuaError("unsupported panel stream")
   if (Object.keys(options.sources).some((path) => isReservedLuaPath(path.toLowerCase()))) throw new GuideLuaError("reserved Chronicle module path")
   let nextObjectId = 1
+  // The page's time range filter, in ms from encounter start; null bounds are open.
+  let timeRange: PanelTimeRange | null = null
+  let timeRangeRequest: { range: PanelTimeRange | null } | undefined
+  let handlingClick = false
   let nextTimerId = 1
   let stopped = false
 
@@ -514,6 +521,33 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         catch (error) { return luaError(state, `invalid filter message: ${error instanceof Error ? error.message : String(error)}`) }
         return 1
       })
+      // The page-wide time range. Changing it filters every panel, so only a viewer's click may do it.
+      const requestTimeRange = (state: LuaState, range: PanelTimeRange | null) => {
+        if (!capabilities.has("input")) luaError(state, "Chronicle.SetTimeRange needs the input capability")
+        if (!handlingClick) luaError(state, "Chronicle.SetTimeRange and ClearTimeRange can only be called from an OnClick handler")
+        timeRange = range
+        timeRangeRequest = { range }
+      }
+      const boundAt = (state: LuaState, index: number, label: string): number | null => {
+        if (lua.lua_isnoneornil(state, index)) return null
+        const value = numberAt(state, index)
+        if (!Number.isFinite(value) || value < 0) luaError(state, `${label} must be a non-negative number of milliseconds`)
+        return Math.round(value)
+      }
+      registerFunction(L, "SetTimeRange", (state) => {
+        const offset = lua.lua_istable(state, 1) ? 1 : 0
+        const startMs = boundAt(state, 1 + offset, "startMs")
+        const endMs = boundAt(state, 2 + offset, "endMs")
+        if (startMs !== null && endMs !== null && endMs < startMs) luaError(state, "endMs must be at least startMs")
+        requestTimeRange(state, startMs === null && endMs === null ? null : { startMs, endMs })
+        return 0
+      })
+      registerFunction(L, "ClearTimeRange", (state) => { requestTimeRange(state, null); return 0 })
+      registerFunction(L, "GetTimeRange", (state) => {
+        if (!timeRange) { lua.lua_pushnil(state); lua.lua_pushnil(state); return 2 }
+        for (const bound of [timeRange.startMs, timeRange.endMs]) if (bound === null) lua.lua_pushnil(state); else pushNumber(state, bound)
+        return 2
+      })
       registerFunction(L, "GetPlayers", (state) => {
         lua.lua_createtable(state, playerGuids.length, 0)
         playerGuids.forEach((guid, index) => { pushString(state, guid); lua.lua_rawseti(state, -2, index + 1) })
@@ -587,7 +621,15 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
 
   return {
     start() { ensureActive(); const source = options.sources[options.entrypoint]; if (source === undefined) fail(`entrypoint '${options.entrypoint}' not found`); loadChunk(L, source, options.entrypoint); protectedCall(L, 0, 0, limits.startupInstructions); const batch = flush(); if (batch.length) options.emitBatch?.(batch); return batch },
-    event(event: GuideEvent) { ensureActive(); const ref = callbacks.get(`${event.id}:${event.event}`); if (ref === undefined) throw new GuideLuaError(`unknown callback '${event.id}:${event.event}'`); callRef(ref, event.id, event.args ?? []) },
+    event(event: GuideEvent) {
+      ensureActive(); const ref = callbacks.get(`${event.id}:${event.event}`); if (ref === undefined) throw new GuideLuaError(`unknown callback '${event.id}:${event.event}'`)
+      handlingClick = event.event === "click"
+      try { callRef(ref, event.id, event.args ?? []) } finally { handlingClick = false }
+    },
+    /** The time range Lua asked for during the last click, if any; null clears it. Taking it resets it. */
+    takeTimeRangeRequest(): { range: PanelTimeRange | null } | undefined { const request = timeRangeRequest; timeRangeRequest = undefined; return request },
+    /** Tells Lua the page's current time range, read with Chronicle.GetTimeRange. */
+    setTimeRange(range: PanelTimeRange | null) { timeRange = range && (range.startMs !== null || range.endMs !== null) ? { ...range } : null },
     resize(width: number, height: number) { ensureActive(); const ref = callbacks.get(`${UI_ROOT_ID}:resize`); if (ref !== undefined) callRef(ref, UI_ROOT_ID, [width, height]) },
     timer(id: number) { ensureActive(); const ref = timers.get(id); if (ref === undefined) throw new GuideLuaError(`unknown timer '${id}'`); timers.delete(id); callRef(ref, null, []); lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref) },
     panelEvent(raw: unknown) {

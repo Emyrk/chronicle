@@ -109,3 +109,52 @@ describe("LuaPanelHost watchdog", () => {
     } finally { cleanup?.() }
   })
 })
+
+describe("LuaPanelHost time range", () => {
+  function host(props: Partial<Parameters<typeof LuaPanelHost>[0]>) {
+    const workers: Array<{ onmessage: ((event: { data: unknown }) => void) | null; postMessage: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn> }> = []
+    vi.stubGlobal("Worker", class {
+      onmessage = null
+      onerror = null
+      terminate = vi.fn()
+      postMessage = vi.fn()
+      constructor() { workers.push(this) }
+    })
+    LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": "" }, streams: [], capabilities: ["ui", "input"], ...props })
+    const cleanup = hooks.effects[1]()
+    return { worker: workers[0], cleanup }
+  }
+
+  it("sends the page's range after start and applies valid requests from Lua", () => {
+    const onSetTimeRange = vi.fn()
+    const { worker, cleanup } = host({ timeRange: { startMs: 1000, endMs: null }, onSetTimeRange })
+    try {
+      // The range effect runs after the worker effect and records the current range for new workers.
+      hooks.effects[2]()
+      const sent = worker.postMessage.mock.calls.map(([message]) => message)
+      expect(sent[0]).toMatchObject({ type: "start" })
+      expect(sent).toContainEqual({ type: "time-range", range: { startMs: 1000, endMs: null } })
+
+      worker.onmessage?.({ data: { type: "set-time-range", range: { startMs: 2000, endMs: 3000 } } })
+      worker.onmessage?.({ data: { type: "set-time-range", range: null } })
+      expect(onSetTimeRange.mock.calls).toEqual([[{ startMs: 2000, endMs: 3000 }], [null]])
+      expect(hooks.states[1]).toBeNull()
+    } finally { cleanup?.() }
+  })
+
+  it.each([
+    [{ startMs: -1, endMs: 5 }],
+    [{ startMs: 5, endMs: 1 }],
+    [{ startMs: 5 }],
+    [{ startMs: 5, endMs: 6, extra: 1 }],
+    ["0-5"],
+  ])("stops the panel on a malformed request %j", (range) => {
+    const onSetTimeRange = vi.fn()
+    const { worker, cleanup } = host({ onSetTimeRange })
+    try {
+      worker.onmessage?.({ data: { type: "set-time-range", range } })
+      expect(onSetTimeRange).not.toHaveBeenCalled()
+      expect(hooks.states[1]).not.toBeNull()
+    } finally { cleanup?.() }
+  })
+})

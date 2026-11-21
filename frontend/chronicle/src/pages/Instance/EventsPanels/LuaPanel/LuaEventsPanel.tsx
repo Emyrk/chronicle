@@ -17,6 +17,8 @@ import { usePanelTiming, usePanelTimingContext } from "../PanelTimingContext"
 import { buildPanelUnits } from "../../../Guides/runtime/panelUnits"
 import type { EventStreams } from "../../../Guides/runtime/panelEvents"
 import { LuaPanelHost, type LuaPanelRunMetrics } from "./LuaPanelHost"
+import { useTimeRangeContextOptional } from "../../TimeRangeContext"
+import type { PanelTimeRange } from "../../../Guides/runtime/runtime"
 import { parseLuaPanelRef } from "./luaPanelRegistry"
 
 export default function LuaEventsPanel(props: EventsPanelProps) {
@@ -138,6 +140,21 @@ function LuaEventsPanelContent(props: EventsPanelProps) {
     return urls
   }, [panel])
   useEffect(() => () => { for (const url of assetUrls.values()) URL.revokeObjectURL(url) }, [assetUrls])
+  // Chronicle.GetTimeRange / SetTimeRange map onto the page's time range controller.
+  const pageTimeRange = useTimeRangeContextOptional()
+  const rangeStartMs = pageTimeRange?.enabled ? pageTimeRange.startOffsetMs : null
+  const rangeEndMs = pageTimeRange?.enabled ? pageTimeRange.endOffsetMs : null
+  // LuaPanelHost reacts to the two bounds, not this object's identity.
+  const timeRange: PanelTimeRange | null = rangeStartMs !== null || rangeEndMs !== null ? { startMs: rangeStartMs, endMs: rangeEndMs } : null
+  const setRange = pageTimeRange?.setRange
+  const resetRange = pageTimeRange?.reset
+  const totalDurationMs = pageTimeRange?.totalDurationMs ?? 0
+  const onSetTimeRange = useMemo(() => setRange && resetRange ? (range: PanelTimeRange | null) => {
+    if (!range) return resetRange()
+    // Clamp to the selected encounters so a module cannot select past the end of the fight.
+    const clamp = (value: number | null) => value === null || totalDurationMs <= 0 ? value : Math.min(value, totalDurationMs)
+    setRange(clamp(range.startMs), clamp(range.endMs))
+  } : undefined, [setRange, resetRange, totalDurationMs])
   const showEditor = editing && filteringSupported && !isSyncActive
   let content
   if (channelQuery.isPending || (hash && packageQuery.isPending)) content = <div className="p-4 text-sm">Loading module...</div>
@@ -145,7 +162,8 @@ function LuaEventsPanelContent(props: EventsPanelProps) {
   else if (panel) content = (panel.streams.length > 0 || filteringSupported) && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
     <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
       filterMode={panel.filterMode} filterContext={filterContext}
-      eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics} />
+      eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics}
+      timeRange={timeRange} onSetTimeRange={onSetTimeRange} />
   return <PanelCard flipped={false} back={null} front={<>
     <div className="flex min-w-0 items-center justify-between gap-2">
       <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />

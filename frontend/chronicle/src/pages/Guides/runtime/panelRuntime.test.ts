@@ -118,6 +118,60 @@ describe("safe panel profile", () => {
     runtime.stop()
   })
 
+  it("lets click handlers set and clear the page time range, and reads it back", () => {
+    const runtime = panel(`
+      local seen = CreateFrame("FontString", "seen", UIParent)
+      local function show()
+        local startMs, endMs = Chronicle.GetTimeRange()
+        seen:SetText(tostring(startMs) .. "-" .. tostring(endMs))
+      end
+      local select = CreateFrame("Button", "select", UIParent)
+      select:SetScript("OnClick", function() Chronicle.SetTimeRange(30000, 45500.4); show() end)
+      local open = CreateFrame("Button", "open", UIParent)
+      open:SetScript("OnClick", function() Chronicle.SetTimeRange(60000) end)
+      local clear = CreateFrame("Button", "clear", UIParent)
+      clear:SetScript("OnClick", function() Chronicle.ClearTimeRange(); show() end)
+      local look = CreateFrame("Button", "look", UIParent)
+      look:SetScript("OnClick", show)
+      local backwards = CreateFrame("Button", "backwards", UIParent)
+      backwards:SetScript("OnClick", function() Chronicle.SetTimeRange(5, 1) end)
+    `)
+    runtime.start()
+    expect(runtime.takeTimeRangeRequest()).toBeUndefined()
+
+    runtime.event({ id: "select", event: "click" })
+    expect(runtime.takeTimeRangeRequest()).toEqual({ range: { startMs: 30000, endMs: 45500 } })
+    expect(runtime.takeTimeRangeRequest()).toBeUndefined()
+    expect(runtime.flush()).toContainEqual({ op: "set", id: "seen", props: { text: "30000-45500" } })
+
+    runtime.event({ id: "open", event: "click" })
+    expect(runtime.takeTimeRangeRequest()).toEqual({ range: { startMs: 60000, endMs: null } })
+
+    runtime.event({ id: "clear", event: "click" })
+    expect(runtime.takeTimeRangeRequest()).toEqual({ range: null })
+    expect(runtime.flush()).toContainEqual({ op: "set", id: "seen", props: { text: "nil-nil" } })
+
+    // The page's range, as pushed by the host.
+    runtime.setTimeRange({ startMs: null, endMs: 9000 })
+    runtime.event({ id: "look", event: "click" })
+    expect(runtime.flush()).toContainEqual({ op: "set", id: "seen", props: { text: "nil-9000" } })
+    expect(runtime.takeTimeRangeRequest()).toBeUndefined()
+
+    expect(() => runtime.event({ id: "backwards", event: "click" })).toThrow(/endMs must be at least startMs/)
+    runtime.stop()
+  })
+
+  it("refuses to change the time range outside a click", () => {
+    for (const source of [
+      `Chronicle.SetTimeRange(0, 1000)`,
+      `require("chronicle.v1.events").onComplete(function() Chronicle.ClearTimeRange() end)`,
+    ]) {
+      const runtime = panel(source)
+      expect(() => { runtime.start(); runtime.panelComplete() }).toThrow(/only be called from an OnClick handler/)
+      runtime.stop()
+    }
+  })
+
   it("rejects uploaded reserved names and unknown Chronicle modules", () => {
     expect(() => panel(``, { "chronicle/v1/ui.lua": "return {}" })).toThrow(/reserved/)
     const runtime = panel(`require("chronicle.v1.other")`)

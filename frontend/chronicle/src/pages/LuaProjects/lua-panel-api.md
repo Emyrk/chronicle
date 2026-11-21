@@ -305,6 +305,28 @@ A chart holds at most 12 series and 2,000 points in total, plus up to 64 bands a
 
 The chart also supports `SetSeries`, `SetBands`, `SetMarkers`, `SetFillParent`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
 
+### Page time range
+
+The instance page has one time range filter that every panel uses. The Line Chart panel sets it when you drag across it. A module can set it from a click handler, for example when a viewer clicks a phase or a timeline column:
+
+```lua
+local phase2 = CreateFrame("Button", "phase-2", UIParent)
+phase2:SetText("Phase 2")
+phase2:SetScript("OnClick", function()
+  Chronicle.SetTimeRange(95000, 180000)   -- ms from encounter start, like event.offsetMs
+end)
+
+local reset = CreateFrame("Button", "reset", UIParent)
+reset:SetText("Whole fight")
+reset:SetScript("OnClick", function() Chronicle.ClearTimeRange() end)
+```
+
+- `Chronicle.SetTimeRange(startMs, endMs)` takes milliseconds from encounter start. `nil` leaves a bound open, so `SetTimeRange(60000)` means "from 1:00 onward". Values past the end of the selected encounters are clamped.
+- `Chronicle.ClearTimeRange()` removes the filter.
+- `Chronicle.GetTimeRange()` returns `startMs, endMs`. A bound is `nil` when it is open, and both are `nil` when no range is set.
+
+Setting or clearing the range needs the `input` capability and works only inside an `OnClick` handler, so a module cannot change other panels without a viewer's click. In the Module Workshop preview there is no page range: `SetTimeRange` does nothing and `GetTimeRange` returns `nil, nil`. The module's own events are not filtered by the range.
+
 ### Lua Language Server definitions
 
 The repository includes `lua-panel-api.d.lua`, a documentation-only [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file. Download it from the **LuaLS definitions** button at the top of this page and copy it into your editor workspace for completion, parameter hints and type checking. Chronicle generates the technical reference below from that file so the editor contract and published documentation stay aligned.
@@ -566,6 +588,22 @@ Test a combat-event message against the viewer's panel filters without mutating 
 - `message`: A supported combat-event message received by Panel:OnEvent.
 
 **Returns:** `boolean` matches
+
+#### `Chronicle.SetTimeRange(startMs?: number, endMs?: number)`
+
+Set the page's time range filter, which every panel on the instance page uses. Times are milliseconds from encounter start, like event.offsetMs; nil leaves a bound open. Needs the input capability and works only inside an OnClick handler, so a module cannot move the range on its own. Ranges past the end of the selected encounters are clamped.
+
+- `endMs`: Must be at least startMs.
+
+#### `Chronicle.ClearTimeRange()`
+
+Clear the page's time range filter. Same rules as Chronicle.SetTimeRange.
+
+#### `Chronicle.GetTimeRange()`
+
+Return the page's current time range in milliseconds from encounter start. Either bound is nil when open; both are nil when no range is set.
+
+**Returns:** `number?` startMs; `number?` endMs
 
 <!-- END GENERATED LUA API REFERENCE -->
 

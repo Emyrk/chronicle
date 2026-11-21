@@ -9,6 +9,7 @@ import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/ty
 import type { EventStreams, PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
+import type { PanelTimeRange } from "../../../Guides/runtime/runtime"
 import { explainModuleError, type ModuleErrorContext, type ModuleErrorExplanation, type ModulePhase } from "../../../Guides/runtime/moduleErrors"
 import type { PanelFilterMode } from "../../../Guides/runtime/panelFilters"
 import type { ProcessorContext } from "../processorTypes"
@@ -37,6 +38,22 @@ export interface LuaPanelHostProps {
   onMetrics?: (metrics: LuaPanelRunMetrics) => void
   /** Shows an "Ask the assistant to fix it" button on errors (Module Workshop only). */
   onAskAssistant?: (prompt: string) => void
+  /** The page's time range filter, readable from Lua with Chronicle.GetTimeRange. */
+  timeRange?: PanelTimeRange | null
+  /** Applies Chronicle.SetTimeRange / ClearTimeRange from a click; omit where there is no page time range. */
+  onSetTimeRange?: (range: PanelTimeRange | null) => void
+}
+
+const bound = (value: unknown): value is number | null => value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0)
+
+/** Worker output is untrusted: accept only {startMs, endMs} with ms bounds, or null. */
+function parseTimeRange(value: unknown): PanelTimeRange | null | undefined {
+  if (value === null) return null
+  if (!value || typeof value !== "object") return undefined
+  const { startMs, endMs } = value as Record<string, unknown>
+  if (Object.keys(value).length !== 2 || !bound(startMs) || !bound(endMs)) return undefined
+  if (startMs !== null && endMs !== null && endMs < startMs) return undefined
+  return { startMs, endMs }
 }
 
 const EMPTY_EVENTS: readonly PanelEvent[] = []
@@ -44,7 +61,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant, timeRange = null, onSetTimeRange }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const sceneRef = useRef(scene)
   const [error, setError] = useState<ModuleErrorExplanation | null>(null)
@@ -53,7 +70,9 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   const workerRef = useRef<Worker | null>(null)
   const drawMs = useRef(0)
   const onMetricsRef = useRef(onMetrics)
-  useEffect(() => { onMetricsRef.current = onMetrics }, [onMetrics])
+  const timeRangeRef = useRef(timeRange)
+  const onSetTimeRangeRef = useRef(onSetTimeRange)
+  useEffect(() => { onMetricsRef.current = onMetrics; onSetTimeRangeRef.current = onSetTimeRange }, [onMetrics, onSetTimeRange])
   useEffect(() => {
     const replaying = streams.length > 0 && !!eventStreams && streams.every(stream => eventStreams[stream])
     let postedAt = 0
@@ -90,6 +109,12 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
           }
           return
         }
+        if (data && typeof data === "object" && "type" in data && data.type === "set-time-range") {
+          const range = parseTimeRange("range" in data ? data.range : undefined)
+          if (range === undefined) throw new Error("Invalid time range from panel")
+          onSetTimeRangeRef.current?.(range)
+          return
+        }
         // The watchdog measures inactivity, not total time: large replays keep it alive with progress.
         if (data && typeof data === "object" && "type" in data && data.type === "progress") {
           armWatchdog()
@@ -116,9 +141,19 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     runtime.onerror = () => stop("Panel worker failed")
     armWatchdog()
     runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents, units, filterMode, filterContext })
+    runtime.postMessage({ type: "time-range", range: timeRangeRef.current })
     if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "streams", streams: eventStreams, encounterIds: [...encounterIds] }) }
     return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
   }, [entrypoint, sources, streams, streamScope, maxEvents, filterMode, filterContext, capabilities, eventStreams, encounterIds, units])
+
+  // Keep Lua's Chronicle.GetTimeRange in step with the page; a new worker gets it right after start.
+  const startMs = timeRange?.startMs ?? null
+  const endMs = timeRange?.endMs ?? null
+  useEffect(() => {
+    const range = startMs === null && endMs === null ? null : { startMs, endMs }
+    timeRangeRef.current = range
+    workerRef.current?.postMessage({ type: "time-range", range })
+  }, [startMs, endMs])
 
   useEffect(() => {
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })

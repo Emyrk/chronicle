@@ -306,3 +306,16 @@ Chronicle = {}
 ---@param message table A supported combat-event message received by Panel:OnEvent.
 ---@return boolean matches
 function Chronicle.Filter(message) end
+
+---Set the page's time range filter, which every panel on the instance page uses. Times are milliseconds from encounter start, like event.offsetMs; nil leaves a bound open. Needs the input capability and works only inside an OnClick handler, so a module cannot move the range on its own. Ranges past the end of the selected encounters are clamped.
+---@param startMs? number
+---@param endMs? number Must be at least startMs.
+function Chronicle.SetTimeRange(startMs, endMs) end
+
+---Clear the page's time range filter. Same rules as Chronicle.SetTimeRange.
+function Chronicle.ClearTimeRange() end
+
+---Return the page's current time range in milliseconds from encounter start. Either bound is nil when open; both are nil when no range is set.
+---@return number? startMs
+---@return number? endMs
+function Chronicle.GetTimeRange() end
