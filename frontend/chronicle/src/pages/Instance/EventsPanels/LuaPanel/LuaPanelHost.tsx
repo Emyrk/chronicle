@@ -3,6 +3,7 @@ import { HelpCircle } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { formatNumber } from "@/lib/format"
 import { GuideUiScene } from "../../../Guides/protocol/GuideUiScene"
+import { PanelTimeRangeContext, type PanelTimeRangeValue } from "../../../Guides/protocol/panelTimeRange"
 import { applySceneBatch, createInitialScene } from "../../../Guides/protocol/scene"
 import { parseWorkerMessage } from "../../../Guides/protocol/protocol"
 import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/types"
@@ -159,12 +160,17 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     for (const event of events) workerRef.current?.postMessage({ type: "event", event })
   }, [events])
 
+  // Lets widgets such as a selectable LineChart read and set the page time range.
+  const timeRangeContext: PanelTimeRangeValue = { range: startMs === null && endMs === null ? null : { startMs, endMs }, select: onSetTimeRange }
+
   if (error) return <ModuleErrorCard error={error} onAskAssistant={onAskAssistant} />
   return <div className="flex min-h-0 flex-1 flex-col">
     {/* Content larger than the panel (or than UIParent:SetSize asks for) scrolls instead of being cut off. */}
     <div className="styled-scrollbar relative min-h-[240px] flex-1 overflow-auto" data-lua-panel-host>
       <div className="relative" style={{ width: scene.canvas.width ?? "100%", height: scene.canvas.height ?? "100%", minWidth: "100%", minHeight: "100%" }}>
-        <GuideUiScene scene={scene} assets={assets} onNodeClick={(node) => workerRef.current?.postMessage({ type: "click", nodeId: node.id })} />
+        <PanelTimeRangeContext.Provider value={timeRangeContext}>
+          <GuideUiScene scene={scene} assets={assets} onNodeClick={(node) => workerRef.current?.postMessage({ type: "click", nodeId: node.id })} />
+        </PanelTimeRangeContext.Provider>
       </div>
     </div>
     {(metrics || progress !== null) && <LuaRunMetricsBar metrics={metrics} progress={progress} />}

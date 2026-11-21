@@ -13,6 +13,8 @@ export const lineChartFormat = choice(["number", "compact", "seconds", "duration
 export const lineChartCurve = choice(["linear", "monotoneX", "step", "natural", "basis"], "ChronicleLineChartCurve")
 export type LineChartFormat = (typeof lineChartFormat.values)[number]
 export type LineChartCurve = (typeof lineChartCurve.values)[number]
+export const lineChartTimeSelection = choice(["off", "seconds", "milliseconds"], "ChronicleLineChartTimeSelection")
+export type LineChartTimeSelection = (typeof lineChartTimeSelection.values)[number]
 const MARKER_STYLES = ["dashed", "solid", "dotted"] as const
 const MARKER_ICONS = ["none", "triangle", "dot"] as const
 export type LineMarkerStyle = (typeof MARKER_STYLES)[number]
@@ -231,6 +233,11 @@ export const lineChartSpec = defineWidget({
     { method: "SetShowPoints", args: [{ prop: "showPoints", type: flag(), doc: "Defaults to true." }], doc: "Draw a dot at every point." },
     { method: "SetStacked", args: [{ prop: "stacked", type: flag(), doc: "Defaults to true." }], doc: "Stack series on top of each other. Stacked charts are always filled." },
     { method: "SetFillParent", args: [{ prop: "fillParent", type: flag(), doc: "Defaults to true." }], doc: "Size the chart to fill its parent frame (or the whole panel), ignoring SetPoint and SetSize." },
+    {
+      method: "SetTimeSelection",
+      args: [{ prop: "timeSelection", type: lineChartTimeSelection, doc: "What the x axis measures: fight time in \"seconds\" or \"milliseconds\". \"off\" (the default) disables selection." }],
+      doc: "Let viewers drag across the chart to set the page's time range, like the Line Chart panel; double-click clears it. The selected range is highlighted. Use Chronicle.OnTimeRangeChanged to react to it.",
+    },
     { method: "SetLegend", args: [{ prop: "legend", type: flag(), doc: "Defaults to true." }], doc: "Show or hide the legend. Shown by default." },
     {
       method: "SetAxisLabels",

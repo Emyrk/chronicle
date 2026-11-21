@@ -184,6 +184,8 @@ function ChronicleButton:SetText(text) end
 
 ---@alias ChronicleLineChartCurve "linear"|"monotoneX"|"step"|"natural"|"basis"
 
+---@alias ChronicleLineChartTimeSelection "off"|"seconds"|"milliseconds"
+
 ---Chronicle's standard player meter, with class colors and icons.
 ---@class ChroniclePlayerMetricChart: ChronicleRegion
 local ChroniclePlayerMetricChart = {}
@@ -268,6 +270,10 @@ function ChronicleLineChart:SetStacked(stacked) end
 ---@param fillParent? boolean Defaults to true.
 function ChronicleLineChart:SetFillParent(fillParent) end
 
+---Let viewers drag across the chart to set the page's time range, like the Line Chart panel; double-click clears it. The selected range is highlighted. Use Chronicle.OnTimeRangeChanged to react to it.
+---@param timeSelection ChronicleLineChartTimeSelection What the x axis measures: fight time in "seconds" or "milliseconds". "off" (the default) disables selection.
+function ChronicleLineChart:SetTimeSelection(timeSelection) end
+
 ---Show or hide the legend. Shown by default.
 ---@param legend? boolean Defaults to true.
 function ChronicleLineChart:SetLegend(legend) end
@@ -314,6 +320,10 @@ function Chronicle.SetTimeRange(startMs, endMs) end
 
 ---Clear the page's time range filter. Same rules as Chronicle.SetTimeRange.
 function Chronicle.ClearTimeRange() end
+
+---Call `callback(startMs, endMs)` whenever the page's time range changes, for example when a viewer drags across a chart or moves the time slider. Bounds are nil when open; both are nil when the range is cleared. It is also called right after loading if a range is already set. It is not called for the module's own Chronicle.SetTimeRange, and cannot call SetTimeRange itself. Registering again replaces the previous callback.
+---@param callback fun(startMs: number?, endMs: number?)
+function Chronicle.OnTimeRangeChanged(callback) end
 
 ---Return the page's current time range in milliseconds from encounter start. Either bound is nil when open; both are nil when no range is set.
 ---@return number? startMs

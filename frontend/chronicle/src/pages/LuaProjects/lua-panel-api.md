@@ -301,9 +301,10 @@ A chart holds at most 12 series and 2,000 points in total, plus up to 64 bands a
 - **Bands** shade an x range behind the lines, like the Line Chart panel's phases or its raid durability background. A band's `label` is drawn along the top. Its `label` and `tooltip` also appear in the hover readout while the pointer is inside it. `opacity` defaults to 0.08.
 - **Markers** draw a vertical line, such as a death or a phase change. `style` is `"dashed"` (default), `"solid"` or `"dotted"`. `icon` is `"none"` (default), `"triangle"` or `"dot"`. A marker with a `tooltip` shows it in a card when the pointer is on the line.
 - A series' **`suffix`**, such as `"/s"`, is appended to its values in the hover readout.
+- **`timeSelection = "seconds"`** (or `chart:SetTimeSelection("seconds")`) lets viewers drag across the chart to set the [page time range](#page-time-range). Double-clicking clears it, and the current range is highlighted. Use `"milliseconds"` if your x values are milliseconds. The x axis must be fight time from encounter start.
 - **`fillParent = true`** (or `chart:SetFillParent()`) sizes the chart to its parent frame, or to the whole panel, and follows it as it resizes. `SetPoint` and `SetSize` are then ignored. Points are `{x, y}` or `{x = x, y = y}`. Colors are `"#rrggbb"` strings or `{r, g, b, a}` tables; series without one get a palette color. Formats are `"number"`, `"compact"` (1.2k, 3.4M), `"seconds"` (12s), `"duration"` (1:05) and `"percent"` (values from 0 to 100). Curves are `"linear"`, `"monotoneX"` (default), `"step"`, `"natural"` and `"basis"`.
 
-The chart also supports `SetSeries`, `SetBands`, `SetMarkers`, `SetFillParent`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
+The chart also supports `SetSeries`, `SetBands`, `SetMarkers`, `SetFillParent`, `SetTimeSelection`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
 
 ### Page time range
 
@@ -324,6 +325,17 @@ reset:SetScript("OnClick", function() Chronicle.ClearTimeRange() end)
 - `Chronicle.SetTimeRange(startMs, endMs)` takes milliseconds from encounter start. `nil` leaves a bound open, so `SetTimeRange(60000)` means "from 1:00 onward". Values past the end of the selected encounters are clamped.
 - `Chronicle.ClearTimeRange()` removes the filter.
 - `Chronicle.GetTimeRange()` returns `startMs, endMs`. A bound is `nil` when it is open, and both are `nil` when no range is set.
+- `Chronicle.OnTimeRangeChanged(function(startMs, endMs) ... end)` runs whenever the range changes, from any source: the time slider, a chart drag, or another module. It also runs right after loading if a range is already set. It does not run for this module's own `SetTimeRange`. It may redraw, but it cannot set the range itself, which prevents feedback loops.
+
+```lua
+local label = CreateFrame("FontString", "range-label", UIParent)
+Chronicle.OnTimeRangeChanged(function(startMs, endMs)
+  if startMs == nil and endMs == nil then label:SetText("Whole fight")
+  else label:SetText(string.format("%ds to %s", (startMs or 0) / 1000, endMs and (endMs / 1000 .. "s") or "end")) end
+end)
+```
+
+A `LineChart` can also set the range by dragging, like the Line Chart panel. See `SetTimeSelection` under [Line chart](#line-chart).
 
 Setting or clearing the range needs the `input` capability and works only inside an `OnClick` handler, so a module cannot change other panels without a viewer's click. In the Module Workshop preview there is no page range: `SetTimeRange` does nothing and `GetTimeRange` returns `nil, nil`. The module's own events are not filtered by the range.
 
@@ -561,6 +573,12 @@ Size the chart to fill its parent frame (or the whole panel), ignoring SetPoint 
 
 - `fillParent`: Defaults to true.
 
+#### `ChronicleLineChart:SetTimeSelection(timeSelection: ChronicleLineChartTimeSelection)`
+
+Let viewers drag across the chart to set the page's time range, like the Line Chart panel; double-click clears it. The selected range is highlighted. Use Chronicle.OnTimeRangeChanged to react to it.
+
+- `timeSelection`: What the x axis measures: fight time in "seconds" or "milliseconds". "off" (the default) disables selection.
+
 #### `ChronicleLineChart:SetLegend(legend?: boolean)`
 
 Show or hide the legend. Shown by default.
@@ -598,6 +616,12 @@ Set the page's time range filter, which every panel on the instance page uses. T
 #### `Chronicle.ClearTimeRange()`
 
 Clear the page's time range filter. Same rules as Chronicle.SetTimeRange.
+
+#### `Chronicle.OnTimeRangeChanged(callback: fun(startMs:)`
+
+Call `callback(startMs, endMs)` whenever the page's time range changes, for example when a viewer drags across a chart or moves the time slider. Bounds are nil when open; both are nil when the range is cleared. It is also called right after loading if a range is already set. It is not called for the module's own Chronicle.SetTimeRange, and cannot call SetTimeRange itself. Registering again replaces the previous callback.
+
+- `callback`: number?, endMs: number?)
 
 #### `Chronicle.GetTimeRange()`
 

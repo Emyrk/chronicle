@@ -1,5 +1,5 @@
 /** Where an module was when it stopped, reported by the panel worker with its error. */
-export type ModulePhase = "startup" | "onEvent" | "onComplete" | "click"
+export type ModulePhase = "startup" | "onEvent" | "onComplete" | "click" | "timeRange"
 
 export interface ModuleErrorContext {
   phase?: ModulePhase
@@ -29,6 +29,7 @@ const phaseLabel: Record<ModulePhase, string> = {
   onEvent: "in onEvent",
   onComplete: "in onComplete",
   click: "in a click handler",
+  timeRange: "in OnTimeRangeChanged",
 }
 
 function describeWhere(location: { file: string; line: string } | null, context: ModuleErrorContext): string | undefined {

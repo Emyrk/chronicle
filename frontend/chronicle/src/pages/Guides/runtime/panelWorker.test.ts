@@ -205,4 +205,27 @@ describe("Lua panel worker time range", () => {
     handle({ type: "click", nodeId: "idle" })
     expect(messages).not.toContainEqual(expect.objectContaining({ type: "set-time-range" }))
   })
+
+  it("runs OnTimeRangeChanged when the host sends a new range and draws its output", () => {
+    const messages: unknown[] = []
+    const handle = createPanelWorkerHandler((message) => messages.push(message))
+    handle({ type: "start", entrypoint: "main.lua", capabilities: ["ui"], streams: [], sources: { "main.lua": `
+      local label = CreateFrame("FontString", "label", UIParent)
+      Chronicle.OnTimeRangeChanged(function(startMs, endMs) label:SetText(startMs .. "-" .. endMs) end)
+    ` } })
+    messages.length = 0
+    handle({ type: "time-range", range: { startMs: 1000, endMs: 4000 } })
+    expect(messages).toContainEqual(expect.objectContaining({ type: "batch", operations: [{ op: "set", id: "label", props: { text: "1000-4000" } }] }))
+    messages.length = 0
+    handle({ type: "time-range", range: { startMs: 1000, endMs: 4000 } })
+    expect(messages).toEqual([])
+  })
+
+  it("reports errors in OnTimeRangeChanged with their phase", () => {
+    const messages: unknown[] = []
+    const handle = createPanelWorkerHandler((message) => messages.push(message))
+    handle({ type: "start", entrypoint: "main.lua", capabilities: ["ui"], streams: [], sources: { "main.lua": `Chronicle.OnTimeRangeChanged(function() error("boom") end)` } })
+    handle({ type: "time-range", range: { startMs: 1, endMs: 2 } })
+    expect(messages).toContainEqual(expect.objectContaining({ type: "error", phase: "timeRange", message: expect.stringMatching(/boom/) }))
+  })
 })
