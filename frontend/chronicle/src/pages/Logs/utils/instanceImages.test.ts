@@ -38,6 +38,13 @@ describe("getInstanceBackground", () => {
     );
   });
 
+  it("returns the City of Dalaran loading screen case-insensitively", () => {
+    const background = "https://icons.chronicleclassic.com/forever/loadingscreens/2959-7e4b16c03c4a4ca4-city-of-dalaran.webp";
+    expect(getInstanceBackground("City of Dalaran")).toBe(background);
+    expect(getInstanceBackground("city of dalaran")).toBe(background);
+    expect(getInstanceContentLevel("City of Dalaran")).toBe(60);
+  });
+
   it("returns The Drowned City loading screen", () => {
     expect(getInstanceBackground("The Drowned City")).toBe(
       "https://icons.chronicleclassic.com/forever/loadingscreens/2970-bea509ce83d9e614-drowned-city.webp",

@@ -220,6 +220,11 @@
     "background": "/c/images/loadingscreens/LoadScreenRuinsOfLordaeron.webp",
     "contentLevel": 60
   },
+  "City of Dalaran": {
+    "background": "https://icons.chronicleclassic.com/forever/loadingscreens/2959-7e4b16c03c4a4ca4-city-of-dalaran.webp",
+    "abbrev": "Dalaran",
+    "contentLevel": 60
+  },
   "The Drowned City": {
     "background": "https://icons.chronicleclassic.com/forever/loadingscreens/2970-bea509ce83d9e614-drowned-city.webp",
     "bossCount": 8,
