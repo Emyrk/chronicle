@@ -109,10 +109,10 @@ func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID)
 // Enrich only missing fields on existing unit messages. Never synthesize party,
 // affiliation, or guild membership, which could change raid ownership votes.
 type scoutingAdvancer struct {
-	realms        map[guid.GUID]uuid.UUID
-	uploadRealmID uuid.UUID
-	source        consumers.Advancer
-	players       *scouting.Scouting
+	realms   map[guid.GUID]uuid.UUID
+	identity *foreverIdentity
+	source   consumers.Advancer
+	players  *scouting.Scouting
 }
 
 func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, error) {
@@ -122,8 +122,18 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 		if !ok {
 			continue
 		}
-		if realmID, resolved := s.realms[unit.Guid]; !resolved || realmID == uuid.Nil || realmID != s.uploadRealmID {
+		if realmID, resolved := s.realms[unit.Guid]; !resolved || realmID == uuid.Nil {
 			continue
+		}
+		sourceName, ok := s.players.IdentityName(unit.Guid)
+		if !ok || (meaningfulIdentityName(unit.Name) && sourceName != unit.Name) {
+			continue
+		}
+		if s.identity != nil {
+			name, safe := uniqueIdentityName(s.identity.ObservedPlayerNames(unit.Guid))
+			if !safe || (meaningfulIdentityName(unit.Name) && name != "" && name != unit.Name) {
+				continue
+			}
 		}
 		known := s.players.KnownAt(unit.Guid, unit.Date().Unix())
 		copy := *unit

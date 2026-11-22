@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
+	"github.com/Emyrk/chronicle/internal/ptr"
+	"github.com/jackc/pgx/v5/pgtype"
+
 	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -207,4 +211,62 @@ func TestArmoryRealmResolverUsesSnapshotName(t *testing.T) {
 	require.Equal(t, us.ID, resolve(combatant.Combatant{Guid: 1, Name: "Snapshot"}).UUID)
 	require.False(t, resolve(combatant.Combatant{Guid: 1, Name: "Unseen"}).Valid)
 	require.Nil(t, armoryRealmResolver(database.LogFormatV9Cleu, units, nil))
+}
+
+func TestScoutingAndCombatArmoryShareInferredIdentity(t *testing.T) {
+	t.Parallel()
+	ctx := testutil.Context(t, testutil.WaitLong)
+	store, _ := dbtestutil.NewDB(t)
+	owner, instanceRealm := insertVisibilityTestOwnerAndRealm(t, ctx, store)
+	realm, err := store.GetWoWServerRealm(ctx, instanceRealm)
+	require.NoError(t, err)
+	home, err := store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: uuid.New(), ServerID: realm.ServerID, Name: "Normal-EU"})
+	require.NoError(t, err)
+	catalog := newParticipantRealmCatalog(realm.ServerID, []database.WowServerRealm{home})
+	const id guid.GUID = 1<<32 | 1
+	scouts := newTestScouting(t, map[guid.GUID][]scouting.Player{id: {{Name: "Alice", Realm: "Normal-EU", LastSeen: 100, Observations: []scouting.Observation{{At: 10, Name: "Alice", Level: ptr.Ref(30), Guild: ptr.Ref("Scouted")}}}}})
+	filtered, realms, identity := reconcileForeverScouting(scouts, combatIdentityFixture(t, "Alice"), catalog)
+	units := unitdb.New(nil)
+	units.SetPlayerRealmLookup(identity)
+	payload, err := scoutingPayload(filtered, realms)
+	require.NoError(t, err)
+	rows, err := store.UpsertScoutedPlayers(ctx, payload)
+	require.NoError(t, err)
+	require.Len(t, rows, 1)
+	row, err := store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: home.ID, Identifier: id})
+	require.NoError(t, err)
+	require.False(t, row.RaceObservedAt.Valid)
+	require.False(t, row.GenderObservedAt.Valid)
+	require.Equal(t, pgtype.NegativeInfinity, row.UpdatedAt.InfinityModifier)
+	observed := time.Unix(50, 0).UTC()
+	log := insertVisibilityTestLogGroup(t, ctx, store, owner)
+	instance := insertVisibilityTestInstance(t, ctx, store, log, instanceRealm, "inferred identity", observed)
+	player := combatant.Combatant{Guid: id, Name: "Alice", Seen: observed, HeroClass: types.HeroClassesMAGE, Race: types.HeroRacesHuman, Gender: types.HeroGenderMale, GearSetups: make([]combatant.GearItem, 19)}
+	player.GearSetups[0].ItemID = 123
+	units.UpdatePlayer(player)
+	tracker := armory.New(units)
+	tracker.Players[id] = player
+	tracker.Participant[id] = struct{}{}
+	raidGuild, err := tracker.Insert(ctx, units, instance, instanceRealm, uuid.New(), store, armoryRealmResolver(database.LogFormatV22Cleu, units, catalog))
+	require.NoError(t, err)
+	require.Nil(t, raidGuild, "scouting must not inject raid membership")
+	row, err = store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: home.ID, Identifier: id})
+	require.NoError(t, err)
+	require.True(t, observed.Equal(row.UpdatedAt.Time))
+	require.Equal(t, int16(30), row.Level)
+	guild, err := store.GetGuildByID(ctx, row.GuildID.UUID)
+	require.NoError(t, err)
+	require.Equal(t, home.ID, guild.RealmID)
+	require.Equal(t, "Scouted", guild.Name)
+	_, err = store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: instanceRealm, Identifier: id})
+	require.ErrorIs(t, err, pgx.ErrNoRows)
+	history, err := store.GetPlayerGearHistory(ctx, database.GetPlayerGearHistoryParams{RealmID: home.ID, PlayerID: id, ResultLimit: 10})
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	// A newer scouting sighting advances metadata, never the gear snapshot clock.
+	_, err = store.UpsertScoutedPlayers(ctx, payload)
+	require.NoError(t, err)
+	row, err = store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: home.ID, Identifier: id})
+	require.NoError(t, err)
+	require.True(t, observed.Equal(row.UpdatedAt.Time))
 }

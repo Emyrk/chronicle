@@ -110,18 +110,12 @@ func (w *WorkerLogParse) parseCombatLog(
 	logCapabilities := initialLogCapabilities(logFormat)
 	var scoutPlayers *scouting.Scouting
 	var scoutRealms map[guid.GUID]uuid.UUID
+	var identity *foreverIdentity
 	if logFormat == database.LogFormatV22Cleu {
 		var err error
 		scoutPlayers, err = w.loadForeverScouting(ctx, artifacts)
 		if err != nil {
 			return nil, err
-		}
-		scoutRealms, err = resolveScoutingRealms(ctx, w.parent.Zed, scoutPlayers, tenantID)
-		if err != nil {
-			return nil, err
-		}
-		if skipped := scoutPlayers.Len() - len(scoutRealms); skipped > 0 {
-			w.parent.logger.WarnContext(ctx, "skipping scouting players without an unambiguous verified realm", "skipped_players", skipped)
 		}
 	}
 
@@ -289,6 +283,22 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
+		if logFormat == database.LogFormatV22Cleu && scoutPlayers.Len() > 0 {
+			evidence, err := blizzardmodern.PreflightPlayerIdentities(ctx, bytes.NewReader(data))
+			if err != nil {
+				return nil, fmt.Errorf("forever identity preflight: %w", err)
+			}
+			catalog, err := loadForeverIdentityCatalog(ctx, w.parent.Zed, tenantID)
+			if err != nil {
+				return nil, err
+			}
+			originalCount := scoutPlayers.Len()
+			scoutPlayers, scoutRealms, identity = reconcileForeverScouting(scoutPlayers, evidence, catalog)
+			if skipped := originalCount - len(scoutRealms); skipped > 0 {
+				w.parent.logger.WarnContext(ctx, "skipping unsafe scouting identities", "skipped_players", skipped)
+			}
+		}
+
 		var p *blizzardmodern.Parser
 		var err error
 		if logFormat == database.LogFormatHermesproxy1142Cc {
@@ -306,9 +316,13 @@ func (w *WorkerLogParse) parseCombatLog(
 		var parseAdvancer consumers.Advancer = p
 		if logFormat == database.LogFormatV22Cleu {
 			encountersState.Units.SetPlayerRealmLookup(p)
+			if identity != nil {
+				identity.live = p
+				encountersState.Units.SetPlayerRealmLookup(identity)
+			}
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
 			if scoutPlayers.Len() > 0 {
-				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, uploadRealmID: uploadRealmID}
+				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, identity: identity}
 			}
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
@@ -383,6 +397,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	}
 
 	encountersState.Units.RefreshPlayerRealms()
+	finalizeScoutingRealms(encountersState.Units, scoutRealms)
 
 	return &parseResult{
 		scoutingRealms:  scoutRealms,

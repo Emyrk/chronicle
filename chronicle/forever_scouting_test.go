@@ -76,7 +76,7 @@ func TestScoutingTimelineDoesNotBackfillFutureEvidence(t *testing.T) {
 	after := &messages.Unit{MessageBase: messages.Base(time.Unix(15, 0)), Info: unitinfo.Info{Guid: 1, CanCooperate: true}}
 	known := &messages.Unit{MessageBase: messages.Base(time.Unix(25, 0)), Info: unitinfo.Info{Guid: 1, Name: "Combat", Level: 60}}
 	realmID := uuid.New()
-	source := scoutingAdvancer{realms: map[guid.GUID]uuid.UUID{1: realmID}, uploadRealmID: realmID, source: scoutingTestSource{messages: []messages.Message{before, after, known}}, players: newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", LastSeen: 30, Observations: []scouting.Observation{
+	source := scoutingAdvancer{realms: map[guid.GUID]uuid.UUID{1: realmID}, source: scoutingTestSource{messages: []messages.Message{before, after, known}}, players: newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", LastSeen: 30, Observations: []scouting.Observation{
 		{At: 10, Name: "Scout", Level: ptr.Ref(20), Guild: ptr.Ref("Ignored")},
 		{At: 20, Name: "Later", Level: ptr.Ref(21)},
 	}}}})}

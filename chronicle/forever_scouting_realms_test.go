@@ -136,13 +136,12 @@ func TestScoutingRealmResolutionBatchFailsClosed(t *testing.T) {
 	require.JSONEq(t, `[]`, string(payload))
 }
 
-func TestScoutingTimelineRejectsUnresolvedAndCrossRealm(t *testing.T) {
+func TestScoutingTimelineRejectsUnresolved(t *testing.T) {
 	t.Parallel()
-	upload, foreign := uuid.New(), uuid.New()
 	index := newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", Observations: []scouting.Observation{{At: 10, Name: "Scout", Level: ptr.Ref(60)}}}}})
-	for _, realms := range []map[guid.GUID]uuid.UUID{nil, {1: foreign}, {1: uuid.Nil}} {
+	for _, realms := range []map[guid.GUID]uuid.UUID{nil, {1: uuid.Nil}} {
 		unit := &messages.Unit{MessageBase: messages.Base(time.Unix(20, 0)), Info: unitinfo.Info{Guid: 1}}
-		advancer := scoutingAdvancer{source: scoutingTestSource{messages: []messages.Message{unit}}, players: index, realms: realms, uploadRealmID: upload}
+		advancer := scoutingAdvancer{source: scoutingTestSource{messages: []messages.Message{unit}}, players: index, realms: realms}
 		batch, _ := advancer.Advance(t.Context())
 		require.Same(t, unit, batch[0])
 		require.Empty(t, unit.Name)
