@@ -88,6 +88,11 @@ func (us *Units) Category(g guid.GUID, identifiers ...CategoryIdentifier) Catego
 				return category
 			}
 		}
+		if us.flavor.Has(database.FlavorWoWForever) {
+			if category, ok := knownForeverObjects[entry]; ok {
+				return category
+			}
+		}
 		if category, ok := knownObjects[entry]; ok {
 			return category
 		}
