@@ -185,7 +185,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ModuleStar key={project.id} project={project} canUse={can.use} />
-            {project.kind === "panel" && can.edit && <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-darker px-4 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Workshop</Link>}
+            {project.kind === "panel" && can.edit && <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-darker px-4 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> <span className="hidden sm:inline">Open in</span> Workshop</Link>}
             {can.edit && <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label="More actions" className="inline-flex size-9 items-center justify-center rounded-md border border-border hover:bg-accent"><MoreHorizontal className="size-4" /></button>
