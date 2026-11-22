@@ -8,6 +8,8 @@ export type LuaMain = { sha256: string; icon?: string; updated_at: string }
 export type LuaProject = {
   id: string
   owner_id: string
+  /** Opt-in discovery listing only. All modules remain public. */
+  published: boolean
   kind: LuaProjectKind
   name: string
   slug: string
@@ -80,8 +82,8 @@ export async function setDescription(id: string, description: string): Promise<L
   return updateProject(id, { description })
 }
 
-/** Saves the module's settings. Leaving out flavor keeps its tags. */
-export async function updateProject(id: string, settings: { description: string; flavor?: string[] }): Promise<LuaProject> {
+/** Saves the module's settings. Omitted flavor and published values keep their current settings. */
+export async function updateProject(id: string, settings: { description: string; flavor?: string[]; published?: boolean }): Promise<LuaProject> {
   return request<LuaProject>(`${base}/${encodeURIComponent(id)}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

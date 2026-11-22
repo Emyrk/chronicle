@@ -3094,6 +3094,7 @@ type LuaProject struct {
 	DraftIcon   pgtype.Text        `db:"draft_icon" json:"draft_icon"`
 	Description string             `db:"description" json:"description"`
 	Flavor      []string           `db:"flavor" json:"flavor"`
+	Published   bool               `db:"published" json:"published"`
 }
 
 type LuaProjectArtifact struct {

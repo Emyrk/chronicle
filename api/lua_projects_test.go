@@ -490,10 +490,21 @@ func TestPublicLuaProjectsMostTrackedFirst(t *testing.T) {
 		return project.ID
 	}
 	popular, newest := release("popular"), release("newest")
+	projects, err := db.ListPublicLuaProjects(ctx)
+	require.NoError(t, err)
+	require.Empty(t, projects, "a release does not opt into discovery")
+	for _, id := range []uuid.UUID{popular, newest} {
+		p, err := db.GetPublicLuaProject(ctx, id)
+		require.NoError(t, err, "unlisted releases remain directly accessible")
+		require.False(t, p.Published)
+		_, err = db.SetLuaProjectSettings(ctx, database.SetLuaProjectSettingsParams{ID: id, Published: pgtype.Bool{Bool: true, Valid: true}})
+		require.NoError(t, err)
+	}
+
 	for _, user := range users[1:] {
 		require.NoError(t, db.StarLuaProject(ctx, database.StarLuaProjectParams{ProjectID: popular, UserID: user}))
 	}
-	projects, err := db.ListPublicLuaProjects(ctx)
+	projects, err = db.ListPublicLuaProjects(ctx)
 	require.NoError(t, err)
 	require.Len(t, projects, 2)
 	require.Equal(t, []uuid.UUID{popular, newest}, []uuid.UUID{projects[0].ID, projects[1].ID}, "stars outrank a newer release")

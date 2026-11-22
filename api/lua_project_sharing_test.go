@@ -168,6 +168,7 @@ func TestLuaProjectPermissions(t *testing.T) {
 	router.Put("/me/lua-projects/{projectID}/contributors/{author}", api.PutLuaProjectContributor)
 	router.Delete("/me/lua-projects/{projectID}/contributors/{author}", api.DeleteLuaProjectContributor)
 	router.Post("/me/lua-projects/{projectID}/releases", api.CreateLuaProjectRelease)
+	router.Get("/lua-projects", api.ListPublicLuaProjects)
 	router.Get("/lua-projects/{projectID}/page", api.GetLuaProjectPage)
 	router.Get("/modules/{author}", api.GetModuleAuthorPage)
 	router.Get("/modules/{author}/{slug}", api.GetLuaProjectPageByPath)
@@ -212,6 +213,10 @@ func TestLuaProjectPermissions(t *testing.T) {
 	var project chroniclesdk.LuaProject
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &project))
 	require.Equal(t, "steven", project.Author)
+	require.False(t, project.Published)
+	var rawProject map[string]json.RawMessage
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &rawProject))
+	require.JSONEq(t, `false`, string(rawProject["published"]))
 	require.Equal(t, int64(1), project.Stars, "owners always track their own modules")
 	require.True(t, project.Starred)
 	_, err := zed.SetLuaProjectDraft(ctx, database.SetLuaProjectDraftParams{ID: project.ID, Hash: pgtype.Text{String: strings.Repeat("d", 64), Valid: true}, ExpectedRevision: 1})
@@ -315,6 +320,55 @@ func TestLuaProjectPermissions(t *testing.T) {
 	require.Equal(t, "v1.0", released.Releases[0].Tag)
 	require.True(t, released.Releases[0].Available)
 	require.Equal(t, "helper", released.Releases[0].PublishedByAuthor, "a contributor's release names them")
+
+	// Discovery is an owner opt-in, independent of release permission and public access.
+	discovered := func() []chroniclesdk.LuaProject {
+		t.Helper()
+		rec := call(uuid.Nil, http.MethodGet, "/lua-projects", "")
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var projects []chroniclesdk.LuaProject
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &projects))
+		return projects
+	}
+	require.Empty(t, discovered(), "releasing alone does not publish discovery")
+	for _, value := range []string{"true", "false"} {
+		require.Equal(t, http.StatusForbidden, call(editor, http.MethodPatch, settings, `{"description":"forbidden","published":`+value+`}`).Code)
+	}
+	rec = call(owner, http.MethodPatch, settings, `{"description":"listed","published":true}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var published chroniclesdk.LuaProject
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &published))
+	require.True(t, published.Published)
+	require.Len(t, discovered(), 1)
+	// Omitting publication must not overwrite a concurrent or previously saved opt-in.
+	rec = call(editor, http.MethodPatch, settings, `{"description":"release editor description","flavor":[]}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &published))
+	require.True(t, published.Published)
+	require.Equal(t, "release editor description", published.Description)
+	rec = call(owner, http.MethodPatch, settings, `{"description":"unlisted","published":false}`)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &published))
+	require.False(t, published.Published)
+	require.Empty(t, discovered())
+	for _, path := range []string{byID, "/modules/steven/interrupt-tracker"} {
+		status, direct := page(uuid.Nil, path)
+		require.Equal(t, http.StatusOK, status)
+		require.False(t, direct.Project.Published)
+		require.True(t, direct.Permissions.Use)
+		require.Len(t, direct.Project.Releases, 1)
+		require.Equal(t, int64(1), direct.Project.Stars)
+	}
+	var stillAuthored chroniclesdk.ModuleAuthorPage
+	rec = call(uuid.Nil, http.MethodGet, "/modules/steven", "")
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &stillAuthored))
+	require.Len(t, stillAuthored.Projects, 1)
+	require.Equal(t, http.StatusOK, call(stranger, http.MethodPut, star, "").Code, "unlisting does not prevent tracking")
+	var stillStarred []chroniclesdk.LuaProject
+	require.NoError(t, json.Unmarshal(call(stranger, http.MethodGet, "/me/lua-projects/starred", "").Body.Bytes(), &stillStarred))
+	require.Len(t, stillStarred, 1)
+
 	require.Equal(t, http.StatusConflict, call(editor, http.MethodPost, "/me/lua-projects/"+project.ID.String()+"/releases", `{"tag":"v1.0","expected_revision":3}`).Code, "tags are unique")
 	require.Equal(t, http.StatusOK, call(owner, http.MethodDelete, contributors+"/helper", "").Code)
 	code, removed := page(editor, byID)

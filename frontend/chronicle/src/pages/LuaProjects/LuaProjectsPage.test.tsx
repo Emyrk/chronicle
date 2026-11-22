@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { LuaProjectsPage } from "./LuaProjectsPage"
 import { NewModuleForm } from "./NewModuleForm"
+import { ModulePublishing } from "./ModulePublishing"
 import { ModuleDescription } from "./ModuleDescription"
 import { ModuleList } from "./ModuleCard"
 import type { LuaProject } from "./api"
@@ -24,7 +25,7 @@ function quotaClient(owned = 1, limit = 5) {
 }
 
 function module(name: string, stars: number, publishedAt: string): LuaProject {
-  return { id: name, owner_id: "o", kind: "panel", name, slug: name, revision: 1, description: `${name} does things.`, author: "someone", stars, starred: false, created_at: publishedAt, updated_at: publishedAt,
+  return { id: name, owner_id: "o", published: false, kind: "panel", name, slug: name, revision: 1, description: `${name} does things.`, author: "someone", stars, starred: false, created_at: publishedAt, updated_at: publishedAt,
     releases: [{ tag: "v1", available: true, sha256: "x", published_at: publishedAt }] }
 }
 
@@ -130,5 +131,37 @@ describe("module description", () => {
     const html = render(<ModuleDescription project={module("Loud", 0, "2026-01-01T00:00:00Z")} canEdit={false} onSaved={() => {}} />)
     expect(html).toContain("Loud does things.")
     expect(html).not.toContain("Edit")
+  })
+})
+
+describe("module publishing", () => {
+  const project = module("Quiet", 0, "2026-01-01T00:00:00Z")
+
+  it("offers owner opt-in and makes clear unpublished modules are public", () => {
+    vi.mocked(useSession).mockReturnValue({ data: { user_id: "o" }, isLoading: false } as ReturnType<typeof useSession>)
+    const html = render(<ModulePublishing project={project} onSaved={() => {}} />)
+    expect(html).toContain("Unpublished")
+    expect(html).toContain("Publish to discovery")
+    expect(html).toContain("All modules are public, even when unpublished.")
+  })
+
+  it("lets owners unpublish without implying a privacy change", () => {
+    vi.mocked(useSession).mockReturnValue({ data: { user_id: "o" }, isLoading: false } as ReturnType<typeof useSession>)
+    const html = render(<ModulePublishing project={{ ...project, published: true }} onSaved={() => {}} />)
+    expect(html).toContain(">Published</span>")
+    expect(html).toContain(">Unpublish</button>")
+  })
+
+  it.each([null, { user_id: "contributor" }])("does not offer publishing to a non-owner (%s)", session => {
+    vi.mocked(useSession).mockReturnValue({ data: session, isLoading: false } as ReturnType<typeof useSession>)
+    const html = render(<ModulePublishing project={project} onSaved={() => {}} />)
+    expect(html).not.toContain("<button")
+    expect(html).toContain("All modules are public")
+  })
+
+  it("explains that a release is needed for discovery", () => {
+    vi.mocked(useSession).mockReturnValue({ data: { user_id: "o" }, isLoading: false } as ReturnType<typeof useSession>)
+    const html = render(<ModulePublishing project={{ ...project, releases: [] }} onSaved={() => {}} />)
+    expect(html).toContain("A release with available files is also required")
   })
 })

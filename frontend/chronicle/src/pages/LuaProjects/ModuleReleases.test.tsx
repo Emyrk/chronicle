@@ -6,7 +6,7 @@ import { latestRelease, type LuaProject } from "./api"
 const release = (tag: string, available: boolean) =>
   ({ tag, available, sha256: available ? tag.repeat(32).slice(0, 64) : undefined, published_at: "2026-10-01T00:00:00Z" })
 const project: LuaProject = {
-  id: "p", owner_id: "o", kind: "panel", name: "Kicks", slug: "kicks", revision: 1, description: "", stars: 1, starred: false,
+  id: "p", owner_id: "o", published: false, kind: "panel", name: "Kicks", slug: "kicks", revision: 1, description: "", stars: 1, starred: false,
   created_at: "2026-10-01T00:00:00Z", updated_at: "2026-10-01T00:00:00Z",
   releases: [release("v5", true), release("v4", true), release("v3", true), release("v2", false), release("v1", false)],
 }
