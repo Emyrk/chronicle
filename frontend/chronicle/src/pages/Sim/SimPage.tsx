@@ -188,6 +188,7 @@ export function SimPage() {
       }],
       players: {
         [SIM_PLAYER_GUID]: {
+          realm_id: null,
           name: playerName,
           class: CLASS_ID_TO_WOW[classId] ?? "WARRIOR",
           race: RACE_ID_TO_WOW[raceId] ?? "Human",

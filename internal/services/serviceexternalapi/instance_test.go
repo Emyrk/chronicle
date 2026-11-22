@@ -236,3 +236,33 @@ func TestGetInstanceBySlugNotFound(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, rec.Code)
 }
+
+func TestInstancePlayerRealmsFullAndAttendance(t *testing.T) {
+	t.Parallel()
+	for _, query := range []string{"", "?attendance_only=true"} {
+		t.Run(query, func(t *testing.T) {
+			t.Parallel()
+			realm := uuid.New()
+			known, unknown := guid.GUID(1), guid.GUID(2)
+			store := &fakeExternalAPIStore{
+				instance: database.LogInstancesGuild{ID: uuid.New(), RealmID: uuid.New(), HashedSlug: pgtype.Text{String: "example-instance", Valid: true}},
+				players: []database.LogInstancePlayer{
+					{UnitGuid: known, Name: "Known", RealmID: uuid.NullUUID{UUID: realm, Valid: true}},
+					{UnitGuid: unknown, Name: "Unknown"},
+				},
+			}
+			service := &Service{db: store}
+			service.setupRoutes()
+			rec := httptest.NewRecorder()
+			service.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/raidlogs/instances/example-instance"+query, nil))
+			require.Equal(t, http.StatusOK, rec.Code)
+			var body struct {
+				Players map[string]map[string]json.RawMessage `json:"players"`
+			}
+			require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &body))
+			require.JSONEq(t, `"`+realm.String()+`"`, string(body.Players[known.String()]["realm_id"]))
+			require.Contains(t, body.Players[unknown.String()], "realm_id")
+			require.Equal(t, "null", string(body.Players[unknown.String()]["realm_id"]))
+		})
+	}
+}

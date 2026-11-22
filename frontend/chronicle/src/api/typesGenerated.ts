@@ -3348,6 +3348,11 @@ export interface InstanceParsesResponse {
 
 // From chroniclesdk/log.go
 export interface InstancePlayer {
+    /**
+     * RealmID is stored participant evidence. Null is explicit; callers may choose
+     * the instance realm as a display fallback, but the API does not assert it.
+     */
+    readonly realm_id: string | null;
     readonly name: string;
     readonly class: WoWHeroClasses;
     readonly race: WoWHeroRaces;
