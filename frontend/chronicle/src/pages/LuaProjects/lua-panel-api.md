@@ -4,6 +4,65 @@ Chronicle modules are small Lua programs that extend Chronicle. This reference c
 
 > **Note:** Chronicle modules run on Chronicle in your browser, not in the game client: they do not go in your `Interface/AddOns` folder.
 
+## Getting Started
+
+You can write modules directly in the browser Workshop, or connect an external AI agent through **MCP (Model Context Protocol)**. The [Chronicle MCP relay](https://github.com/Emyrk/chronicle-mcp) runs locally on your computer and connects your agent to a browser tab you explicitly choose. The browser owns the module files, execution, previews, and save approval. You do not need a local Lua project or file synchronization.
+
+### Install and start the Claude Code plugin
+
+The plugin supports Linux and macOS on Intel/AMD and ARM64. You need Claude Code, `curl`, and GitHub CLI (`gh`) with attestation verification support. Setup asks before installing prerequisites and verifies downloaded releases. Native Windows setup is not supported.
+
+Run these commands in your terminal to install from Chronicle's own marketplace:
+
+```sh
+claude plugin marketplace add Emyrk/chronicle-mcp
+claude plugin install chronicle@chronicle-plugins
+```
+
+Start Claude Code and run:
+
+```text
+/chronicle:setup
+```
+
+Approve the setup command. Once the local service is running, reconnect the Chronicle server in Claude Code's `/mcp` menu or restart Claude Code. Installing the plugin alone does not start the service. If setup reports a missing release, incompatible daemon, or occupied port, follow the [relay setup and troubleshooting instructions](https://github.com/Emyrk/chronicle-mcp#quick-start) rather than bypassing verification or stopping an unknown service.
+
+### Connect your module editor
+
+1. Open [Modules](/modules), create or choose a module, and open its editor in the Workshop.
+2. Click **Connect agent** in the Workshop header and allow local-network access if your browser asks.
+3. In Claude Code, run `/chronicle:connect` and tell the agent which connection name or ID to use.
+4. Let the agent select that tab and load its current page context and skills before asking it to edit.
+
+The agent never automatically selects a tab, even if only one is connected. Each tab can have one agent owner, and each agent can own one tab. Release the current tab before switching. After a full reload or reconnect, select the new connection again.
+
+### Build, preview, and save with your agent
+
+Try a request like:
+
+```text
+Use my connected module editor to make an instance panel that shows total
+healing by player. Read the current files and Lua API guidance first, then
+edit the browser working copy and run the startup check. Ask me to select
+an instance and encounters for Preview, and show me the result before saving.
+```
+
+The agent discovers the tools and Lua API guidance from the connected page. It can read and edit your working copy, check startup, and run a preview when those tools are available. Select an instance and encounters in the browser's **Preview** pane so the preview has real log data.
+
+> **You control persistence.** Agent edits stay in the browser working copy until saved. An agent's save request requires your approval in the browser. Saving updates main; it does not tag or publish a release. Review the changes and preview before approving, then publish separately when ready.
+
+Use the browser's **Revoke** control to cancel an agent's work and release its ownership, or disconnect the tab to end its relay connection. Neither action saves or discards your working copy. To stop the shared local service, run `/chronicle:teardown` in Claude Code and review its confirmation; shutdown affects every connected agent.
+
+### Other clients and troubleshooting
+
+Other MCP clients need stateful Streamable HTTP support and secure authentication configuration. See the [relay's client configuration guide](https://github.com/Emyrk/chronicle-mcp#headless-service-and-other-mcp-clients). Do not paste bearer tokens or private daemon state into chat or commit them to a repository.
+
+- **No tabs listed:** keep the module editor open and click **Connect agent**. Opening this API reference alone does not connect an editor.
+- **Only connection tools appear:** explicitly select a tab before expecting module tools. The agent loads fresh page guidance after selection or navigation.
+- **Tab already owned:** ask the current agent to release it, or use the browser's **Revoke** control before selecting it again.
+- **Preview needs data:** select an instance and encounters in the Workshop's **Preview** pane.
+- **Cannot reach the relay:** check that setup completed and the local service is running, allow browser local-network access, and reconnect the MCP server in your client.
+
 ## Quick start
 
 An instance panel module is two files: `project.json` (what the panel needs) and `main.lua` (what it does). This panel shows total damage for the selected encounters:
