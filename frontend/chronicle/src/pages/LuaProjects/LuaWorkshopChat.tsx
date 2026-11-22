@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type RefObject } from "react"
+import { useCallback, useEffect } from "react"
 import { Link } from "react-router-dom"
 import { Code2, LoaderCircle, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -23,21 +23,8 @@ import { usageFromApi } from "@/features/chat/usage"
 
 type PanelProps = Omit<React.ComponentProps<typeof ChatPanel>, "controller">
 
-/** A message another part of the workshop asks the chat to send, e.g. from the preview's error card. */
-export interface WorkshopChatRequest { id: number; text: string }
-
-function WorkshopChatPanel({ chat, panel, ideas, request, sentRef }: {
-  chat: UseAssistantChatOptions; panel: PanelProps; ideas: boolean; request?: WorkshopChatRequest
-  /** Owned by the parent so a request is sent once even though this panel remounts per thread. */
-  sentRef: RefObject<number | undefined>
-}) {
+function WorkshopChatPanel({ chat, panel, ideas }: { chat: UseAssistantChatOptions; panel: PanelProps; ideas: boolean }) {
   const controller = useAssistantChat(chat)
-  const { isRunning, submit } = controller
-  useEffect(() => {
-    if (!request || sentRef.current === request.id || panel.disabled || isRunning) return
-    sentRef.current = request.id
-    void submit(request.text)
-  }, [request, panel.disabled, isRunning, submit, sentRef])
   const emptyState = ideas && !panel.disabled ? <EmptyState onPick={text => void controller.submit(text)} /> : panel.emptyState
   return <ChatPanel {...panel} emptyState={emptyState} controller={controller} />
 }
@@ -56,10 +43,8 @@ function EmptyState({ onPick }: { onPick: (text: string) => void }) {
 }
 
 /** Durable per-project chat. Tools come from the page's lua-editor capability. */
-export function LuaWorkshopChat({ projectId, projectName, windowControls, onShowCode, request }: {
+export function LuaWorkshopChat({ projectId, projectName, windowControls, onShowCode }: {
   projectId: string; projectName: string; windowControls?: React.ReactNode
-  /** Sent once the chat is ready and idle. */
-  request?: WorkshopChatRequest
   /** Set while chat holds the main area; lets users without chat bring the code there instead. */
   onShowCode?: () => void
 }) {
@@ -71,7 +56,6 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
   const clearThread = useClearInferenceThread()
   const createThread = useCreateLuaProjectInferenceThread()
   const { debugEnabled, yoloEnabled, setDebugEnabled, setYoloEnabled } = useChatPreferences(session?.user_id, `lua-project-${projectId}`)
-  const sentRequest = useRef<number | undefined>(undefined)
   const threadId = createThread.data?.thread.id
   const threadQuery = useInferenceThread(threadId, { enabled: false })
 
@@ -126,8 +110,6 @@ export function LuaWorkshopChat({ projectId, projectName, windowControls, onShow
     // Keep the controller mounted across thread refreshes; remounting aborts client-tool continuations.
     key={response?.thread.id ?? "pending"}
     ideas={!threadLoading}
-    request={request}
-    sentRef={sentRequest}
     chat={{
       endpoint: "/api/v1/inference/runs", threadId: response?.thread.id, initialMessages, createRequest,
       initialUsage: response?.usage && usageFromApi(response.usage), yoloEnabled,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { explainModuleError, formatModuleError } from "./moduleErrors"
+import { explainModuleError, formatModuleError, moduleErrorReport } from "./moduleErrors"
 
 describe("explainModuleError", () => {
   it("explains UI operation overflows in onComplete with location and fixes", () => {
@@ -26,5 +26,15 @@ describe("explainModuleError", () => {
     const text = formatModuleError(explainModuleError("main.lua:151: operation limit exceeded", { phase: "onComplete" }))
     expect(text).toMatch(/^Too many UI changes at once \(main\.lua line 151 · in onComplete\): /)
     expect(text).toMatch(/Original error: main\.lua:151: operation limit exceeded$/)
+  })
+})
+
+describe("moduleErrorReport", () => {
+  it("is the explanation with a request for help, ready to paste into an assistant", () => {
+    const error = explainModuleError("main.lua:12: operation limit exceeded", { phase: "onComplete" })
+    const report = moduleErrorReport(error)
+    expect(report.startsWith("My Chronicle module stopped with this error.")).toBe(true)
+    expect(report).toContain(formatModuleError(error))
+    expect(report).toContain("main.lua line 12")
   })
 })
