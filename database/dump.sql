@@ -2854,7 +2854,8 @@ CREATE TABLE log_instance_players (
     class wow_playable_class NOT NULL,
     race wow_playable_race NOT NULL,
     guild_id uuid,
-    faction wow_player_faction
+    faction wow_player_faction,
+    realm_id uuid
 );
 
 CREATE TABLE log_instance_raid_group_snapshots (
@@ -5926,6 +5927,9 @@ ALTER TABLE ONLY log_instance_players
 
 ALTER TABLE ONLY log_instance_players
     ADD CONSTRAINT log_instance_players_instance_id_fkey FOREIGN KEY (instance_id) REFERENCES log_instances(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY log_instance_players
+    ADD CONSTRAINT log_instance_players_realm_id_fkey FOREIGN KEY (realm_id) REFERENCES wow_server_realms(id) ON DELETE SET NULL NOT VALID;
 
 ALTER TABLE ONLY log_instance_raid_group_snapshots
     ADD CONSTRAINT log_instance_raid_group_snapshots_encounter_id_fkey FOREIGN KEY (encounter_id) REFERENCES log_instance_encounters(id) ON DELETE CASCADE;

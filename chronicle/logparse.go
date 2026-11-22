@@ -472,6 +472,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	var totalFinalizeDuration time.Duration
 	var totalDBInsertDuration time.Duration
 
+	participantCatalogs := make(participantRealmCatalogs)
 	for i, inst := range encountersState.Instances {
 		instanceID := uuid.New()
 		builder := newInstanceBuilder(encountersState.Units, instanceID)
@@ -546,6 +547,11 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			metrics.instanceFailures.Inc()
 			report.Instances = append(report.Instances, instReport)
 			continue
+		}
+
+		builder.realmCatalog, err = participantCatalogs.load(ctx, db, realmID, job.Args.TenantID, lg.Format.LogFormat)
+		if err != nil {
+			return err
 		}
 
 		// Compute the instance time range before persisting guilds so historical
@@ -1203,8 +1209,9 @@ func (w *WorkerLogParse) NextRetry(job *river.Job[ArgsLogParse]) time.Time {
 }
 
 type logParseInstanceBuilder struct {
-	db         *unitdb.Units
-	instanceID uuid.UUID
+	realmCatalog *participantRealmCatalog
+	db           *unitdb.Units
+	instanceID   uuid.UUID
 
 	categories map[guid.GUID]unitdb.Category
 	accounted  map[guid.GUID]struct{}
@@ -1272,6 +1279,7 @@ func (w *logParseInstanceBuilder) participate(ids ...guid.GUID) {
 				InstanceID: w.instanceID,
 				UnitGuid:   id,
 				Name:       playerData.Name,
+				RealmID:    w.realmCatalog.resolve(playerData.RawRealm),
 				Level:      level,
 				Class:      db2sdk.HeroClassToDB(playerData.HeroClass),
 				Race:       validRaceOrUnknown(playerData.Race),

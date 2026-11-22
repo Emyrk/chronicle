@@ -13408,7 +13408,7 @@ func (q *sqlQuerier) ListInferenceInstanceEncounters(ctx context.Context, instan
 }
 
 const listInferenceInstancePlayers = `-- name: ListInferenceInstancePlayers :many
-SELECT instance_id, unit_guid, name, level, class, race, guild_id, faction
+SELECT instance_id, unit_guid, name, level, class, race, guild_id, faction, realm_id
 FROM log_instance_players
 WHERE instance_id = $1
 ORDER BY name, unit_guid
@@ -13433,6 +13433,7 @@ func (q *sqlQuerier) ListInferenceInstancePlayers(ctx context.Context, instanceI
 			&i.Race,
 			&i.GuildID,
 			&i.Faction,
+			&i.RealmID,
 		); err != nil {
 			return nil, err
 		}
@@ -23553,7 +23554,7 @@ func (q *sqlQuerier) InstancePlayerSpecs(ctx context.Context, instanceID uuid.UU
 
 const instancePlayersByInstanceID = `-- name: InstancePlayersByInstanceID :many
 SELECT
-  instance_id, unit_guid, name, level, class, race, guild_id, faction
+  instance_id, unit_guid, name, level, class, race, guild_id, faction, realm_id
 FROM
   log_instance_players
 WHERE
@@ -23578,6 +23579,7 @@ func (q *sqlQuerier) InstancePlayersByInstanceID(ctx context.Context, instanceID
 			&i.Race,
 			&i.GuildID,
 			&i.Faction,
+			&i.RealmID,
 		); err != nil {
 			return nil, err
 		}
