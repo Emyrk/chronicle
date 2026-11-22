@@ -20,7 +20,7 @@ const (
 	v22AdvancedCombatFields = 19
 )
 
-type advancedCombatSnapshot struct  {
+type advancedCombatSnapshot struct {
 	unit             string
 	owner            string
 	currentHealth    int64
@@ -48,8 +48,13 @@ type transformReader struct {
 	combatLogVersion            int
 	advancedCombatFields        int
 	preserveAdvancedFieldLayout bool
-	buf                         bytes.Buffer
-	err                         error
+	// zoneArgs holds the last ZONE_CHANGE arguments and copyID the per-copy
+	// identifier observed in creature GUIDs for that zone's map. Repeated runs
+	// of one dungeon share a map ID but use a new copy ID after each reset.
+	zoneArgs []string
+	copyID   string
+	buf      bytes.Buffer
+	err      error
 }
 
 func newTransformReader(r io.Reader) *transformReader {
@@ -150,7 +155,11 @@ func (r *transformReader) transform(line string) (string, error) {
 		}
 		return prefix + "BLIZZARD_COMBAT_LOG_VERSION," + strings.Join(args, ","), nil
 	case "ZONE_CHANGE":
-		return prefix + "BLIZZARD_ZONE_CHANGE," + strings.Join(args, ","), nil
+		if len(args) > 0 && (len(r.zoneArgs) == 0 || r.zoneArgs[0] != args[0]) {
+			r.copyID = ""
+		}
+		r.zoneArgs = args
+		return r.zoneChangeLine(prefix), nil
 	case "COMBATANT_INFO":
 		if len(args) == 0 {
 			return "", fmt.Errorf("blizzard COMBATANT_INFO missing player GUID")
@@ -197,6 +206,7 @@ func (r *transformReader) transform(line string) (string, error) {
 		return "", err
 	}
 	base = append(base, source, sourceName, args[2], dest, destName, args[6])
+	copyChange := r.observeCopy(prefix, args[0], args[4])
 
 	body := args[8:]
 	spellPrefix := eventHasSpellPrefix(event)
@@ -236,15 +246,49 @@ func (r *transformReader) transform(line string) (string, error) {
 	if event == "SWING_DAMAGE_LANDED" {
 		converted = ""
 	}
-	if snapshot == nil {
-		return converted, nil
+	lines := make([]string, 0, 5)
+	if copyChange != "" {
+		lines = append(lines, copyChange)
 	}
+	if converted != "" {
+		lines = append(lines, converted)
+	}
+	if snapshot != nil {
+		lines = append(lines, snapshot.lines(prefix)...)
+	}
+	return strings.Join(lines, "\n"), nil
+}
 
-	telemetry := snapshot.lines(prefix)
-	if converted == "" {
-		return strings.Join(telemetry, "\n"), nil
+// zoneChangeLine renders the current zone, appending the observed copy ID.
+func (r *transformReader) zoneChangeLine(prefix string) string {
+	args := r.zoneArgs
+	if r.copyID != "" {
+		args = append(append([]string{}, args...), r.copyID)
 	}
-	return strings.Join(append([]string{converted}, telemetry...), "\n"), nil
+	return prefix + "BLIZZARD_ZONE_CHANGE," + strings.Join(args, ",")
+}
+
+// observeCopy returns a synthetic zone change when a creature GUID reveals a
+// new copy of the current zone's map. Creature GUIDs are
+// Creature-0-server-map-copy-entry-spawn; pets are ignored because they keep
+// the copy they were summoned in. Open-world maps also have copy IDs that
+// change with sharding, so only instanced zones are considered.
+func (r *transformReader) observeCopy(prefix string, guids ...string) string {
+	if len(r.zoneArgs) < 3 || r.zoneArgs[2] != "1" {
+		return ""
+	}
+	for _, raw := range guids {
+		if !strings.HasPrefix(raw, "Creature-") {
+			continue
+		}
+		parts := strings.Split(raw, "-")
+		if len(parts) != 7 || parts[3] != r.zoneArgs[0] || parts[4] == r.copyID {
+			continue
+		}
+		r.copyID = parts[4]
+		return r.zoneChangeLine(prefix)
+	}
+	return ""
 }
 
 // parseAdvancedCombatSnapshot uses infoGUID as the authoritative subject. It is

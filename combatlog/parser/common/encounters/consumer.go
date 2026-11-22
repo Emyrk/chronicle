@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parseoptions"
@@ -167,10 +168,15 @@ func (s *State) Process(m messages.Message) error {
 		}
 	case *messages.EncounterBoundary:
 		if typed.Active && typed.InstanceID != 0 {
-			for _, instance := range s.Instances {
-				if instance.MatchesZone(zone.Zone{MapID: typed.InstanceID}) {
-					s.CurrentInstance = instance
-					break
+			// Several copies of one map can exist in a log. Keep the current copy
+			// when it matches; otherwise prefer the most recently created one.
+			bounded := zone.Zone{MapID: typed.InstanceID}
+			if s.CurrentInstance == nil || !s.CurrentInstance.MatchesZone(bounded) {
+				for _, instance := range slices.Backward(s.Instances) {
+					if instance.MatchesZone(bounded) {
+						s.CurrentInstance = instance
+						break
+					}
 				}
 			}
 		} else if !typed.Active {
@@ -324,6 +330,10 @@ func (s *State) matchOrCreateInstance(z messages.Zone) {
 	matched := false
 	for _, inst := range s.Instances {
 		if !inst.MatchesZone(z.Zone) {
+			continue
+		}
+		if inst.CurrentZone.CopyDiffers(z.Zone) {
+			// A different copy of the same map is a new reset of the instance.
 			continue
 		}
 		if inst.CurrentZone.DifficultyDiffers(z.Zone) {

@@ -483,6 +483,9 @@ func (h *Hookable) UpdateZoneDifficulty(z zone.Zone) {
 	h.CurrentZone.MaxPlayers = z.MaxPlayers
 	h.CurrentZone.DynamicDifficulty = z.DynamicDifficulty
 	h.CurrentZone.SubZone = z.SubZone
+	if h.CurrentZone.CopyID == 0 {
+		h.CurrentZone.CopyID = z.CopyID
+	}
 	if h.currentFight != nil && h.currentFight.active() {
 		// Companion zone metadata can arrive after the pull has begun. Apply it
 		// to this fight too, without losing the initial snapshot for resolvers.

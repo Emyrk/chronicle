@@ -26,6 +26,10 @@ type Zone struct {
 	Ghost        bool
 	InstanceType string
 	IsInstance   bool
+	// CopyID identifies one copy of an instanced map, when the log reveals it
+	// (modern creature GUIDs). Zero means unknown. A different known copy of the
+	// same zone is a separate instance reset.
+	CopyID uint32
 
 	// Difficulty fields (populated by companion addon on 3.3.5a).
 	DifficultyIndex   int    // 1=10N, 2=25N, 3=10H, 4=25H
@@ -103,6 +107,11 @@ const (
 	// adopt the new info without creating a new hookable.
 	InfoUpdated
 )
+
+// CopyDiffers reports that both zones carry a known, different copy ID.
+func (z Zone) CopyDiffers(b Zone) bool {
+	return z.CopyID != 0 && b.CopyID != 0 && z.CopyID != b.CopyID
+}
 
 // HasDifficulty returns true if difficulty/size information has been set.
 func (z Zone) HasDifficulty() bool {
