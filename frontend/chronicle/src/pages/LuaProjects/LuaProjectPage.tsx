@@ -3,7 +3,8 @@ import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } 
 import { useQuery } from "@tanstack/react-query"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, Trash2, Upload, Users } from "lucide-react"
+import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, MoreHorizontal, Trash2, Upload, Users } from "lucide-react"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/DropdownMenu/DropdownMenu"
 import { modulePath, authorPath, createRelease, deleteProject, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
 import { ModuleIcon } from "./ModuleIcon"
 import { ModuleReleases, ReleasesTable, VersionPicker } from "./ModuleReleases"
@@ -164,27 +165,42 @@ function ModulePage({ projectId }: { projectId?: string }) {
     </div>
     <main className="w-full min-w-0 max-w-6xl space-y-6">
       <Link className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground" to="/modules"><ArrowLeft className="size-4" /> All modules</Link>
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b pb-5">
-        <div className="min-w-0 flex-1">
-          <h1 className="flex items-center gap-3 text-2xl font-semibold"><ModuleIcon name={refIcon} className="size-6 text-muted-foreground" />{project.name}
-            <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span></h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {project.author ? <>by <Link to={authorPath(project.author)} className="font-mono hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
-            {can.edit && <span className="font-mono"> · /{project.slug} · revision {project.revision}</span>} · updated {formatDate(project.updated_at)}
-          </p>
-          <ModuleDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
-          <ModuleFlavorTags project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
+      {/* Identity and actions on one row, then the description: like a repository header. */}
+      <header className="space-y-3 border-b pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
+          <div className="flex min-w-0 items-start gap-3">
+            <span className="mt-0.5 flex size-11 shrink-0 items-center justify-center rounded-lg border border-border bg-muted/40">
+              <ModuleIcon name={refIcon} className="size-6 text-muted-foreground" />
+            </span>
+            <div className="min-w-0">
+              <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xl font-semibold leading-tight">
+                <span className="break-all">{project.name}</span>
+                <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span>
+              </h1>
+              <p className="mt-1 text-sm text-muted-foreground">
+                {project.author ? <>by <Link to={authorPath(project.author)} className="font-medium text-foreground/80 hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
+                <span className="mx-1.5">·</span>updated {formatDate(project.updated_at)}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <ModuleStar key={project.id} project={project} canUse={can.use} />
+            {project.kind === "panel" && can.edit && <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-darker px-4 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Workshop</Link>}
+            {can.edit && <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button type="button" aria-label="More actions" className="inline-flex size-9 items-center justify-center rounded-md border border-border hover:bg-accent"><MoreHorizontal className="size-4" /></button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48">
+                <DropdownMenuItem onSelect={() => show({ tab: tab === "contributors" ? undefined : "contributors" })}><Users /> Contributors</DropdownMenuItem>
+                {can.manage && <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem variant="destructive" disabled={busy} onSelect={() => void removeProject()}><Trash2 /> Delete module</DropdownMenuItem>
+                </>}
+              </DropdownMenuContent>
+            </DropdownMenu>}
+          </div>
         </div>
-        <div className="flex flex-wrap items-start gap-2">
-          <ModuleStar key={project.id} project={project} canUse={can.use} />
-          {can.edit && <button type="button" aria-pressed={tab === "contributors"} onClick={() => show({ tab: tab === "contributors" ? undefined : "contributors" })}
-            className={`inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm font-medium hover:bg-accent ${tab === "contributors" ? "border-primary/50 bg-muted" : "border-border"}`}>
-            <Users className="size-4" /> Contributors</button>}
-          {can.manage && <button type="button" disabled={busy} onClick={() => void removeProject()}
-            className="inline-flex items-center gap-2 rounded-md border border-destructive/40 px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 disabled:opacity-50">
-            <Trash2 className="size-4" /> Delete module</button>}
-          {project.kind === "panel" && can.edit && <Link className="inline-flex items-center gap-2 rounded-md bg-primary-darker px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> Open in Module Workshop</Link>}
-        </div>
+        <ModuleDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
       </header>
       {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
         This module has no named address yet. <Link className="text-primary underline underline-offset-2" to="/modules">Claim an author name</Link> to publish it at /modules/&lt;you&gt;/{project.slug}.</p>}
@@ -235,6 +251,10 @@ function ModulePage({ projectId }: { projectId?: string }) {
               <div><dt className="text-muted-foreground">Capabilities</dt><dd className="mt-1 font-mono">{about.capabilities.join(", ") || "None"}</dd></div>
               <div><dt className="text-muted-foreground">Replays</dt><dd className="mt-1">{about.streamScope === "instance" ? "Whole instance" : "Selected encounters"}{about.maxEvents !== undefined && `, up to ${about.maxEvents.toLocaleString()} events`}</dd></div>
             </dl> : <p className="text-xs text-muted-foreground">{ref ? "Details appear once the files load." : "Details appear once a build exists."}</p>}
+            <ModuleFlavorTags project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
+            {can.edit && <dl className="space-y-2 text-xs">
+              <div><dt className="text-muted-foreground">Address</dt><dd className="mt-1 font-mono">/{project.slug} · revision {project.revision}</dd></div>
+            </dl>}
             {/* Cost stays with the people building the module; visitors never see it. */}
             {can.edit && project.kind === "panel" && <ModuleAiUsage projectId={project.id} />}
             <p className="border-t border-border pt-3 text-xs text-muted-foreground">Created {formatDate(project.created_at)} · <Link className="text-primary underline-offset-2 hover:underline" to="/modules/api">API reference</Link></p>

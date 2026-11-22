@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, X } from "lucide-react"
+import { Check, Info, X } from "lucide-react"
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { updateProject, type LuaProject } from "./api"
 import { errorMessage } from "./moduleUi"
@@ -30,12 +30,19 @@ export function ModuleFlavorTags({ project, canEdit, onSaved }: { project: LuaPr
 
   const shown = canEdit ? MODULE_FLAVOR_TAGS : MODULE_FLAVOR_TAGS.filter(({ tag }) => flavor.includes(tag))
   if (shown.length === 0) return null
-  return <div className="mt-3">
-    <div className="flex flex-wrap items-center gap-1.5" aria-label="Flavor tags">
+  return <div className="text-xs">
+    <div className="flex items-center gap-1 text-muted-foreground">
+      Listed on
+      <HintTooltip>
+        <TooltipTrigger asChild><button type="button" aria-label="About listing tags" className="hover:text-foreground"><Info className="size-3" /></button></TooltipTrigger>
+        <TooltipContent className="max-w-64">Modules are only listed on sites that use every selected tag. None selected lists it everywhere.</TooltipContent>
+      </HintTooltip>
+    </div>
+    <div className="mt-1 flex flex-wrap items-center gap-1.5" aria-label="Flavor tags">
       {shown.map(({ tag, label, hint }) => {
         const selected = flavor.includes(tag)
         const onSite = site.includes(tag)
-        const className = `inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs ${selected
+        const className = `inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs ${selected
           ? onSite ? "border-sky-400/60 bg-sky-400/10 text-sky-300" : "border-destructive/60 bg-destructive/10 text-destructive"
           : "border-dashed border-border text-muted-foreground"} ${canEdit && onSite ? "hover:border-sky-400/60" : ""} disabled:cursor-not-allowed disabled:opacity-60`
         const content = <>{selected && (onSite ? <Check className="size-3" /> : <X className="size-3" />)}{label}</>
@@ -49,7 +56,6 @@ export function ModuleFlavorTags({ project, canEdit, onSaved }: { project: LuaPr
         </HintTooltip>
       })}
     </div>
-    {canEdit && <p className="mt-1.5 text-xs text-muted-foreground">Modules are only listed on sites that use every selected tag. None selected lists it everywhere.</p>}
     {!fitsSite(project, site) && <p className="mt-1.5 text-xs text-destructive">This site does not use every tag, so the module is not listed here.</p>}
     {error && <p role="alert" className="mt-1.5 text-xs text-destructive">{error}</p>}
   </div>
