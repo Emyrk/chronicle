@@ -271,9 +271,10 @@ func (r *transformReader) zoneChangeLine(prefix string) string {
 // observeCopy returns a synthetic zone change when a creature GUID reveals a
 // new copy of the current zone's map. Creature GUIDs are
 // Creature-0-server-map-copy-entry-spawn; pets are ignored because they keep
-// the copy they were summoned in.
+// the copy they were summoned in. Open-world maps also have copy IDs that
+// change with sharding, so only instanced zones are considered.
 func (r *transformReader) observeCopy(prefix string, guids ...string) string {
-	if len(r.zoneArgs) == 0 {
+	if len(r.zoneArgs) < 3 || r.zoneArgs[2] != "1" {
 		return ""
 	}
 	for _, raw := range guids {

@@ -49,6 +49,22 @@ func TestTransformV22ZoneChangeCarriesCreatureCopy(t *testing.T) {
 	}, zones)
 }
 
+func TestTransformV22IgnoresOpenWorldCopies(t *testing.T) {
+	t.Parallel()
+
+	// Open-world shards change the copy field; they must not look like resets.
+	input := strings.Join([]string{
+		`11/15/2026 23:40:00.0000  COMBAT_LOG_VERSION,22,ADVANCED_LOG_ENABLED,1,BUILD_VERSION,1.60.1,PROJECT_ID,18`,
+		`11/15/2026 23:40:01.0000  ZONE_CHANGE,1,"Kalimdor",0`,
+		`11/15/2026 23:40:02.0000  UNIT_DIED,0000000000000000,nil,0x80000000,0x80000000,Creature-0-7069-1-42635-255070-00007A354D,"Skeletal Warder",0x10a48,0x80000000,0`,
+		`11/15/2026 23:40:03.0000  UNIT_DIED,0000000000000000,nil,0x80000000,0x80000000,Creature-0-6821-1-1650-255070-00007A354E,"Skeletal Warder",0x10a48,0x80000000,0`,
+	}, "\n")
+	converted, err := io.ReadAll(newTransformReader(strings.NewReader(input)))
+	require.NoError(t, err)
+	require.Equal(t, 1, strings.Count(string(converted), "BLIZZARD_ZONE_CHANGE"))
+	require.Contains(t, string(converted), `BLIZZARD_ZONE_CHANGE,1,"Kalimdor",0`+"\n")
+}
+
 func TestV22CreatureCopySplitsInstances(t *testing.T) {
 	t.Parallel()
 
