@@ -1,3 +1,4 @@
+import { dungeonMeshSHA256, encounterReferenceY, type EncounterHeightReference } from "./encounterHeightCalibration";
 import * as THREE from "three";
 import { OrbitControls } from "three/examples/jsm/controls/OrbitControls.js";
 import type { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
@@ -403,6 +404,8 @@ export interface MapSceneFollowUnit {
  * same; a new one rebuilds the track.
  */
 export interface MapSceneFollowSource {
+  /** Candidate only: the loaded mesh digest must authorize it before inference. */
+  heightReference?: EncounterHeightReference;
   /** What the data is, apart from how far it has streamed: a new key rebuilds the track; growth alone does not. */
   key: string;
   startMs: number;
@@ -457,6 +460,7 @@ interface DungeonMeshCave {
 }
 
 interface DungeonMesh {
+  sha256?: string;
   url: string;
   /** The entry's world bounds: the plan layer's world <-> scene transform. */
   bounds: WowMapFloorBounds;
@@ -2270,6 +2274,7 @@ export class MapScene3D {
         },
       })),
       scale: mesh.scale,
+      referenceY: encounterReferenceY(source.heightReference, mesh.sha256, mesh.scale),
       candidatesAt: (x, z) => this.floorCandidates(x, z),
     });
     const slice = () => {
@@ -2336,7 +2341,7 @@ export class MapScene3D {
   private async loadDungeonMesh(request: DungeonMeshRequest): Promise<DungeonMesh | null> {
     const parsed = await parsedDungeonMesh(request);
     if (!parsed) return null;
-    return { url: request.url, bounds: request.bounds, group: parsed.template.clone(), caves: parsed.caves, liquids: parsed.liquids, scale: parsed.scale, radius: parsed.radius };
+    return { url: request.url, sha256: parsed.sha256, bounds: request.bounds, group: parsed.template.clone(), caves: parsed.caves, liquids: parsed.liquids, scale: parsed.scale, radius: parsed.radius };
   }
 
   // Shows the mesh or the tiles, re-grounds every unit and re-applies the
@@ -5786,6 +5791,7 @@ function gltfLoader(): Promise<GLTFLoader> {
 // parse and the BVH build. Never disposed by a scene; a scene's renderer
 // frees its own GPU copies when it is disposed.
 interface ParsedDungeonMesh {
+  sha256?: string;
   template: THREE.Group;
   caves: DungeonMeshCave[];
   /** Water (and other liquid) planes: units stand on them, but they never block the camera. */
@@ -5816,6 +5822,8 @@ async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDung
   try {
     // The bytes may already be on their way: the map prefetches them while the encounter processes.
     const [loader, { MeshBVH }, bytes] = await Promise.all([gltfLoader(), import("three-mesh-bvh"), dungeonMeshBytes(request.url)]);
+    // Hash the exact buffer before parsing/releasing it; cache provenance with geometry.
+    const sha256 = await dungeonMeshSHA256(bytes);
     const gltf = await loader.parseAsync(bytes, THREE.LoaderUtils.extractUrlBase(request.url));
     releaseDungeonMeshBytes(request.url);
     for (const node of gltf.scene.children) node.position.set(0, 0, 0);
@@ -5852,7 +5860,7 @@ async function parseDungeonMesh(request: DungeonMeshRequest): Promise<ParsedDung
     });
     if (caves.length === 0) return null;
     const radius = new THREE.Box3().setFromObject(template).getBoundingSphere(new THREE.Sphere()).radius;
-    return { template, caves, liquids, scale: placement.scale, radius };
+    return { template, caves, liquids, scale: placement.scale, radius, sha256 };
   } catch (error) {
     console.warn("Dungeon mesh unavailable, keeping the map tiles", request.url, error);
     return null;

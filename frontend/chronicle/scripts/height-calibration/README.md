@@ -133,6 +133,28 @@ The synthetic tests include school conversion, explicit map mapping, snapshot
 deduplication/facing, incomplete encounters, solver reference selection and missing
 node rejection. No private fixture or timing-dependent assertions enter tests.
 
+## Runtime follow-up: applying reviewed anchors
+
+Runtime references apply only to a single selected matching encounter in the
+verified canonical dataset, with explicit world coordinates and an exact SHA-256
+match against the bytes parsed into the displayed mesh. Missing identity or a
+stale mesh revision keeps ordinary inference. The actual active encounter must
+match the reviewed name, map and enemy entry; the artwork's representative
+encounter is not sufficient.
+
+Whole-run and multi-encounter selections deliberately retain ordinary inference:
+their merged movement does not preserve the provenance needed to apply one
+encounter's seed safely. Logged Z remains authoritative. Reviewed references never
+populate raw `sample.z` or floor telemetry, and do not change downward-drop costs.
+Resolved tracks are reused in memory across seeks; reviewed metadata is durable in
+Git, while derived tracks are recomputed after a reload. No database is required.
+
+The lab's Current mode exercises this production path when the fixture carries
+matching dataset/coordinate metadata and the exact reviewed mesh; its reference
+modes instead display precomputed inferred tracks. Historical fixtures without
+provenance keep the old fallback. No new Dalaran mesh is published by this change:
+the reference stays dormant until the exact reviewed asset is available in replay.
+
 ## Important limitations
 
 - This is a narrow advanced-log fixture adapter, **not the full combat parser**.
