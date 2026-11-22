@@ -50,6 +50,10 @@ jobs:
         working-directory: frontend/chronicle
         run: pnpm vitest run --project unit
 
+      - name: Check Lua API reference is generated
+        working-directory: frontend/chronicle
+        run: pnpm run check:lua-api
+
   panel-sdk-package:
     name: chronicle-panel-sdk (snapshots + typecheck + test + build)
     runs-on: ubuntu-latest

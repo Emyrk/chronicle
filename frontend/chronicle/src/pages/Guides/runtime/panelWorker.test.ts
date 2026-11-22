@@ -221,6 +221,37 @@ describe("Lua panel worker time range", () => {
     expect(messages).toEqual([])
   })
 
+  it("requests spells after a flush and runs GetSpell callbacks when the host answers", () => {
+    const messages: unknown[] = []
+    const handle = createPanelWorkerHandler((message) => messages.push(message))
+    handle({ type: "start", entrypoint: "main.lua", capabilities: ["ui"], streams: [], sources: { "main.lua": `
+      local label = CreateFrame("FontString", "label", UIParent)
+      Chronicle.GetSpell(116, function(spell) label:SetText(spell and spell.name or "unknown") end)
+      Chronicle.GetSpell(5, function(spell) label:SetText(spell and spell.name or "unknown") end)
+    ` } })
+    expect(messages).toContainEqual({ type: "spell-request", ids: [116, 5] })
+    messages.length = 0
+    // Host answers are untrusted shapes: bad names become nil, bad icons are dropped.
+    handle({ type: "spell-info", spells: [{ id: 116, spell: { id: 116, name: "Frostbolt", icon: "../x" } }, { id: 5, spell: { id: 5, name: "" } }] })
+    expect(messages).toContainEqual(expect.objectContaining({ type: "batch", operations: [
+      { op: "set", id: "label", props: { text: "Frostbolt" } },
+      { op: "set", id: "label", props: { text: "unknown" } },
+    ] }))
+  })
+
+  it("closes Breakout frames and reports OnClose errors with their phase", () => {
+    const messages: unknown[] = []
+    const handle = createPanelWorkerHandler((message) => messages.push(message))
+    handle({ type: "start", entrypoint: "main.lua", capabilities: ["ui", "input"], streams: [], sources: { "main.lua": `
+      local details = CreateFrame("Breakout", "details")
+      details:Show()
+      details:SetScript("OnClose", function() error("boom") end)
+    ` } })
+    messages.length = 0
+    handle({ type: "close", nodeId: "details" })
+    expect(messages).toContainEqual(expect.objectContaining({ type: "error", phase: "close", message: expect.stringMatching(/boom/) }))
+  })
+
   it("reports errors in OnTimeRangeChanged with their phase", () => {
     const messages: unknown[] = []
     const handle = createPanelWorkerHandler((message) => messages.push(message))

@@ -79,7 +79,7 @@ ${calls.join("\n")}
 
 /** Built-in CreateFrame types that are not widgets, with their LuaLS classes. */
 const BASE_FRAME_TYPES: ReadonlyArray<readonly [string, string]> = [
-  ["Frame", "ChronicleFrame"], ["FontString", "ChronicleFontString"], ["Texture", "ChronicleTexture"], ["Button", "ChronicleButton"],
+  ["Frame", "ChronicleFrame"], ["FontString", "ChronicleFontString"], ["Texture", "ChronicleTexture"], ["Button", "ChronicleButton"], ["Breakout", "ChronicleBreakout"],
 ]
 
 export const WIDGET_DEFINITIONS_BEGIN = "-- BEGIN GENERATED WIDGET DEFINITIONS"
