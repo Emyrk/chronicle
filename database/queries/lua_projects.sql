@@ -41,9 +41,10 @@ SELECT p.* FROM lua_projects p JOIN addon_authors a ON a.user_id = p.owner_id
 WHERE a.name = @author AND p.slug = @slug;
 
 -- name: ListPublicLuaProjects :many
--- Modules with a release people can still run, most tracked first, then newest release.
+-- Author-opted-in modules with a runnable release, most tracked first, then newest release.
 SELECT p.* FROM lua_projects p
 JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL
+WHERE p.published
 ORDER BY (SELECT count(*) FROM lua_project_stars s WHERE s.project_id = p.id) DESC, latest.published_at DESC LIMIT 100;
 
 -- name: GetPublicLuaProject :one
@@ -198,6 +199,7 @@ SELECT project_id, count(*) AS stars FROM lua_project_stars WHERE project_id = A
 SELECT project_id FROM lua_project_stars WHERE user_id = @user_id AND project_id = ANY(@project_ids::uuid[]);
 
 -- name: SetLuaProjectSettings :one
--- Leaves updated_at alone: it dates main. A null flavor keeps the current tags.
-UPDATE lua_projects SET description = @description, flavor = COALESCE(sqlc.narg('flavor')::text[], flavor)
+-- Leaves updated_at alone: it dates main. Null settings keep their current values.
+UPDATE lua_projects SET description = @description, flavor = COALESCE(sqlc.narg('flavor')::text[], flavor),
+  published = COALESCE(sqlc.narg('published')::boolean, published)
 WHERE id = @id RETURNING *;

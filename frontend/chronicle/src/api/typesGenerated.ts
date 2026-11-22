@@ -3504,7 +3504,7 @@ export interface InstanceReport {
     readonly db_insert_duration_ms: Duration;
     readonly encounter_count: number;
     /**
-     * UnknownUnits groups finalized uncategorized GUIDs by entry ID (zero when unavailable).
+     * UnknownUnits groups finalized uncategorized GUIDs with valid, nonzero entry IDs.
      */
     readonly unknown_units?: Record<number, UnknownUnit>;
 }
@@ -4849,6 +4849,10 @@ export interface LuaProject {
      * Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
      */
     readonly description: string;
+    /**
+     * Published opts into discovery only. All modules remain public by direct link.
+     */
+    readonly published: boolean;
     /**
      * Author is the owner's module author name, the first part of /modules/<author>/<slug>. Absent until claimed.
      */
@@ -7411,6 +7415,10 @@ export interface UpdateLuaProjectRequest {
      * added or removed.
      */
     readonly flavor?: readonly string[];
+    /**
+     * Published is owner-only; omitted preserves the current discovery setting.
+     */
+    readonly published?: boolean;
 }
 
 // From chroniclesdk/user.go

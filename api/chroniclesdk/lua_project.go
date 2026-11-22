@@ -52,6 +52,8 @@ type LuaProject struct {
 	Revision int64     `json:"revision"`
 	// Description is a short summary, up to LuaProjectDescriptionMax characters. It lives outside the manifest.
 	Description string `json:"description"`
+	// Published opts into discovery only. All modules remain public by direct link.
+	Published bool `json:"published"`
 	// Author is the owner's module author name, the first part of /modules/<author>/<slug>. Absent until claimed.
 	Author string `json:"author,omitempty"`
 	// Flavor lists the LuaProjectFlavorTags the module needs. Sites missing any of them leave it out of listings.
@@ -78,6 +80,8 @@ type UpdateLuaProjectRequest struct {
 	// Flavor replaces the module's flavor tags; omitted keeps them. Only tags the current site has may be
 	// added or removed.
 	Flavor []string `json:"flavor,omitempty"`
+	// Published is owner-only; omitted preserves the current discovery setting.
+	Published *bool `json:"published,omitempty"`
 }
 
 // LuaProjectStar answers a star or unstar.

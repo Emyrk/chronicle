@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { channelSha, createProject, createRelease, deleteProject, deleteRelease, getProjectQuota, getPublicProject, latestRelease, listProjects, publicPackageURL, uploadDraft } from "./api"
+import { channelSha, createProject, createRelease, deleteProject, deleteRelease, getProjectQuota, getPublicProject, latestRelease, listProjects, publicPackageURL, updateProject, uploadDraft } from "./api"
 
 const response = (body: unknown = {}) => ({ ok: true, status: 200, json: async () => body })
 
@@ -24,6 +24,19 @@ describe("Lua project authoring API", () => {
     await deleteProject("a/b")
     expect(fetch.mock.calls[0]).toEqual(["/api/v1/me/lua-projects/quota", { credentials: "include" }])
     expect(fetch.mock.calls[1]).toEqual(["/api/v1/me/lua-projects/a%2Fb", expect.objectContaining({ credentials: "include", method: "DELETE" })])
+  })
+
+  it("opts in and out of discovery explicitly, while unrelated settings omit published", async () => {
+    const fetch = vi.fn().mockResolvedValue(response())
+    vi.stubGlobal("fetch", fetch)
+    await updateProject("abc", { description: "Public panel", published: true })
+    await updateProject("abc", { description: "Public panel", published: false })
+    await updateProject("abc", { description: "New description" })
+    expect(fetch.mock.calls[0]).toEqual(["/api/v1/me/lua-projects/abc", expect.objectContaining({
+      method: "PATCH", body: JSON.stringify({ description: "Public panel", published: true }),
+    })])
+    expect(JSON.parse(fetch.mock.calls[1][1].body as string)).toEqual({ description: "Public panel", published: false })
+    expect(JSON.parse(fetch.mock.calls[2][1].body as string)).not.toHaveProperty("published")
   })
 
   it("uploads raw tar with a revision guard and no form encoding", async () => {

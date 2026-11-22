@@ -36,9 +36,9 @@ describe("Lua panel discovery", () => {
     expect(trackedLuaPanelOptions([{ ...entry, author: undefined, main: undefined }]).map(option => option.label)).toEqual(["Pumper"])
 
     const projects = [
-      { id: id("2"), owner_id: "o", kind: "panel", name: "Released", author: "someone", description: "", slug: "r", revision: 1, stars: 9, starred: false,
+      { id: id("2"), owner_id: "o", published: false, kind: "panel", name: "Released", author: "someone", description: "", slug: "r", revision: 1, stars: 9, starred: false,
         releases: [release("v2")], created_at: "", updated_at: "" },
-      { id: id("3"), owner_id: "o", kind: "guide", name: "Guide", slug: "g", description: "", revision: 1, stars: 0, starred: false,
+      { id: id("3"), owner_id: "o", published: false, kind: "guide", name: "Guide", slug: "g", description: "", revision: 1, stars: 0, starred: false,
         releases: [release("v1")], created_at: "", updated_at: "" },
     ] as LuaProject[]
     expect(publicLuaPanelOptions(projects)).toEqual([{ name: "someone/Released", channel: "release", ref: luaPanelRef(id("2"), "release"), icon: "swords", label: "someone/Released", description: "", stars: 9 }])

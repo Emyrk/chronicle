@@ -9,6 +9,7 @@ import { modulePath, authorPath, createRelease, deleteProject, deleteRelease, la
 import { ModuleIcon } from "./ModuleIcon"
 import { ModuleReleases, ReleasesTable, VersionPicker } from "./ModuleReleases"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
+import { ModulePublishing, PublishedBadge } from "./ModulePublishing"
 import { ModuleDescription } from "./ModuleDescription"
 import { ModuleFlavorTags } from "./ModuleFlavorTags"
 import { ModuleStar } from "./ModuleStar"
@@ -176,6 +177,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
               <h1 className="flex flex-wrap items-center gap-x-3 gap-y-1 text-2xl font-semibold leading-tight">
                 <span className="break-all">{project.name}</span>
                 <span className="rounded-full border border-border px-2 py-0.5 text-xs font-normal text-muted-foreground">{kindLabel(project.kind)}</span>
+                {can.edit && <PublishedBadge published={!!project.published} />}
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
                 {project.author ? <>by <Link to={authorPath(project.author)} className="font-medium text-foreground/80 hover:text-foreground hover:underline">{project.author}</Link></> : "Unnamed author"}
@@ -185,7 +187,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ModuleStar key={project.id} project={project} canUse={can.use} />
-            {project.kind === "panel" && can.edit && <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-darker px-4 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /> <span className="hidden sm:inline">Open in</span> Workshop</Link>}
+            {project.kind === "panel" && can.edit && <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-darker px-4 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /><span><span className="hidden sm:inline">Open in </span>Workshop</span></Link>}
             {can.edit && <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <button type="button" aria-label="More actions" className="inline-flex size-9 items-center justify-center rounded-md border border-border hover:bg-accent"><MoreHorizontal className="size-4" /></button>
@@ -203,7 +205,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
         <ModuleDescription key={project.id} project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
       </header>
       {can.manage && !project.author && <p className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-        This module has no named address yet. <Link className="text-primary underline underline-offset-2" to="/modules">Claim an author name</Link> to publish it at /modules/&lt;you&gt;/{project.slug}.</p>}
+        This module has no named address yet. <Link className="text-primary underline underline-offset-2" to="/modules">Claim an author name</Link> to give it an address at /modules/&lt;you&gt;/{project.slug}.</p>}
       {error && <p role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-sm text-destructive">{error}{error.includes("revision") && " Reload the project before retrying."}</p>}
       {notice && <p role="status" className="rounded-md border border-emerald-600/30 bg-emerald-600/10 p-3 text-sm">{notice}</p>}
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_18rem]">
@@ -213,7 +215,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
             onView={next => show({ ref: next })} onDelete={removeRelease} onClose={() => show({})} /> :
           !ref || !sha ? <div className={`${card} text-sm text-muted-foreground`}>{can.edit
             ? <>No files yet. {project.kind === "panel" ? "Open the Module Workshop and save to main, or upload" : "Upload"} a tar archive from Releases.</>
-            : "This module has not been published yet."}</div> : <>
+            : "This module has no source files yet."}</div> : <>
             <section aria-label="Files" className="overflow-hidden rounded-xl border border-border/80 bg-card shadow-sm">
               <div className="flex flex-wrap items-center gap-3 border-b border-border bg-muted/30 px-4 py-2">
                 <VersionPicker project={project} latest={latest} viewing={ref} onView={next => show({ ref: next })} />
@@ -251,6 +253,8 @@ function ModulePage({ projectId }: { projectId?: string }) {
               <div><dt className="text-muted-foreground">Capabilities</dt><dd className="mt-1 font-mono">{about.capabilities.join(", ") || "None"}</dd></div>
               <div><dt className="text-muted-foreground">Replays</dt><dd className="mt-1">{about.streamScope === "instance" ? "Whole instance" : "Selected encounters"}{about.maxEvents !== undefined && `, up to ${about.maxEvents.toLocaleString()} events`}</dd></div>
             </dl> : <p className="text-xs text-muted-foreground">{ref ? "Details appear once the files load." : "Details appear once a build exists."}</p>}
+            {/* Where it shows up: publishing puts it in the gallery, flavor tags choose which sites. */}
+            <ModulePublishing key={`publishing-${project.id}`} project={project} canEdit={can.edit} onSaved={() => void pageQuery.refetch()} />
             <ModuleFlavorTags project={project} canEdit={can.release} onSaved={() => void pageQuery.refetch()} />
             {can.edit && <dl className="space-y-2 text-xs">
               <div><dt className="text-muted-foreground">Address</dt><dd className="mt-1 font-mono">/{project.slug} · revision {project.revision}</dd></div>

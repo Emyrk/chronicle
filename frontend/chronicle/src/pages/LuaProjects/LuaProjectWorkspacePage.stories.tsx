@@ -66,7 +66,7 @@ const DRAFT_ZIP = zipSync({ "project.json": strToU8(MANIFEST), "main.lua": strTo
 
 function project(overrides: Partial<LuaProject> = {}): LuaProject {
   return {
-    id: PROJECT_ID, owner_id: "user-1", kind: "panel", name: "Raid Damage Meter", slug: "raid-damage-meter", revision: 7,
+    id: PROJECT_ID, owner_id: "user-1", published: false, kind: "panel", name: "Raid Damage Meter", slug: "raid-damage-meter", revision: 7,
     description: "Damage done per player.", author: "forgewright", stars: 12, starred: true,
     created_at: "2026-10-01T00:00:00Z", updated_at: "2026-11-18T00:00:00Z",
     main: { sha256: MAIN_SHA, updated_at: "2026-11-18T00:00:00Z" },

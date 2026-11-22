@@ -143,7 +143,7 @@ var luaReleaseTag = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,31}$`)
 
 // luaProjectResponse builds the API project; authors maps the owner and release publishers to their author names.
 func luaProjectResponse(p database.LuaProject, releases []database.LuaProjectRelease, authors map[uuid.UUID]string) chroniclesdk.LuaProject {
-	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision, Description: p.Description,
+	result := chroniclesdk.LuaProject{ID: p.ID, OwnerID: p.OwnerID, Kind: p.Kind, Name: p.Name, Slug: p.Slug, Revision: p.Revision, Description: p.Description, Published: p.Published,
 		Flavor: p.Flavor, Author: authors[p.OwnerID], Releases: make([]chroniclesdk.LuaProjectRelease, 0, len(releases)), CreatedAt: p.CreatedAt.Time, UpdatedAt: p.UpdatedAt.Time}
 	if p.DraftHash.Valid {
 		result.Main = &chroniclesdk.LuaProjectMain{SHA256: p.DraftHash.String, Icon: p.DraftIcon.String, UpdatedAt: p.UpdatedAt.Time}
@@ -567,7 +567,8 @@ func luaProjectFitsSite(p database.LuaProject, site database.WoWFlavor) bool {
 	return true
 }
 
-// UpdateLuaProject sets an module's description and flavor tags. Anyone who may release the module may describe it.
+// UpdateLuaProject changes module settings. Release permission allows description and flavor edits;
+// only the owner may opt into or out of discovery.
 func (a *API) UpdateLuaProject(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	id, ok := luaProjectID(w, r)
@@ -584,20 +585,30 @@ func (a *API) UpdateLuaProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var flavor []string
-	if req.Flavor != nil {
+	if req.Flavor != nil || req.Published != nil {
 		current, err := a.Opts.Zed.GetLuaProject(ctx, id)
 		if err != nil {
 			httpapi.InternalServerError(w, err)
 			return
 		}
-		var message string
-		flavor, message = luaProjectFlavor(current.Flavor, req.Flavor, a.resolvedSiteFlavor(ctx))
-		if message != "" {
-			httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: message})
+		if req.Published != nil && current.OwnerID != chronauth.MustAuthenticatedClaims(ctx).Subject {
+			httpapi.Write(ctx, w, http.StatusForbidden, chroniclesdk.Response{Message: "Only the module owner can change discovery publication."})
 			return
 		}
+		if req.Flavor != nil {
+			var message string
+			flavor, message = luaProjectFlavor(current.Flavor, req.Flavor, a.resolvedSiteFlavor(ctx))
+			if message != "" {
+				httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: message})
+				return
+			}
+		}
 	}
-	p, err := a.Opts.Zed.SetLuaProjectSettings(ctx, database.SetLuaProjectSettingsParams{ID: id, Description: description, Flavor: flavor})
+	var published pgtype.Bool
+	if req.Published != nil {
+		published = pgtype.Bool{Bool: *req.Published, Valid: true}
+	}
+	p, err := a.Opts.Zed.SetLuaProjectSettings(ctx, database.SetLuaProjectSettingsParams{ID: id, Description: description, Flavor: flavor, Published: published})
 	if err != nil {
 		httpapi.InternalServerError(w, err)
 		return

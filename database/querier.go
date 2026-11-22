@@ -1047,7 +1047,7 @@ type sqlcQuerier interface {
 	ListProofSubjectClasses(ctx context.Context, requestID uuid.UUID) ([]ListProofSubjectClassesRow, error)
 	ListProofSubjects(ctx context.Context, requestID uuid.UUID) ([]ProofRequestSubject, error)
 	ListPublicBlogFeedback(ctx context.Context, arg ListPublicBlogFeedbackParams) ([]BlogFeedback, error)
-	// Modules with a release people can still run, most tracked first, then newest release.
+	// Author-opted-in modules with a runnable release, most tracked first, then newest release.
 	ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error)
 	ListRaidCompositionsByUser(ctx context.Context, arg ListRaidCompositionsByUserParams) ([]RaidComposition, error)
 	// Load ranking rows for a specific instance directly from encounter_dps_rankings.
@@ -1441,7 +1441,7 @@ type sqlcQuerier interface {
 	SetLeaderboardOperationMissingDates(ctx context.Context, arg SetLeaderboardOperationMissingDatesParams) error
 	SetLeaderboardWorkerTimeouts(ctx context.Context, statementTimeout string) error
 	SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDraftParams) (LuaProject, error)
-	// Leaves updated_at alone: it dates main. A null flavor keeps the current tags.
+	// Leaves updated_at alone: it dates main. Null settings keep their current values.
 	SetLuaProjectSettings(ctx context.Context, arg SetLuaProjectSettingsParams) (LuaProject, error)
 	SetPanelLayoutCode(ctx context.Context, arg SetPanelLayoutCodeParams) (int64, error)
 	SetPrimaryUserCharacter(ctx context.Context, arg SetPrimaryUserCharacterParams) (UserCharacterLink, error)

@@ -21009,7 +21009,7 @@ func (q *sqlQuerier) CountReadyLuaProjectArtifactGarbage(ctx context.Context) (i
 }
 
 const createLuaProject = `-- name: CreateLuaProject :one
-INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES ($1, $2, $3, $4) RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor
+INSERT INTO lua_projects (owner_id, kind, name, slug) VALUES ($1, $2, $3, $4) RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor, published
 `
 
 type CreateLuaProjectParams struct {
@@ -21040,6 +21040,7 @@ func (q *sqlQuerier) CreateLuaProject(ctx context.Context, arg CreateLuaProjectP
 		&i.DraftIcon,
 		&i.Description,
 		&i.Flavor,
+		&i.Published,
 	)
 	return i, err
 }
@@ -21149,7 +21150,7 @@ func (q *sqlQuerier) DeleteLuaProjectRelease(ctx context.Context, arg DeleteLuaP
 }
 
 const getLuaProject = `-- name: GetLuaProject :one
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor FROM lua_projects WHERE id = $1
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor, published FROM lua_projects WHERE id = $1
 `
 
 // Callers check the project permission in SpiceDB first.
@@ -21169,6 +21170,7 @@ func (q *sqlQuerier) GetLuaProject(ctx context.Context, id uuid.UUID) (LuaProjec
 		&i.DraftIcon,
 		&i.Description,
 		&i.Flavor,
+		&i.Published,
 	)
 	return i, err
 }
@@ -21205,7 +21207,7 @@ func (q *sqlQuerier) GetLuaProjectArtifact(ctx context.Context, arg GetLuaProjec
 }
 
 const getLuaProjectByAuthorSlug = `-- name: GetLuaProjectByAuthorSlug :one
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor FROM lua_projects p JOIN addon_authors a ON a.user_id = p.owner_id
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor, p.published FROM lua_projects p JOIN addon_authors a ON a.user_id = p.owner_id
 WHERE a.name = $1 AND p.slug = $2
 `
 
@@ -21230,12 +21232,13 @@ func (q *sqlQuerier) GetLuaProjectByAuthorSlug(ctx context.Context, arg GetLuaPr
 		&i.DraftIcon,
 		&i.Description,
 		&i.Flavor,
+		&i.Published,
 	)
 	return i, err
 }
 
 const getLuaProjectDraftPackage = `-- name: GetLuaProjectDraftPackage :one
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor, a.object_key, a.mime_type, a.content_encoding
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor, p.published, a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = p.draft_hash
 WHERE p.id = $1
@@ -21264,6 +21267,7 @@ func (q *sqlQuerier) GetLuaProjectDraftPackage(ctx context.Context, id uuid.UUID
 		&i.LuaProject.DraftIcon,
 		&i.LuaProject.Description,
 		&i.LuaProject.Flavor,
+		&i.LuaProject.Published,
 		&i.ObjectKey,
 		&i.MimeType,
 		&i.ContentEncoding,
@@ -21294,7 +21298,7 @@ func (q *sqlQuerier) GetModuleAuthorByUser(ctx context.Context, userID uuid.UUID
 }
 
 const getPublicLuaProject = `-- name: GetPublicLuaProject :one
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor FROM lua_projects p WHERE p.id = $1
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor, published FROM lua_projects p WHERE p.id = $1
   AND (p.draft_hash IS NOT NULL OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL))
 `
 
@@ -21315,12 +21319,13 @@ func (q *sqlQuerier) GetPublicLuaProject(ctx context.Context, id uuid.UUID) (Lua
 		&i.DraftIcon,
 		&i.Description,
 		&i.Flavor,
+		&i.Published,
 	)
 	return i, err
 }
 
 const getPublishedLuaProjectArtifact = `-- name: GetPublishedLuaProjectArtifact :one
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor, a.object_key, a.mime_type, a.content_encoding
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor, p.published, a.object_key, a.mime_type, a.content_encoding
 FROM lua_projects p
 JOIN lua_project_artifacts a ON a.project_id = p.id AND a.hash = $1
 WHERE p.id = $2 AND (p.draft_hash = $1 OR EXISTS (SELECT 1 FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash = $1))
@@ -21354,6 +21359,7 @@ func (q *sqlQuerier) GetPublishedLuaProjectArtifact(ctx context.Context, arg Get
 		&i.LuaProject.DraftIcon,
 		&i.LuaProject.Description,
 		&i.LuaProject.Flavor,
+		&i.LuaProject.Published,
 		&i.ObjectKey,
 		&i.MimeType,
 		&i.ContentEncoding,
@@ -21507,7 +21513,7 @@ func (q *sqlQuerier) ListLuaProjectReleasesForProjects(ctx context.Context, proj
 }
 
 const listLuaProjectsByOwner = `-- name: ListLuaProjectsByOwner :many
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor, published FROM lua_projects WHERE owner_id = $1 ORDER BY updated_at DESC LIMIT 100
 `
 
 // An author's own modules, for /modules/<author>.
@@ -21533,6 +21539,7 @@ func (q *sqlQuerier) ListLuaProjectsByOwner(ctx context.Context, ownerID uuid.UU
 			&i.DraftIcon,
 			&i.Description,
 			&i.Flavor,
+			&i.Published,
 		); err != nil {
 			return nil, err
 		}
@@ -21569,12 +21576,13 @@ func (q *sqlQuerier) ListModuleAuthorsByUsers(ctx context.Context, userIds []uui
 }
 
 const listPublicLuaProjects = `-- name: ListPublicLuaProjects :many
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor FROM lua_projects p
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor, p.published FROM lua_projects p
 JOIN LATERAL (SELECT max(r.published_at) AS published_at FROM lua_project_releases r WHERE r.project_id = p.id AND r.hash IS NOT NULL) latest ON latest.published_at IS NOT NULL
+WHERE p.published
 ORDER BY (SELECT count(*) FROM lua_project_stars s WHERE s.project_id = p.id) DESC, latest.published_at DESC LIMIT 100
 `
 
-// Modules with a release people can still run, most tracked first, then newest release.
+// Author-opted-in modules with a runnable release, most tracked first, then newest release.
 func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, error) {
 	rows, err := q.db.Query(ctx, listPublicLuaProjects)
 	if err != nil {
@@ -21597,6 +21605,7 @@ func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, e
 			&i.DraftIcon,
 			&i.Description,
 			&i.Flavor,
+			&i.Published,
 		); err != nil {
 			return nil, err
 		}
@@ -21609,7 +21618,7 @@ func (q *sqlQuerier) ListPublicLuaProjects(ctx context.Context) ([]LuaProject, e
 }
 
 const listStarredLuaProjects = `-- name: ListStarredLuaProjects :many
-SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor FROM lua_projects p JOIN lua_project_stars s ON s.project_id = p.id
+SELECT p.id, p.owner_id, p.kind, p.name, p.slug, p.revision, p.draft_hash, p.created_at, p.updated_at, p.draft_icon, p.description, p.flavor, p.published FROM lua_projects p JOIN lua_project_stars s ON s.project_id = p.id
 WHERE s.user_id = $1 ORDER BY s.created_at DESC LIMIT 200
 `
 
@@ -21636,6 +21645,7 @@ func (q *sqlQuerier) ListStarredLuaProjects(ctx context.Context, userID uuid.UUI
 			&i.DraftIcon,
 			&i.Description,
 			&i.Flavor,
+			&i.Published,
 		); err != nil {
 			return nil, err
 		}
@@ -21648,7 +21658,7 @@ func (q *sqlQuerier) ListStarredLuaProjects(ctx context.Context, userID uuid.UUI
 }
 
 const listUserLuaProjects = `-- name: ListUserLuaProjects :many
-SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor FROM lua_projects
+SELECT id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor, published FROM lua_projects
 WHERE owner_id = $1 OR id IN (SELECT project_id FROM lua_project_contributors WHERE user_id = $1)
 ORDER BY updated_at DESC LIMIT 100
 `
@@ -21676,6 +21686,7 @@ func (q *sqlQuerier) ListUserLuaProjects(ctx context.Context, userID uuid.UUID) 
 			&i.DraftIcon,
 			&i.Description,
 			&i.Flavor,
+			&i.Published,
 		); err != nil {
 			return nil, err
 		}
@@ -21790,7 +21801,7 @@ func (q *sqlQuerier) RegisterLuaProjectUpload(ctx context.Context, objectKey str
 
 const setLuaProjectDraft = `-- name: SetLuaProjectDraft :one
 UPDATE lua_projects SET draft_hash = $1, draft_icon = $2, revision = revision + 1, updated_at = now()
-WHERE id = $3 AND revision = $4 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor
+WHERE id = $3 AND revision = $4 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor, published
 `
 
 type SetLuaProjectDraftParams struct {
@@ -21821,24 +21832,32 @@ func (q *sqlQuerier) SetLuaProjectDraft(ctx context.Context, arg SetLuaProjectDr
 		&i.DraftIcon,
 		&i.Description,
 		&i.Flavor,
+		&i.Published,
 	)
 	return i, err
 }
 
 const setLuaProjectSettings = `-- name: SetLuaProjectSettings :one
-UPDATE lua_projects SET description = $1, flavor = COALESCE($2::text[], flavor)
-WHERE id = $3 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor
+UPDATE lua_projects SET description = $1, flavor = COALESCE($2::text[], flavor),
+  published = COALESCE($3::boolean, published)
+WHERE id = $4 RETURNING id, owner_id, kind, name, slug, revision, draft_hash, created_at, updated_at, draft_icon, description, flavor, published
 `
 
 type SetLuaProjectSettingsParams struct {
-	Description string    `db:"description" json:"description"`
-	Flavor      []string  `db:"flavor" json:"flavor"`
-	ID          uuid.UUID `db:"id" json:"id"`
+	Description string      `db:"description" json:"description"`
+	Flavor      []string    `db:"flavor" json:"flavor"`
+	Published   pgtype.Bool `db:"published" json:"published"`
+	ID          uuid.UUID   `db:"id" json:"id"`
 }
 
-// Leaves updated_at alone: it dates main. A null flavor keeps the current tags.
+// Leaves updated_at alone: it dates main. Null settings keep their current values.
 func (q *sqlQuerier) SetLuaProjectSettings(ctx context.Context, arg SetLuaProjectSettingsParams) (LuaProject, error) {
-	row := q.db.QueryRow(ctx, setLuaProjectSettings, arg.Description, arg.Flavor, arg.ID)
+	row := q.db.QueryRow(ctx, setLuaProjectSettings,
+		arg.Description,
+		arg.Flavor,
+		arg.Published,
+		arg.ID,
+	)
 	var i LuaProject
 	err := row.Scan(
 		&i.ID,
@@ -21853,6 +21872,7 @@ func (q *sqlQuerier) SetLuaProjectSettings(ctx context.Context, arg SetLuaProjec
 		&i.DraftIcon,
 		&i.Description,
 		&i.Flavor,
+		&i.Published,
 	)
 	return i, err
 }
@@ -33352,7 +33372,6 @@ type ListSitemapGuildsRow struct {
 // finalized runs. Edited pages first, then the most recently active.
 // last_modified is the newer of the page edit and the newest listed run. The
 // run count probes idx_log_instances_guild.
-// Uses idx_log_instances_guild.
 func (q *sqlQuerier) ListSitemapGuilds(ctx context.Context, arg ListSitemapGuildsParams) ([]ListSitemapGuildsRow, error) {
 	rows, err := q.db.Query(ctx, listSitemapGuilds, arg.TenantID, arg.MinInstances, arg.ResultLimit)
 	if err != nil {

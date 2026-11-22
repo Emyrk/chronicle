@@ -6,7 +6,7 @@ import { LuaProjectsPage } from "./LuaProjectsPage"
 
 function panel(overrides: Partial<LuaProject> = {}): LuaProject {
   return {
-    id: overrides.id ?? "panel-1", owner_id: "owner-1", kind: "panel", name: "Ember Threat Tracker", slug: "ember-threat-tracker",
+    id: overrides.id ?? "panel-1", owner_id: "owner-1", published: true, kind: "panel", name: "Ember Threat Tracker", slug: "ember-threat-tracker",
     revision: 3, description: "A live threat meter with a dedicated taunt warning for tanks.", author: "forgewright",
     stars: 128, starred: false, created_at: "2026-06-01T00:00:00Z", updated_at: "2026-09-10T00:00:00Z",
     releases: [{ tag: "v2.1", available: true, sha256: "a1", published_at: "2026-09-10T00:00:00Z" }],
