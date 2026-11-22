@@ -5,6 +5,7 @@ import (
 	"slices"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 )
 
 // Scouting indexes independent, already decoded source snapshots by normalized
@@ -148,4 +149,48 @@ func cloneObservationPointer(value *Observation) *Observation {
 	}
 	copy := cloneObservation(*value)
 	return &copy
+}
+
+// StaticAttributes returns recognized identity scalars for every timestamp, even
+// before the first observation. Unknown values never erase known ones. Conflicting
+// recognized values are withheld rather than guessing which source is authoritative.
+func (s *Scouting) StaticAttributes(id guid.GUID) (types.HeroRaces, types.HeroGender) {
+	race, gender := types.HeroRacesUnknown, types.HeroGenderUnknown
+	raceConflict, genderConflict := false, false
+	if s == nil {
+		return race, gender
+	}
+	for _, player := range s.players[id] {
+		// Parse explicit race tokens from the shared enum, never numeric/custom IDs.
+		nextRace, err := types.ParseHeroRaces(player.Race)
+		if err == nil && nextRace != types.HeroRacesUnknown {
+			if race != types.HeroRacesUnknown && race != nextRace {
+				raceConflict = true
+			}
+			race = nextRace
+		}
+		nextGender := types.HeroGenderUnknown
+		if player.Gender != nil {
+			// UnitSex uses 1=unknown, 2=male, 3=female (as in the companion parser).
+			switch *player.Gender {
+			case 2:
+				nextGender = types.HeroGenderMale
+			case 3:
+				nextGender = types.HeroGenderFemale
+			}
+		}
+		if nextGender != types.HeroGenderUnknown {
+			if gender != types.HeroGenderUnknown && gender != nextGender {
+				genderConflict = true
+			}
+			gender = nextGender
+		}
+	}
+	if raceConflict {
+		race = types.HeroRacesUnknown
+	}
+	if genderConflict {
+		gender = types.HeroGenderUnknown
+	}
+	return race, gender
 }

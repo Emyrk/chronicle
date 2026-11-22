@@ -28,8 +28,8 @@ type Observation struct {
 }
 
 type Player struct {
-	// Identity scalars are latest retained metadata, not timestamped history.
-	// They must never be projected onto At observations.
+	// Identity scalars are not timestamped history. Race and Gender are static
+	// attributes valid at every timestamp, exposed separately from observations.
 	Realm        string
 	Race         string
 	Gender       *int

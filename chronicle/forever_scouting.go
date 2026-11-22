@@ -13,6 +13,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/events"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/google/uuid"
@@ -64,8 +65,10 @@ type scoutingPlayerInput struct {
 	GuildName          *string    `json:"guild_name"`
 	GuildKnown         bool       `json:"guild_known"`
 	GuildObservedAt    *time.Time `json:"guild_observed_at"`
-	Race               *int       `json:"race"`
-	Gender             *int       `json:"gender"`
+	Race               *string    `json:"race"`
+	Gender             *string    `json:"gender"`
+	RaceObservedAt     *time.Time `json:"race_observed_at"`
+	GenderObservedAt   *time.Time `json:"gender_observed_at"`
 }
 
 func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID) ([]byte, error) {
@@ -101,13 +104,28 @@ func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID)
 			row.GuildKnown = true
 			row.GuildObservedAt = timestamp(known.Guild)
 		}
+		// Static attributes apply at all event times. LastSeen is only their
+		// persistence revision clock, not the beginning of their validity.
+		race, gender := players.StaticAttributes(id)
+		if race != types.HeroRacesUnknown {
+			value := race.String()
+			row.Race = &value
+			row.RaceObservedAt = &row.ObservedAt
+		}
+		if gender != types.HeroGenderUnknown {
+			value := gender.String()
+			row.Gender = &value
+			row.GenderObservedAt = &row.ObservedAt
+		}
 		rows = append(rows, row)
 	}
 	return json.Marshal(rows)
 }
 
-// Enrich only missing fields on existing unit messages. Never synthesize party,
-// affiliation, or guild membership, which could change raid ownership votes.
+// Enrich only missing fields on existing unit and combatant messages. Static
+// race/gender apply even before the first scouting observation; name and level
+// remain event-time evidence. Never synthesize party, affiliation, or guild
+// membership, which could change raid ownership votes.
 type scoutingAdvancer struct {
 	realms   map[guid.GUID]uuid.UUID
 	identity *foreverIdentity
@@ -118,23 +136,32 @@ type scoutingAdvancer struct {
 func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, error) {
 	batch, err := s.source.Advance(ctx)
 	for i, message := range batch {
-		unit, ok := message.(*messages.Unit)
-		if !ok {
+		var id guid.GUID
+		var unitName string
+		switch m := message.(type) {
+		case *messages.Unit:
+			id, unitName = m.Guid, m.Name
+		case *messages.Combatant:
+			id, unitName = m.Guid, m.Name
+		default:
 			continue
 		}
-		if realmID, resolved := s.realms[unit.Guid]; !resolved || realmID == uuid.Nil {
+		if !s.safeIdentity(id, unitName) {
 			continue
 		}
-		sourceName, ok := s.players.IdentityName(unit.Guid)
-		if !ok || (meaningfulIdentityName(unit.Name) && sourceName != unit.Name) {
-			continue
-		}
-		if s.identity != nil {
-			name, safe := uniqueIdentityName(s.identity.ObservedPlayerNames(unit.Guid))
-			if !safe || (meaningfulIdentityName(unit.Name) && name != "" && name != unit.Name) {
-				continue
+		if combatant, ok := message.(*messages.Combatant); ok {
+			copy := *combatant
+			race, gender := s.players.StaticAttributes(id)
+			if copy.Race == "" || copy.Race == types.HeroRacesUnknown {
+				copy.Race = race
 			}
+			if copy.Gender <= types.HeroGenderUnknown {
+				copy.Gender = gender
+			}
+			batch[i] = &copy
+			continue
 		}
+		unit := message.(*messages.Unit)
 		known := s.players.KnownAt(unit.Guid, unit.Date().Unix())
 		copy := *unit
 		if (copy.Name == "" || copy.Name == "Unknown") && known.Name != nil {
@@ -148,4 +175,22 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 		batch[i] = &copy
 	}
 	return batch, err
+}
+
+// The same realm/name reconciliation gates both temporal and static enrichment.
+func (s *scoutingAdvancer) safeIdentity(id guid.GUID, unitName string) bool {
+	if realmID, resolved := s.realms[id]; !resolved || realmID == uuid.Nil {
+		return false
+	}
+	sourceName, ok := s.players.IdentityName(id)
+	if !ok || (meaningfulIdentityName(unitName) && sourceName != unitName) {
+		return false
+	}
+	if s.identity != nil {
+		name, safe := uniqueIdentityName(s.identity.ObservedPlayerNames(id))
+		if !safe || (meaningfulIdentityName(unitName) && name != "" && name != unitName) {
+			return false
+		}
+	}
+	return true
 }

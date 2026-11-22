@@ -11,11 +11,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/google/uuid"
@@ -142,4 +146,75 @@ func testScoutingRealms(players map[guid.GUID][]scouting.Player) map[guid.GUID]u
 		realms[id] = realm
 	}
 	return realms
+}
+
+func TestScoutingStaticCombatantAttributes(t *testing.T) {
+	t.Parallel()
+	realm := uuid.New()
+	players := newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", Race: "NightElf", Gender: ptr.Ref(3), LastSeen: 30, Observations: []scouting.Observation{{At: 10, Name: "Scout"}}}}})
+	for _, at := range []int64{5, 10, 20} {
+		t.Run(fmt.Sprint(at), func(t *testing.T) {
+			t.Parallel()
+			raw := &messages.Combatant{MessageBase: messages.Base(time.Unix(at, 0)), Combatant: combatant.Combatant{Guid: 1, Name: "Scout", Seen: time.Unix(at, 0)}}
+			source := scoutingAdvancer{players: players, realms: map[guid.GUID]uuid.UUID{1: realm}, source: scoutingTestSource{messages: []messages.Message{raw}}}
+			batch, err := source.Advance(t.Context())
+			require.ErrorIs(t, err, io.EOF)
+			enriched := batch[0].(*messages.Combatant)
+			require.Equal(t, types.HeroRacesNightElf, enriched.Race)
+			require.Equal(t, types.HeroGenderFemale, enriched.Gender)
+			require.Empty(t, raw.Race)
+			tracker := armory.New(nil)
+			tracker.Player(enriched)
+			require.Equal(t, types.HeroRacesNightElf, tracker.Players[1].Race)
+			require.Equal(t, types.HeroGenderFemale, tracker.Players[1].Gender)
+			require.Nil(t, enriched.Guild)
+			require.Nil(t, enriched.Faction)
+		})
+	}
+	for _, tc := range []struct {
+		name       string
+		realm      uuid.UUID
+		playerName string
+		race       types.HeroRaces
+		gender     types.HeroGender
+	}{
+		{"unresolved", uuid.Nil, "Scout", "", types.HeroGenderUnknown},
+		{"mismatched", realm, "Other", "", types.HeroGenderUnknown},
+		{"known", realm, "Scout", types.HeroRacesHuman, types.HeroGenderMale},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			raw := &messages.Combatant{Combatant: combatant.Combatant{Guid: 1, Name: tc.playerName, Race: tc.race, Gender: tc.gender}}
+			source := scoutingAdvancer{players: players, realms: map[guid.GUID]uuid.UUID{1: tc.realm}, source: scoutingTestSource{messages: []messages.Message{raw}}}
+			batch, _ := source.Advance(t.Context())
+			require.Equal(t, raw, batch[0])
+		})
+	}
+}
+
+func TestScoutingStaticArmoryPersistence(t *testing.T) {
+	t.Parallel()
+	db, _ := dbtestutil.NewDB(t)
+	ctx := t.Context()
+	server, err := db.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: uuid.New(), Name: t.Name()})
+	require.NoError(t, err)
+	realm, err := db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: uuid.New(), ServerID: server.ID, Name: "realm"})
+	require.NoError(t, err)
+	persist := func(race string, gender int, lastSeen int64) {
+		t.Helper()
+		players := newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", Race: race, Gender: &gender, LastSeen: lastSeen}}})
+		payload, err := scoutingPayload(players, map[guid.GUID]uuid.UUID{1: realm.ID})
+		require.NoError(t, err)
+		_, err = db.UpsertScoutedPlayers(ctx, payload)
+		require.NoError(t, err)
+	}
+	persist("", 1, 10) // Existing unknown row must be enriched on conflict too.
+	persist("NightElf", 3, 20)
+	persist("unsupported", 99, 30)
+	row, err := db.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: realm.ID, Identifier: 1})
+	require.NoError(t, err)
+	require.Equal(t, database.WowPlayableRaceNightElf, row.Race)
+	require.Equal(t, database.WowPlayableGenderFemale, row.Gender)
+	require.Equal(t, int64(20), row.RaceObservedAt.Time.Unix())
+	require.Equal(t, int64(20), row.GenderObservedAt.Time.Unix())
 }
