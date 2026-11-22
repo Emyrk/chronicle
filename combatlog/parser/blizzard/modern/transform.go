@@ -42,6 +42,7 @@ type advancedCombatSnapshot struct {
 
 type transformReader struct {
 	playerRealms                map[guid.GUID]map[string]PlayerRealmInfo
+	playerNames                 map[guid.GUID]map[string]struct{}
 	scanner                     *bufio.Scanner
 	guids                       *guidNormalizer
 	names                       map[string]string

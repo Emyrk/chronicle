@@ -1,6 +1,10 @@
 package unitdb
 
-import "github.com/Emyrk/chronicle/combatlog/parser/guid"
+import (
+	"strings"
+
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+)
 
 // PlayerRealmLookup supplies raw parse-wide evidence, keyed by GUID AND name.
 // A provider must not substitute another name's realm when an exact match is absent.
@@ -38,4 +42,40 @@ func (us *Units) RefreshPlayerRealms() {
 	for id := range us.Players {
 		us.GetPlayer(id)
 	}
+}
+
+// ObservePlayerName retains identity evidence before GUID-only merges or early
+// returns discard it. It does not alter combat attribution or merged snapshots.
+func (us *Units) ObservePlayerName(id guid.GUID, name string) {
+	if !id.IsPlayer() || id.IsZero() || !meaningfulPlayerName(name) {
+		return
+	}
+	if us.playerNames == nil {
+		us.playerNames = make(map[guid.GUID]map[string]struct{})
+	}
+	if us.playerNames[id] == nil {
+		us.playerNames[id] = make(map[string]struct{})
+	}
+	us.playerNames[id][name] = struct{}{}
+}
+
+func meaningfulPlayerName(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "", "unknown", "nil":
+		return false
+	default:
+		return true
+	}
+}
+
+// PlayerIdentityAmbiguous is monotonic across the entire parse, including
+// parser names that were never attached to a UNIT_INFO/COMBATANT_INFO record.
+// Call after parsing finishes when deciding whether armory writes are safe.
+func (us *Units) PlayerIdentityAmbiguous(id guid.GUID) bool {
+	if source, ok := us.playerRealmLookup.(interface{ ObservedPlayerNames(guid.GUID) []string }); ok {
+		for _, name := range source.ObservedPlayerNames(id) {
+			us.ObservePlayerName(id, name)
+		}
+	}
+	return len(us.playerNames[id]) > 1
 }

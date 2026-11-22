@@ -6,6 +6,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbstatic"
 	"github.com/google/uuid"
@@ -110,4 +114,18 @@ func (c *participantRealmCatalog) resolve(raw string) uuid.NullUUID {
 		}
 	}
 	return uuid.NullUUID{}
+}
+
+// armoryRealmResolver deliberately differs from participant persistence: unknown
+// Forever identities are omitted from armory, never assigned the instance realm.
+func armoryRealmResolver(format database.LogFormat, units *unitdb.Units, catalog *participantRealmCatalog) armory.PlayerRealmResolver {
+	if format != database.LogFormatV22Cleu {
+		return nil
+	}
+	return func(player combatant.Combatant) uuid.NullUUID {
+		if player.Name == "" || player.Name == "Unknown" {
+			return uuid.NullUUID{}
+		}
+		return catalog.resolve(units.PlayerRawRealm(player.Guid, player.Name, player.RawRealm))
+	}
 }

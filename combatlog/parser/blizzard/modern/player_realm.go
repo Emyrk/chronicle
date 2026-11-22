@@ -26,6 +26,13 @@ func (r *transformReader) recordPlayerRealm(rawGUID, name, display string) {
 		return
 	}
 	id := guid.GUID(value)
+	// Names without realm suffixes still disqualify ambiguous GUID-only gear.
+	if r.playerNames != nil {
+		if r.playerNames[id] == nil {
+			r.playerNames[id] = make(map[string]struct{})
+		}
+		r.playerNames[id][display] = struct{}{}
+	}
 	names := r.playerRealms[id]
 	if _, known := names[display]; known {
 		return
@@ -69,4 +76,17 @@ func (p *Parser) LookupPlayerRealm(id guid.GUID, name string) (string, bool) {
 	}
 	info, ok := p.playerRealms[id][name]
 	return info.RawRealm, ok
+}
+
+// ObservedPlayerNames returns parse-wide input evidence, including names whose
+// realm is unknown. It is independent of the GUID-only merged combatant state.
+func (p *Parser) ObservedPlayerNames(id guid.GUID) []string {
+	if p == nil {
+		return nil
+	}
+	names := make([]string, 0, len(p.playerNames[id]))
+	for name := range p.playerNames[id] {
+		names = append(names, name)
+	}
+	return names
 }

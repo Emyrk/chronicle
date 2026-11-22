@@ -54,6 +54,10 @@ func TestParserPlayerRealmIndex(t *testing.T) {
 	require.Equal(t, map[guid.GUID]map[string]PlayerRealmInfo{
 		id: {"First Last": {RawRealm: "Normal-US"}, "Other Name": {RawRealm: "Normal-EU"}},
 	}, p.playerRealms)
+	require.ElementsMatch(t, []string{"First Last", "Other Name", "Missing"}, p.ObservedPlayerNames(id))
+	units := unitdb.New(nil)
+	units.SetPlayerRealmLookup(p)
+	require.True(t, units.PlayerIdentityAmbiguous(id))
 }
 
 func TestNormalizeUnitNameRealmIndex(t *testing.T) {
