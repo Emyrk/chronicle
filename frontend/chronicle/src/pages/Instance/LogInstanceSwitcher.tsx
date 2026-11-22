@@ -22,6 +22,7 @@ export interface LogInstanceSibling {
   wipes: number;
 }
 
+/** Every switcher renders nothing unless the log holds at least two instances. */
 interface SwitcherProps {
   instances: readonly LogInstanceSibling[];
   currentId: string;
@@ -64,6 +65,7 @@ function BossProgress({ instance, className }: { instance: LogInstanceSibling; c
 
 /** Option A: a tab strip below the header. Each tab carries enough to tell resets apart at a glance. */
 export function LogInstanceTabs({ instances, currentId, onSelect }: SwitcherProps) {
+  if (instances.length < 2) return null;
   const labels = siblingLabels(instances);
   return (
     <div className="styled-scrollbar -mt-4 mb-4 flex gap-1 overflow-x-auto rounded-lg border border-white/10 bg-background/40 p-1">
@@ -96,6 +98,7 @@ export function LogInstanceTabs({ instances, currentId, onSelect }: SwitcherProp
 
 /** Option B: a compact stepper beside the title, with the full list in a dropdown. */
 export function LogInstanceStepper({ instances, currentId, onSelect }: SwitcherProps) {
+  if (instances.length < 2) return null;
   const labels = siblingLabels(instances);
   const index = Math.max(0, instances.findIndex((instance) => instance.id === currentId));
   const step = (delta: number) => {
@@ -153,10 +156,10 @@ export function LogInstanceStepper({ instances, currentId, onSelect }: SwitcherP
 
 /** Option C: the log's night as a timeline. Segment width is real time, gaps are breaks between instances. */
 export function LogInstanceTimeline({ instances, currentId, onSelect }: SwitcherProps) {
-  const labels = siblingLabels(instances);
   const first = instances[0];
   const last = instances[instances.length - 1];
-  if (!first || !last) return null;
+  if (instances.length < 2 || !first || !last) return null;
+  const labels = siblingLabels(instances);
   const start = new Date(first.startTime).getTime();
   const span = Math.max(1, new Date(last.endTime).getTime() - start);
   const offset = (iso: string) => ((new Date(iso).getTime() - start) / span) * 100;

@@ -118,3 +118,6 @@ export const TabsMobile: Story = {
   args: { instances: dalaranResets, variant: "tabs", isMobile: true },
   decorators: [(Story) => <div className="mx-auto w-[360px] max-w-full"><Story /></div>],
 };
+
+/** A log with one instance: no switcher is shown in any variant. */
+export const SingleInstance: Story = { args: { instances: dalaranResets.slice(0, 1), variant: "tabs" } };
