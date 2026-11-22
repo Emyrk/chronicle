@@ -194,7 +194,9 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         const request = runtime.takeTimeRangeRequest()
         if (request) send({ type: "set-time-range", range: request.range })
       } else if (input.type === "time-range") {
-        runtime?.setTimeRange(input.range)
+        if (!runtime) return
+        phase = "timeRange"
+        runtime.setTimeRange(input.range); flush(runtime.flush())
       }
     } catch (error) {
       runtime?.stop(); runtime = null

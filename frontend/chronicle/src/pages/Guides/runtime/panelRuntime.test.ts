@@ -161,6 +161,41 @@ describe("safe panel profile", () => {
     runtime.stop()
   })
 
+  it("calls OnTimeRangeChanged when the page range changes, but not for its own request", () => {
+    const runtime = panel(`
+      local log = CreateFrame("FontString", "log", UIParent)
+      local calls = 0
+      Chronicle.OnTimeRangeChanged(function(startMs, endMs)
+        calls = calls + 1
+        log:SetText(calls .. ":" .. tostring(startMs) .. "-" .. tostring(endMs))
+      end)
+      local select = CreateFrame("Button", "select", UIParent)
+      select:SetScript("OnClick", function() Chronicle.SetTimeRange(1000, 2000) end)
+    `)
+    runtime.start()
+    const texts = () => runtime.flush().filter((op) => op.op === "set" && op.id === "log").map((op) => (op as unknown as { props: { text: string } }).props.text)
+
+    runtime.setTimeRange({ startMs: 5000, endMs: null })
+    expect(texts()).toEqual(["1:5000-nil"])
+    runtime.setTimeRange({ startMs: 5000, endMs: null })
+    expect(texts()).toEqual([])
+    runtime.setTimeRange(null)
+    expect(texts()).toEqual(["2:nil-nil"])
+
+    // The page echoes the module's own request back; that is not a change.
+    runtime.event({ id: "select", event: "click" })
+    runtime.setTimeRange({ startMs: 1000, endMs: 2000 })
+    expect(texts()).toEqual([])
+    runtime.stop()
+  })
+
+  it("does not let OnTimeRangeChanged set the range, which could loop", () => {
+    const runtime = panel(`Chronicle.OnTimeRangeChanged(function() Chronicle.SetTimeRange(0, 1) end)`)
+    runtime.start()
+    expect(() => runtime.setTimeRange({ startMs: 10, endMs: 20 })).toThrow(/only be called from an OnClick handler/)
+    runtime.stop()
+  })
+
   it("refuses to change the time range outside a click", () => {
     for (const source of [
       `Chronicle.SetTimeRange(0, 1000)`,

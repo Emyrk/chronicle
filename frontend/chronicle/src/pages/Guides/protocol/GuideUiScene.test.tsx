@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it } from "vitest"
 import { GuideUiScene } from "./GuideUiScene"
 import { applySceneBatch, createInitialScene, UI_ROOT_ID } from "./scene"
+import { dragToTimeRange, PanelTimeRangeContext } from "./panelTimeRange"
 
 describe("GuideUiScene", () => {
   it("renders host-owned player metric chart nodes with Chronicle's chart component", () => {
@@ -104,5 +105,28 @@ describe("GuideUiScene", () => {
 
     expect(markup).toMatch(/data-guide-node="plain"[^>]*pointer-events:none/)
     expect(markup).toMatch(/data-guide-node="hover"[^>]*pointer-events:auto/)
+  })
+
+  it("highlights the page time range on selectable line charts only", () => {
+    const chart = (id: string, timeSelection: string) => ({
+      op: "create" as const, id, kind: "line-chart" as const, parentId: UI_ROOT_ID,
+      props: { x: 0, y: 0, width: 480, height: 240, anchor: "top-left", timeSelection, series: [{ name: "Raid", points: [{ x: 0, y: 0 }, { x: 100, y: 10 }] }] },
+    })
+    const scene = applySceneBatch(createInitialScene(), [chart("on", "seconds"), chart("off", "off")])
+    const markup = renderToStaticMarkup(
+      <PanelTimeRangeContext.Provider value={{ range: { startMs: 20_000, endMs: 50_000 }, select: () => {} }}>
+        <GuideUiScene scene={scene} assets={new Map()} onNodeClick={() => {}} />
+      </PanelTimeRangeContext.Provider>,
+    )
+    expect(markup.match(/data-line-chart-selection/g)).toHaveLength(1)
+    expect(markup).toMatch(/data-guide-node="on".*data-line-chart-selection/s)
+    expect(markup).toContain("cursor:crosshair")
+  })
+
+  it("converts a drag across fight time into a page range", () => {
+    expect(dragToTimeRange(50, 20, 1000)).toEqual({ startMs: 20_000, endMs: 50_000 })
+    expect(dragToTimeRange(-3, 1.5, 1000)).toEqual({ startMs: 0, endMs: 1500 })
+    expect(dragToTimeRange(1200, 4000.4, 1)).toEqual({ startMs: 1200, endMs: 4000 })
+    expect(dragToTimeRange(7, 7, 1000)).toBeUndefined()
   })
 })

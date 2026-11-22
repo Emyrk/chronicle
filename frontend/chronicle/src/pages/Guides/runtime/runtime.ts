@@ -125,6 +125,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   let timeRange: PanelTimeRange | null = null
   let timeRangeRequest: { range: PanelTimeRange | null } | undefined
   let handlingClick = false
+  let timeRangeCallback: number | undefined // Chronicle.OnTimeRangeChanged
   let nextTimerId = 1
   let stopped = false
 
@@ -543,6 +544,14 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         return 0
       })
       registerFunction(L, "ClearTimeRange", (state) => { requestTimeRange(state, null); return 0 })
+      registerFunction(L, "OnTimeRangeChanged", (state) => {
+        const index = lua.lua_istable(state, 1) ? 2 : 1
+        lauxlib.luaL_checktype(state, index, lua.LUA_TFUNCTION)
+        if (timeRangeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, timeRangeCallback)
+        lua.lua_pushvalue(state, index)
+        timeRangeCallback = lauxlib.luaL_ref(state, lua.LUA_REGISTRYINDEX)
+        return 0
+      })
       registerFunction(L, "GetTimeRange", (state) => {
         if (!timeRange) { lua.lua_pushnil(state); lua.lua_pushnil(state); return 2 }
         for (const bound of [timeRange.startMs, timeRange.endMs]) if (bound === null) lua.lua_pushnil(state); else pushNumber(state, bound)
@@ -628,8 +637,18 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     },
     /** The time range Lua asked for during the last click, if any; null clears it. Taking it resets it. */
     takeTimeRangeRequest(): { range: PanelTimeRange | null } | undefined { const request = timeRangeRequest; timeRangeRequest = undefined; return request },
-    /** Tells Lua the page's current time range, read with Chronicle.GetTimeRange. */
-    setTimeRange(range: PanelTimeRange | null) { timeRange = range && (range.startMs !== null || range.endMs !== null) ? { ...range } : null },
+    /**
+     * Tells Lua the page's current time range, read with Chronicle.GetTimeRange. When it differs
+     * from what Lua last saw, calls Chronicle.OnTimeRangeChanged(startMs, endMs). A range this
+     * module just set is already current, so its own SetTimeRange does not echo back.
+     */
+    setTimeRange(range: PanelTimeRange | null) {
+      ensureActive()
+      const next = range && (range.startMs !== null || range.endMs !== null) ? { ...range } : null
+      if (next?.startMs === timeRange?.startMs && next?.endMs === timeRange?.endMs) return
+      timeRange = next
+      if (timeRangeCallback !== undefined) callRef(timeRangeCallback, null, [next?.startMs ?? null, next?.endMs ?? null])
+    },
     resize(width: number, height: number) { ensureActive(); const ref = callbacks.get(`${UI_ROOT_ID}:resize`); if (ref !== undefined) callRef(ref, UI_ROOT_ID, [width, height]) },
     timer(id: number) { ensureActive(); const ref = timers.get(id); if (ref === undefined) throw new GuideLuaError(`unknown timer '${id}'`); timers.delete(id); callRef(ref, null, []); lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref) },
     panelEvent(raw: unknown) {
@@ -670,7 +689,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       if (completeCallback !== undefined) callRef(completeCallback, null, [])
     },
     flush,
-    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback); anyEventCallback = undefined; callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
+    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback); anyEventCallback = undefined; if (timeRangeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, timeRangeCallback); timeRangeCallback = undefined; callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
     stats() { return { callbacks: callbacks.size, objects: Math.max(0, objects.size - 1), operations: operations.length, timers: timers.size, stopped } },
   }
 }

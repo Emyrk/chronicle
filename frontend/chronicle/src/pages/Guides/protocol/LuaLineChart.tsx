@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { Line, ResponsiveLine, type CommonCustomLayerProps, type LineSeries, type LineSvgLayer, type LineSvgProps, type SliceTooltipProps } from "@nivo/line";
 import type { LineBand, LineChartCurve, LineChartFormat, LineMarker, LineSeries as LuaSeries } from "../widgets/lineChart";
 import { formatChartValue } from "./lineChartFormat";
+import { dragToTimeRange, usePanelTimeRange } from "./panelTimeRange";
 import type { SceneNode } from "./types";
 
 /** Series colors used when Lua does not set one; picked to read on the dark panel background. */
@@ -15,6 +16,9 @@ const TOOLTIP_CARD = "min-w-[140px] max-w-[260px] rounded-md border border-zinc-
 interface ChartSeries extends LineSeries { id: string; color: string; data: Array<{ x: number; y: number }> }
 type LayerProps = CommonCustomLayerProps<ChartSeries>;
 interface HoveredMarker { marker: LineMarker; x: number; innerWidth: number }
+type XScale = LayerProps["xScale"] & { invert?: (px: number) => number };
+const SELECTION_FILL = "rgba(59, 130, 246, 0.15)";
+const SELECTION_STROKE = "rgba(59, 130, 246, 0.5)";
 
 function asFormat(value: unknown, fallback: LineChartFormat): LineChartFormat {
   return value === "number" || value === "compact" || value === "seconds" || value === "duration" || value === "percent" ? value : fallback;
@@ -82,6 +86,12 @@ export function LuaLineChart({ node }: { node: SceneNode }) {
   const bands = Array.isArray(props.bands) ? props.bands as LineBand[] : [];
   const markers = Array.isArray(props.markers) ? props.markers as LineMarker[] : [];
   const luaSeries = Array.isArray(props.series) ? props.series as LuaSeries[] : [];
+  // Drag-to-select the page time range, like the Line Chart panel. x is fight time in this unit.
+  const pageRange = usePanelTimeRange();
+  const msPerUnit = props.timeSelection === "seconds" ? 1000 : props.timeSelection === "milliseconds" ? 1 : 0;
+  const select = msPerUnit > 0 ? pageRange?.select : undefined;
+  const xScaleRef = useRef<XScale | null>(null);
+  const [drag, setDrag] = useState<{ start: number; current: number } | null>(null);
 
   const all: ChartSeries[] = luaSeries.map((series, index) => ({
     id: series.name,
@@ -166,7 +176,56 @@ export function LuaLineChart({ node }: { node: SceneNode }) {
     </g>
   );
 
-  const layers: LineSvgLayer<ChartSeries>[] = ["grid", bandsLayer, "axes", "areas", "crosshair", "lines", markersLayer, "points", "slices", markerHoverLayer];
+  // Captures Nivo's x scale for the mouse handlers and draws the page range and the active drag.
+  const selectionLayer = ({ xScale, innerHeight, innerWidth }: LayerProps) => {
+    xScaleRef.current = xScale as XScale;
+    if (!select) return null;
+    const range = pageRange?.range;
+    const span = (from: number, to: number) => {
+      const x0 = Math.max(0, Math.min(innerWidth, from));
+      const x1 = Math.max(0, Math.min(innerWidth, to));
+      return x1 > x0 ? { x: x0, width: x1 - x0 } : null;
+    };
+    const saved = range && span(range.startMs === null ? 0 : xScale(range.startMs / msPerUnit), range.endMs === null ? innerWidth : xScale(range.endMs / msPerUnit));
+    const dragged = drag && span(xScale(Math.min(drag.start, drag.current)), xScale(Math.max(drag.start, drag.current)));
+    return (
+      <g key="selection">
+        {saved && <rect data-line-chart-selection {...saved} y={0} height={innerHeight} fill={SELECTION_FILL} stroke={SELECTION_STROKE} strokeWidth={1} />}
+        {dragged && <rect {...dragged} y={0} height={innerHeight} fill={SELECTION_FILL} stroke={SELECTION_STROKE} strokeWidth={1} />}
+      </g>
+    );
+  };
+
+  const xAt = (event: ReactMouseEvent<HTMLElement>) => {
+    const invert = xScaleRef.current?.invert;
+    if (!invert) return undefined;
+    return Math.max(0, invert(event.clientX - event.currentTarget.getBoundingClientRect().left - margin.left));
+  };
+  const finishDrag = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!drag || !select) return;
+    const range = dragToTimeRange(drag.start, xAt(event) ?? drag.current, msPerUnit);
+    setDrag(null);
+    if (range) select(range);
+  };
+  const selectionHandlers = select ? {
+    onMouseDown: (event: ReactMouseEvent<HTMLElement>) => {
+      // Legend buttons keep working while selection is on.
+      if (event.button !== 0 || (event.target instanceof Element && event.target.closest("button"))) return;
+      const x = xAt(event);
+      if (x !== undefined) { event.preventDefault(); setDrag({ start: x, current: x }); }
+    },
+    onMouseMove: (event: ReactMouseEvent<HTMLElement>) => {
+      if (!drag) return;
+      const x = xAt(event);
+      if (x !== undefined) setDrag({ ...drag, current: x });
+    },
+    onMouseUp: finishDrag,
+    onMouseLeave: finishDrag,
+    onDoubleClick: () => select(null),
+    style: { cursor: "crosshair" },
+  } : {};
+
+  const layers: LineSvgLayer<ChartSeries>[] = ["grid", selectionLayer, bandsLayer, "axes", "areas", "crosshair", "lines", markersLayer, "points", "slices", markerHoverLayer];
   const chart: LineSvgProps<ChartSeries> = {
     width,
     height,
@@ -197,7 +256,7 @@ export function LuaLineChart({ node }: { node: SceneNode }) {
   };
 
   return (
-    <div className="relative h-full w-full" data-line-chart>
+    <div className="relative h-full w-full select-none" data-line-chart {...selectionHandlers}>
       {fillParent ? <ResponsiveLine {...chart} /> : <Line {...chart} />}
       {hoveredMarker && (
         <div
