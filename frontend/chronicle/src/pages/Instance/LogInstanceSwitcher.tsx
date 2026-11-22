@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Skull } from "lucide-react";
 import { Link } from "react-router-dom";
+import { instanceQueryOptions } from "@/api/queries";
 import type { DungeonInstanceSetMember } from "@/api/typesGenerated";
 import {
   DropdownMenu,
@@ -21,6 +22,14 @@ import { formatDurationMs } from "./phaseTimeRange";
 interface SwitcherProps {
   members: readonly DungeonInstanceSetMember[];
   currentId: string;
+  /** Called when a reset is likely to be opened next (hover, focus or touch), to prefetch it. */
+  onIntent?: (member: DungeonInstanceSetMember) => void;
+}
+
+function intentHandlers(member: DungeonInstanceSetMember, onIntent?: (member: DungeonInstanceSetMember) => void) {
+  if (!onIntent) return {};
+  const handle = () => onIntent(member);
+  return { onPointerEnter: handle, onFocus: handle, onTouchStart: handle };
 }
 
 function instanceHref(member: DungeonInstanceSetMember): string {
@@ -55,7 +64,7 @@ function mostBossKills(members: readonly DungeonInstanceSetMember[]): number {
 }
 
 /** Desktop: a tab per reset under the header, each showing its outcome. */
-export function LogInstanceTabs({ members, currentId }: SwitcherProps) {
+export function LogInstanceTabs({ members, currentId, onIntent }: SwitcherProps) {
   if (members.length < 2) return null;
   const mostKills = mostBossKills(members);
   return (
@@ -70,6 +79,7 @@ export function LogInstanceTabs({ members, currentId }: SwitcherProps) {
             key={member.id}
             to={instanceHref(member)}
             aria-current={active ? "page" : undefined}
+            {...(active ? {} : intentHandlers(member, onIntent))}
             className={cn(
               "flex min-w-40 shrink-0 flex-col items-start rounded-md px-3 py-1.5 text-left transition-colors",
               active ? "bg-primary/15 ring-1 ring-primary/40" : "hover:bg-white/5",
@@ -90,7 +100,7 @@ export function LogInstanceTabs({ members, currentId }: SwitcherProps) {
 }
 
 /** Mobile: a compact stepper beside the title, with every reset in a dropdown. */
-export function LogInstanceStepper({ members, currentId }: SwitcherProps) {
+export function LogInstanceStepper({ members, currentId, onIntent }: SwitcherProps) {
   if (members.length < 2) return null;
   const mostKills = mostBossKills(members);
   const index = Math.max(0, members.findIndex((member) => member.id === currentId));
@@ -101,7 +111,7 @@ export function LogInstanceStepper({ members, currentId }: SwitcherProps) {
   return (
     <span className="inline-flex items-center rounded-md border border-white/10 bg-background/40 text-sm font-normal">
       {previous ? (
-        <Link to={instanceHref(previous)} aria-label="Previous reset" className={cn(stepClass, "rounded-l-md")}>
+        <Link to={instanceHref(previous)} {...intentHandlers(previous, onIntent)} aria-label="Previous reset" className={cn(stepClass, "rounded-l-md")}>
           <ChevronLeft className="h-4 w-4" />
         </Link>
       ) : (
@@ -119,6 +129,7 @@ export function LogInstanceStepper({ members, currentId }: SwitcherProps) {
             <DropdownMenuItem key={member.id} asChild>
               <Link
                 to={instanceHref(member)}
+                {...(member.id === currentId ? {} : intentHandlers(member, onIntent))}
                 className={cn("flex items-center justify-between gap-3", member.id === currentId && "bg-primary/10")}
               >
                 <span className="flex min-w-0 flex-col">
@@ -134,7 +145,7 @@ export function LogInstanceStepper({ members, currentId }: SwitcherProps) {
         </DropdownMenuContent>
       </DropdownMenu>
       {next ? (
-        <Link to={instanceHref(next)} aria-label="Next reset" className={cn(stepClass, "rounded-r-md")}>
+        <Link to={instanceHref(next)} {...intentHandlers(next, onIntent)} aria-label="Next reset" className={cn(stepClass, "rounded-r-md")}>
           <ChevronRight className="h-4 w-4" />
         </Link>
       ) : (
@@ -146,6 +157,7 @@ export function LogInstanceStepper({ members, currentId }: SwitcherProps) {
 
 /** Fetches the dungeon set for an instance and renders the tabs or stepper. */
 export function DungeonInstanceSetSwitcher({ instanceId, variant }: { instanceId: string; variant: "tabs" | "stepper" }) {
+  const queryClient = useQueryClient();
   const { data } = useQuery({
     queryKey: ["dungeon-instance-set", instanceId],
     queryFn: async () => {
@@ -156,7 +168,11 @@ export function DungeonInstanceSetSwitcher({ instanceId, variant }: { instanceId
     staleTime: 60_000,
   });
   if (!data) return null;
+  // Links use the slug, so prefetch under the same key the instance page reads.
+  const prefetch = (member: DungeonInstanceSetMember) => {
+    void queryClient.prefetchQuery({ ...instanceQueryOptions(member.slug || member.id), staleTime: 60_000 });
+  };
   return variant === "tabs"
-    ? <LogInstanceTabs members={data} currentId={instanceId} />
-    : <LogInstanceStepper members={data} currentId={instanceId} />;
+    ? <LogInstanceTabs members={data} currentId={instanceId} onIntent={prefetch} />
+    : <LogInstanceStepper members={data} currentId={instanceId} onIntent={prefetch} />;
 }

@@ -1507,15 +1507,22 @@ export function useDeleteLogFiles() {
   });
 }
 
-export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<WoWParsedInstance>, "queryKey" | "queryFn">) {
-  return useQuery({
+/** Query key and fetcher shared by useInstance and prefetches of instances the user may open next. */
+export function instanceQueryOptions(instanceId: string) {
+  return {
     queryKey: ["instance", instanceId],
-    retry: false,
     queryFn: async () => {
       const response = await fetch(`/api/v1/raidlogs/instances/${instanceId}`);
       if (!response.ok) throw new Error("Failed to fetch instance");
       return response.json() as Promise<WoWParsedInstance>;
     },
+  };
+}
+
+export function useInstance(instanceId: string, options?: Omit<UseQueryOptions<WoWParsedInstance>, "queryKey" | "queryFn">) {
+  return useQuery({
+    ...instanceQueryOptions(instanceId),
+    retry: false,
     ...options,
   });
 }
