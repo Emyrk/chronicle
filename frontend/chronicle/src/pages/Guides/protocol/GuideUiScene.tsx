@@ -1,4 +1,5 @@
-import { useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { useRef, type ComponentProps, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
+import { Link, useInRouterContext } from "react-router-dom";
 import { useItemTooltip } from "@/api/gamedata";
 import { useSpell } from "@/api/queries";
 import { getSpellIconUrl } from "@/api/wowdb";
@@ -68,8 +69,18 @@ function nodeStyle(node: SceneNode): CSSProperties {
     borderWidth: props.borderColor ? 1 : undefined,
     fontSize: px(props.fontSize),
     textAlign: props.align === "left" || props.align === "center" || props.align === "right" ? props.align : undefined,
-    pointerEvents: node.kind === "button" || node.listeners.includes("click") || node.props.tooltip === true || hoverText(node) !== undefined ? "auto" : "none",
+    pointerEvents: node.kind === "button" || node.listeners.includes("click") || node.props.tooltip === true || hoverText(node) !== undefined || linkHref(node) !== undefined ? "auto" : "none",
   };
+}
+
+/** A path on this site set with SetLink. The scene validates it, so it is never an external URL. */
+function linkHref(node: SceneNode): string | undefined {
+  return typeof node.props.href === "string" && node.props.href.length > 0 ? node.props.href : undefined;
+}
+
+/** Client-side navigation inside the app; a plain link where there is no router (tests, previews). */
+function SceneLink({ href, ...props }: { href: string } & Omit<ComponentProps<"a">, "href">) {
+  return useInRouterContext() ? <Link to={href} {...props} /> : <a href={href} {...props} />;
 }
 
 /** Text set with SetTooltip; drawn by the host so hovering never runs Lua. */
@@ -200,6 +211,10 @@ export function GuideUiScene({ scene, assets, onNodeClick, onBreakoutClose }: Gu
       return <TextTooltip key={node.id} text={hoverText(node)}><div data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{children}</div></TextTooltip>;
     }
     if (node.kind === "text") {
+      const href = linkHref(node);
+      if (href) {
+        return <TextTooltip key={node.id} text={hoverText(node)}><SceneLink href={href} data-guide-node={node.id} className={`${nodeClassName(node) ?? ""} underline-offset-2 hover:underline`} style={style} onClick={click}>{text(node.props.text)}</SceneLink></TextTooltip>;
+      }
       return <TextTooltip key={node.id} text={hoverText(node)}><div data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</div></TextTooltip>;
     }
     if (node.kind === "breakout") {
@@ -210,6 +225,10 @@ export function GuideUiScene({ scene, assets, onNodeClick, onBreakoutClose }: Gu
     if (node.kind === "texture") return <GuideTextureNode key={node.id} node={node} assets={assets} style={style} onClick={click} />;
     if (isWidgetKind(node.kind)) return renderWidget(node.kind, node, style);
     if (node.kind === "button") {
+      const href = node.props.enabled === false ? undefined : linkHref(node);
+      if (href) {
+        return <TextTooltip key={node.id} text={hoverText(node)}><SceneLink href={href} data-guide-node={node.id} className={`${nodeClassName(node) ?? ""} inline-flex items-center justify-center`} style={style} onClick={click}>{text(node.props.text)}</SceneLink></TextTooltip>;
+      }
       return (
         <TextTooltip key={node.id} text={hoverText(node)}>
           <button

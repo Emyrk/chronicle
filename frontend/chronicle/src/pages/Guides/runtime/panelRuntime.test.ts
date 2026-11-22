@@ -94,6 +94,25 @@ describe("safe panel profile", () => {
     runtime.stop()
   })
 
+  it("links FontStrings and Buttons to pages on this site only", () => {
+    const runtime = panel(`
+      local about = CreateFrame("FontString", "about", UIParent)
+      about:SetLink("/modules/chronicle/module-ui-demo")
+      local go = CreateFrame("Button", "go", UIParent)
+      go:SetLink("/modules/api")
+      go:SetLink(nil)
+    `)
+    const operations = runtime.start()
+    expect(() => applySceneBatch(createInitialScene(), operations)).not.toThrow()
+    expect(operations).toContainEqual({ op: "set", id: "about", props: { href: "/modules/chronicle/module-ui-demo" } })
+    expect(operations).toContainEqual({ op: "set", id: "go", props: { href: "" } })
+    runtime.stop()
+    for (const bad of ["https://evil.test", "//evil.test", "javascript:alert(1)"]) {
+      expect(() => panel(`CreateFrame("Button", "b"):SetLink("${bad}")`).start()).toThrow(/SetLink expects a path on this site/)
+    }
+    expect(() => panel(`CreateFrame("Frame", "f"):SetLink("/x")`).start()).toThrow(/href is not supported for frame/)
+  })
+
   it("frees descendants and their callbacks when a parent is destroyed", () => {
     const runtime = panel(`
       local root = CreateFrame("Frame", "root", UIParent)

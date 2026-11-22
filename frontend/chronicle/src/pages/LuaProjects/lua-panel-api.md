@@ -286,6 +286,7 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 | `Show()`, `Hide()`, `IsShown()` | all | |
 | `SetParent(frame)` | all | |
 | `SetTooltip(text)` | Frame, FontString, Texture, Button | Plain hover text drawn by Chronicle; hovering never runs Lua. Newlines start new lines. `nil` or `""` removes it. A Texture with a spell or item tooltip shows that instead. |
+| `SetLink(path)` | FontString, Button | Links to a page on Chronicle, such as `"/modules/author/slug"`. See [Links](#links). |
 | `Destroy()` | all except UIParent | Removes the object, everything parented to it, and their click handlers. Their IDs can be reused. |
 | `SetScript("OnClick", fn)` | Button, Frame | Needs the `input` capability. `fn(self)` runs on click. |
 | `SetTitle(text)`, `SetAnchor(frame)` | Breakout | See [Breakout panels](#breakout-panels). |
@@ -321,6 +322,20 @@ chart:SetData({
 Each row requires `playerID`, `playerName`, `className` and a non-negative `value`. It may also include `specialization`, `stackedValue` and `dimmed`. A chart accepts at most 100 rows. `type` is `"damage"`, `"healing"`, `"taken"` or `"mitigation"`. The chart is display-only in Lua v1: modules cannot inject React tooltip or breakout content.
 
 The returned chart also supports `SetChartType`, `SetPerSecond`, `SetDuration`, `SetPanelTitle`, `SetStackedLabel`, `SetValueSuffix`, `SetHideZeroValue`, `SetRowHeight` and `SetData`.
+
+### Links
+
+`SetLink(path)` turns a FontString or Button into a link to another page on Chronicle, for example your module's own page or the API reference. Clicking it navigates like any other link on the site and needs no `input` capability.
+
+```lua
+local more = CreateFrame("FontString", "more", UIParent)
+more:SetText("About this module ›")
+more:SetLink("/modules/chronicle/module-ui-demo")
+```
+
+- Only paths on this site are accepted: they start with a single `/`. Full URLs, `//host` paths and anything else are an error, so a module cannot send viewers off Chronicle.
+- `nil` or `""` removes the link. A disabled Button is never a link.
+- Your module's page is `/modules/<author>/<slug>`, using the `slug` from `project.json`.
 
 ### Hover tooltips
 
@@ -563,6 +578,12 @@ Set displayed text, up to 4 KiB.
 
 Set font size in pixels.
 
+#### `ChronicleFontString:SetLink(path?: string)`
+
+Make this text a link to a page on Chronicle, such as your module's page. Only paths on this site are accepted; nil or "" removes the link.
+
+- `path`: A path starting with /, such as "/modules/author/slug". Up to 512 characters.
+
 #### `ChronicleFontString:SetColor(red: number, green: number, blue: number, alpha?: number)`
 
 Set text color. Components are numbers from 0 through 1.
@@ -596,6 +617,12 @@ Render a named icon from Chronicle's current dataset CDN. Names contain only ASC
 #### `ChronicleButton:SetText(text: string)`
 
 Set the button label.
+
+#### `ChronicleButton:SetLink(path?: string)`
+
+Make this button a link to a page on Chronicle, such as your module's page. Only paths on this site are accepted; nil or "" removes the link.
+
+- `path`: A path starting with /, such as "/modules/author/slug". Up to 512 characters.
 
 ### `ChronicleBreakout` extends `ChronicleFrame`
 

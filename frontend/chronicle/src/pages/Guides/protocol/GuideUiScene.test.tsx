@@ -107,6 +107,18 @@ describe("GuideUiScene", () => {
     expect(markup).toMatch(/data-guide-node="hover"[^>]*pointer-events:auto/)
   })
 
+  it("renders linked text and buttons as links to the path, and disabled buttons as buttons", () => {
+    const scene = applySceneBatch(createInitialScene(), [
+      { op: "create", id: "about", kind: "text", parentId: UI_ROOT_ID, props: { x: 0, y: 0, anchor: "top-left", text: "About", fontSize: 12, color: "#ffffff", href: "/modules/chronicle/demo" } },
+      { op: "create", id: "go", kind: "button", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 80, height: 20, anchor: "top-left", text: "Go", href: "/modules/api" } },
+      { op: "create", id: "off", kind: "button", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 80, height: 20, anchor: "top-left", text: "Off", enabled: false, href: "/modules/api" } },
+    ])
+    const markup = renderToStaticMarkup(<GuideUiScene scene={scene} assets={new Map()} onNodeClick={() => {}} />)
+    expect(markup).toMatch(/<a href="\/modules\/chronicle\/demo" data-guide-node="about"[^>]*pointer-events:auto/)
+    expect(markup).toMatch(/<a href="\/modules\/api" data-guide-node="go"/)
+    expect(markup).toMatch(/<button data-guide-node="off"[^>]*disabled/)
+  })
+
   it("highlights the page time range on selectable line charts only", () => {
     const chart = (id: string, timeSelection: string) => ({
       op: "create" as const, id, kind: "line-chart" as const, parentId: UI_ROOT_ID,

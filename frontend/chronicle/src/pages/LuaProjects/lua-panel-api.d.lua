@@ -109,6 +109,10 @@ function ChronicleFontString:SetText(text) end
 ---@param size number
 function ChronicleFontString:SetFontSize(size) end
 
+---Make this text a link to a page on Chronicle, such as your module's page. Only paths on this site are accepted; nil or "" removes the link.
+---@param path? string A path starting with /, such as "/modules/author/slug". Up to 512 characters.
+function ChronicleFontString:SetLink(path) end
+
 ---Set text color. Components are numbers from 0 through 1.
 ---@param red number
 ---@param green number
@@ -143,6 +147,10 @@ local ChronicleButton = {}
 ---Set the button label.
 ---@param text string
 function ChronicleButton:SetText(text) end
+
+---Make this button a link to a page on Chronicle, such as your module's page. Only paths on this site are accepted; nil or "" removes the link.
+---@param path? string A path starting with /, such as "/modules/author/slug". Up to 512 characters.
+function ChronicleButton:SetLink(path) end
 
 ---A floating panel Chronicle draws outside your module's panel, so it is never cut off by the panel's size. It looks like Chronicle's own pinned breakouts: a title bar the viewer can drag and a close button. Create it with CreateFrame("Breakout", id); it is always top-level and starts hidden. Put Frames, FontStrings, Textures and Buttons inside it, then call Show(), usually from an OnClick handler.
 ---@class ChronicleBreakout: ChronicleFrame

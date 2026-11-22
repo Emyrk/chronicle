@@ -1,5 +1,6 @@
 import { lauxlib, lua, lualib, to_luastring } from "fengari"
 import { MAX_CANVAS_SIZE, UI_ROOT_ID } from "../protocol/scene"
+import { sitePath } from "../protocol/validators"
 import { isWidgetKind, WIDGETS, widgetDefaultProps, widgetProps, widgetSettersByMethod, widgetSpec } from "../widgets"
 import type { LuaReadContext, WidgetSetter } from "../widgets/types"
 import type { GuideCapability, NodeKind, SceneOperation } from "../protocol/types"
@@ -73,9 +74,9 @@ interface ObjectState { kind: NodeKind | "root"; shown: boolean; parentId: strin
 
 const SUPPORTED_PROPS: Record<NodeKind, ReadonlySet<string>> = Object.fromEntries([
   ["frame", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "color", "backgroundColor", "borderColor", "tooltipText"]],
-  ["text", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText"]],
+  ["text", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText", "href"]],
   ["texture", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor", "tooltipText"]],
-  ["button", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText"]],
+  ["button", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText", "href"]],
   ["breakout", ["width", "height", "visible", "alpha", "title", "anchorTo", "borderColor"]],
   ["unit", ["visible", "alpha", "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"]],
   ["icon", ["visible", "alpha", "x", "y", "size", "asset", "label", "color", "facing"]],
@@ -336,6 +337,11 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     registerFunction(state, "SetPoints", propertyMethod((inner) => ({ points: readPoints(inner, 2) })))
     // Hover text drawn by the host: hovering never runs Lua. nil or "" removes it.
     registerFunction(state, "SetTooltip", propertyMethod((inner) => ({ tooltipText: optionalString(inner, 2, "") })))
+    registerFunction(state, "SetLink", propertyMethod((inner) => {
+      const href = optionalString(inner, 2, "")
+      try { sitePath(href, "SetLink") } catch { luaError(inner, "SetLink expects a path on this site starting with /, such as \"/modules/author/slug\"") }
+      return { href }
+    }))
     registerFunction(state, "SetTitle", propertyMethod((inner) => ({ title: optionalString(inner, 2, "") })))
     // Breakouts open beside this frame; nil opens them beside the panel.
     registerFunction(state, "SetAnchor", propertyMethod((inner) => {

@@ -90,6 +90,15 @@ describe("retained guide scene reducer", () => {
     expect(() => frame("bad\u0007")).toThrow(/tooltipText/)
   })
 
+  it("accepts only same-site link paths", () => {
+    const text = (href: unknown) => applySceneBatch(createInitialScene(), [{ op: "create", id: "t", kind: "text", parentId: UI_ROOT_ID, props: { x: 0, y: 0, anchor: "top-left", text: "x", fontSize: 12, color: "#ffffff", href } }])
+    for (const ok of ["/modules/chronicle/module-ui-demo", "/modules/api#links", "/instance/abc?tab=deaths", ""]) expect(text(ok).nodes.get("t")?.props.href).toBe(ok)
+    for (const bad of ["https://evil.test", "//evil.test/x", "/\\evil.test", "javascript:alert(1)", "modules/x", "/a b", "/x\u0000", "/" + "a".repeat(512), 5]) {
+      expect(() => text(bad), String(bad)).toThrow(/path on this site/)
+    }
+    expect(() => applySceneBatch(createInitialScene(), [{ op: "create", id: "f", kind: "frame", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 1, height: 1, anchor: "top-left", href: "/x" } }])).toThrow(/unknown property/)
+  })
+
   it("keeps breakouts top-level and lets them hold UI nodes", () => {
     const breakout = (parentId: string, props: Record<string, unknown> = {}): SceneOperation => ({ op: "create", id: "b", kind: "breakout", parentId, props: { width: 300, height: 200, visible: false, ...props } })
     const scene = applySceneBatch(createInitialScene(), [breakout(UI_ROOT_ID, { title: "Jaina", anchorTo: "row" }), create("inside", "text", "b")])

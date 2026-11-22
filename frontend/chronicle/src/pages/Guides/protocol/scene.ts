@@ -1,4 +1,4 @@
-import { boolean, bounded, color, displayText, exact, finite, id, record, SceneValidationError, string } from "./validators"
+import { boolean, bounded, color, displayText, exact, finite, id, record, SceneValidationError, sitePath, string } from "./validators"
 import { WIDGETS, widgetArgs, widgetProps, widgetRequiredProps } from "../widgets"
 import { NODE_KINDS, type GuideEvent, type NodeKind, type RetainedScene, type SceneNode, type SceneOperation } from "./types"
 
@@ -20,9 +20,9 @@ const COMMON_MAP = ["visible", "alpha"]
 // Widget kinds (charts and other Chronicle-owned widgets) come from their specs in ../widgets.
 const BASE_PROPERTIES: Partial<Record<NodeKind, readonly string[]>> = {
   frame: [...COMMON_UI, "width", "height", "color", "backgroundColor", "borderColor", "tooltipText"],
-  text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText"],
+  text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText", "href"],
   texture: [...COMMON_UI, "width", "height", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor", "tooltipText"],
-  button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText"],
+  button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText", "href"],
   // A floating panel the host draws outside the module's panel, beside anchorTo.
   breakout: ["visible", "alpha", "zIndex", "width", "height", "title", "anchorTo", "borderColor"],
   unit: [...COMMON_MAP, "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"],
@@ -88,6 +88,7 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
     const arg = widget?.get(key)
     if (arg) arg.type.validate(value, `${kind}.${key}`)
     else if (key === "text" || key === "tooltipText" || key === "title") displayText(value, `${kind}.${key}`)
+    else if (key === "href") sitePath(value, `${kind}.href`)
     else if (key === "anchorTo") { if (value !== null) id(value, `${kind}.anchorTo`) }
     else if (key === "asset") {
       const asset = string(value, `${kind}.asset`, 255)

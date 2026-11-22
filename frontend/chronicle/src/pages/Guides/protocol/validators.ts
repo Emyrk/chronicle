@@ -63,3 +63,13 @@ export function boolean(value: unknown, label: string): boolean {
   if (typeof value !== "boolean") throw new SceneValidationError(`${label} must be a boolean`)
   return value
 }
+
+export const MAX_LINK_LENGTH = 512
+/** A path on this site, such as "/modules/author/slug". Never a URL, protocol-relative path or script. "" removes the link. */
+const SITE_PATH = /^\/(?![/\\])[A-Za-z0-9\-._~!$&'()*+,;=:@/?#%]*$/
+export function sitePath(value: unknown, label: string): string {
+  if (typeof value !== "string" || value.length > MAX_LINK_LENGTH || (value !== "" && !SITE_PATH.test(value))) {
+    throw new SceneValidationError(`${label} must be a path on this site starting with /, such as /modules/author/slug`)
+  }
+  return value
+}
