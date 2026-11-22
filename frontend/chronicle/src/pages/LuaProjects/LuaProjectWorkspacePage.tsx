@@ -328,7 +328,10 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   return <div className="flex flex-col border-b border-border lg:h-[calc(100dvh-70px)] lg:min-h-[560px]">
     <ConnectAgentPrompt />
     <header className="flex flex-wrap items-center gap-x-2 gap-y-2 border-b border-border px-3 py-2">
-      <Link className={iconButton} to={modulePath(project)} title="Back to the module overview" aria-label="Back to the module overview"><ChevronLeft className="size-4" /></Link>
+      <Link className="inline-flex h-7 shrink-0 items-center gap-0.5 rounded-md pl-1 pr-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        to={modulePath(project)} title="Back to the module page" aria-label="Back to the module page">
+        <ChevronLeft className="size-4" /><span className="hidden sm:inline">Module page</span></Link>
+      <span aria-hidden className="h-5 w-px bg-border" />
       <h1 className="min-w-0 truncate text-sm font-semibold" title={project.slug}>{project.name}</h1>
       <a className={iconButton} href="/modules/api" target="_blank" rel="noreferrer"
         title="Module API reference and FAQ (opens in a new tab)" aria-label="Module API reference"><BookOpen className="size-4" /></a>
