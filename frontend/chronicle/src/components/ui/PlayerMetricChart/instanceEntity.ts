@@ -1,21 +1,24 @@
 import { Focus } from "lucide-react"
 import type { EntityActionProvider } from "@/components/EntityMenu/EntityMenu"
 import { entityAttributes, type EntityRef } from "@/components/EntityMenu/entity"
+import type { FavoritePlayer } from "@/api/typesGenerated"
 import type { Instance } from "@/pages/Instance/InstancePage"
 import type { PlayerMetricChartData } from "./PlayerMetricChartModel"
 
 /** Build an armory URL for a player GUID, or undefined if not a known player or no realm. */
-export function getArmoryUrl(instance: Instance, playerId: string): string | undefined {
+export function getArmoryUrl(instance: Pick<Instance, "players" | "realm">, playerId: string): string | undefined {
   const player = instance.players?.[playerId]
-  if (!player || !instance.realm) return undefined
-  return `/armory/${encodeURIComponent(instance.realm)}/${encodeURIComponent(playerId)}`
+  const realm = player?.realm_id ?? instance.realm
+  if (!player || !realm) return undefined
+  return `/armory/${encodeURIComponent(realm)}/${encodeURIComponent(playerId)}`
 }
 
 /** The player a GUID in this log belongs to, for the entity menu; undefined for pets, NPCs and unknown GUIDs. */
 export function instanceCharacterEntity(instance: Pick<Instance, "players" | "realm">, guid: string): EntityRef | undefined {
   const player = instance.players?.[guid]
-  if (!player || !instance.realm) return undefined
-  return { kind: "character", realm: instance.realm, guid, name: player.name, className: player.class }
+  const realm = player?.realm_id ?? instance.realm
+  if (!player || !realm) return undefined
+  return { kind: "character", realm, guid, name: player.name, className: player.class }
 }
 
 /**
@@ -38,9 +41,8 @@ export function instanceGuildEntity(instance: Pick<Instance, "guild">): EntityRe
 /** The character a meter row stands for, for its entity menu; pets and NPCs have none. */
 export function instanceRowEntity(instance: Instance): (row: PlayerMetricChartData) => EntityRef | undefined {
   return (row) => {
-    const player = instance.players?.[row.playerID]
-    if (!player || !instance.realm) return undefined
-    return { kind: "character", realm: instance.realm, guid: row.playerID, name: row.playerName, className: row.className }
+    const entity = instanceCharacterEntity(instance, row.playerID)
+    return entity ? { ...entity, name: row.playerName, className: row.className } : undefined
   }
 }
 
@@ -50,4 +52,18 @@ export function focusPlayerActions(onFocus: (playerId: string) => void): EntityA
     entity.kind === "character"
       ? [{ id: "focus", label: `Focus ${entity.name}`, icon: Focus, onSelect: () => onFocus(entity.guid) }]
       : []
+}
+
+/** Match favorites by GUID and home realm; older instance responses carry only a realm name. */
+export function isInstancePlayerFavorite(
+  instance: Pick<Instance, "players" | "realm">,
+  guid: string,
+  favorites: readonly Pick<FavoritePlayer, "id" | "realm_id" | "realm_name">[],
+): boolean {
+  const player = instance.players?.[guid]
+  const realm = player?.realm_id ?? instance.realm
+  if (!player || !realm) return false
+  return favorites.some((favorite) => favorite.id === guid && (
+    favorite.realm_id === realm || (player.realm_id == null && favorite.realm_name.toLowerCase() === realm.toLowerCase())
+  ))
 }

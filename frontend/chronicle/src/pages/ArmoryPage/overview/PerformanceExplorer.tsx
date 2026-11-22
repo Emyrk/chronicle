@@ -129,7 +129,8 @@ export function PerformanceExplorer({ players, state, onStateChange }: Performan
   const selectedPlayerProfiles = state.players.flatMap((selection) => {
     const profile = players.find((player) => (
       player.id === selection.id
-      && player.realm_name.localeCompare(selection.realmName, undefined, { sensitivity: "accent" }) === 0
+      && (player.realm_id === selection.realmName
+        || player.realm_name.localeCompare(selection.realmName, undefined, { sensitivity: "accent" }) === 0)
     ));
     return profile ? [{ selection, profile }] : [];
   });
