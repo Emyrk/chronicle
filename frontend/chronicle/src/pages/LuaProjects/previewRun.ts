@@ -116,6 +116,8 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
         return
       }
       if (message?.type === "progress") { armWatchdog(); return }
+      // The preview reports one snapshot; it never answers Chronicle.GetSpell, so names stay placeholders.
+      if (message?.type === "spell-request") return
       if (message?.type === "replay-complete") {
         const m = message.metrics
         finish({ ok: true, metrics: m && { events: m.events, encounters: m.encounters, totalMs: round(m.totalMs), luaMs: round(m.luaMs), completeMs: round(m.completeMs), uiOperations: m.uiOperations } })

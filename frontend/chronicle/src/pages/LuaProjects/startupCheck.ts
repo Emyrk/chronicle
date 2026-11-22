@@ -25,6 +25,8 @@ export function runStartupCheck(panel: PanelPackage, signal?: AbortSignal, timeo
         finish({ ok: false, message: `Lua startup failed: ${"message" in data ? String(data.message) : "unknown error"}` })
         return
       }
+      // A top-level Chronicle.GetSpell is valid; the startup check never answers it.
+      if (data && typeof data === "object" && "type" in data && data.type === "spell-request") return
       try {
         if (parseWorkerMessage(data).type === "ready") finish({ ok: true, message: "Lua startup passed in the browser worker." })
       } catch { finish({ ok: false, message: "Lua worker returned an invalid message." }) }
