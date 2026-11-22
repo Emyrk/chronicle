@@ -814,6 +814,29 @@ JOIN users u ON u.id = wlg.owner
 WHERE li.duplicate_group_id = @duplicate_group_id
 ORDER BY li.id;
 
+-- name: ListDungeonInstanceSet :many
+-- A dungeon instance set is every instance in one uploaded log with the same
+-- dungeon name, e.g. several resets of one dungeon. Raids are never grouped.
+SELECT
+    li.id,
+    li.hashed_slug AS slug,
+    li.name,
+    li.start_time,
+    li.end_time,
+    (SELECT COUNT(DISTINCT lie.name) FROM log_instance_encounters lie
+     WHERE lie.instance_id = li.id AND lie.boss AND lie.kill_type IN ('clean', 'partial'))::bigint AS boss_kills,
+    (SELECT COUNT(*) FROM log_instance_encounters lie
+     WHERE lie.instance_id = li.id AND lie.kill_type = 'wipe')::bigint AS wipes
+FROM log_instances li
+JOIN parsed_log_group plg ON plg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
+WHERE li.log_group_id = @log_group_id
+  AND li.name = @name
+  AND li.category = 'dungeon'
+ORDER BY li.start_time, li.id;
+
 
 
 

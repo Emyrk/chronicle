@@ -1795,6 +1795,27 @@ export interface DpsRankingsStatus {
 
 // From chroniclesdk/log.go
 /**
+ * DungeonInstanceSetMember is one dungeon instance from the same uploaded log
+ * with the same name, such as one of several resets. The list is in log order.
+ */
+export interface DungeonInstanceSetMember {
+    readonly id: string;
+    readonly slug: string;
+    readonly name: string;
+    readonly start_time?: string;
+    readonly end_time?: string;
+    /**
+     * BossKills counts distinct bosses killed in this instance.
+     */
+    readonly boss_kills: number;
+    /**
+     * Wipes counts encounters, boss or trash, that ended in a wipe.
+     */
+    readonly wipes: number;
+}
+
+// From chroniclesdk/log.go
+/**
  * DuplicateInstance is a sibling instance in the same duplicate group.
  */
 export interface DuplicateInstance {

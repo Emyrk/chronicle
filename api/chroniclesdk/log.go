@@ -710,6 +710,20 @@ type RecentEncounter struct {
 	KillType KillType `json:"kill_type"`
 }
 
+// DungeonInstanceSetMember is one dungeon instance from the same uploaded log
+// with the same name, such as one of several resets. The list is in log order.
+type DungeonInstanceSetMember struct {
+	ID        uuid.UUID  `json:"id"`
+	Slug      string     `json:"slug"`
+	Name      string     `json:"name"`
+	StartTime *time.Time `json:"start_time,omitempty"`
+	EndTime   *time.Time `json:"end_time,omitempty"`
+	// BossKills counts distinct bosses killed in this instance.
+	BossKills int64 `json:"boss_kills"`
+	// Wipes counts encounters, boss or trash, that ended in a wipe.
+	Wipes int64 `json:"wipes"`
+}
+
 // DuplicateInstance is a sibling instance in the same duplicate group.
 type DuplicateInstance struct {
 	ID           uuid.UUID `json:"id"`

@@ -619,6 +619,43 @@ func (api *API) UngroupInstance(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListDuplicateInstances returns all instances in the same duplicate group.
+// DungeonInstanceSet lists the dungeon instances in this instance's log that
+// share its name, such as several resets of one dungeon. Raids, and dungeons
+// run once, return a list of at most one.
+func (api *API) DungeonInstanceSet(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	inst := httpmw.Instance(ctx)
+
+	rows, err := api.Opts.Zed.ListDungeonInstanceSet(ctx, database.ListDungeonInstanceSetParams{
+		LogGroupID: inst.LogGroupID,
+		Name:       inst.Name,
+	})
+	if err != nil {
+		httpapi.InternalServerError(w, err)
+		return
+	}
+
+	result := make([]chroniclesdk.DungeonInstanceSetMember, 0, len(rows))
+	for _, row := range rows {
+		member := chroniclesdk.DungeonInstanceSetMember{
+			ID:        row.ID,
+			Slug:      row.Slug.String,
+			Name:      row.Name,
+			BossKills: row.BossKills,
+			Wipes:     row.Wipes,
+		}
+		if row.StartTime.Valid {
+			member.StartTime = &row.StartTime.Time
+		}
+		if row.EndTime.Valid {
+			member.EndTime = &row.EndTime.Time
+		}
+		result = append(result, member)
+	}
+
+	httpapi.Write(ctx, w, http.StatusOK, result)
+}
+
 func (api *API) ListDuplicateInstances(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	inst := httpmw.Instance(ctx)

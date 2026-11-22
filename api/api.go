@@ -844,6 +844,7 @@ func (api *API) Routes() chi.Router {
 								r.Get("/speedrun", api.InstanceSpeedrun)
 								r.Get("/speedrun/cohort", api.InstanceSpeedrunCohort)
 								r.Get("/duplicates", api.ListDuplicateInstances)
+								r.Get("/dungeon-set", api.DungeonInstanceSet)
 
 								r.Group(func(r chi.Router) {
 									r.Use(api.Auth.Authenticated(false))
