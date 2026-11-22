@@ -59,6 +59,16 @@ describe("runPreview", () => {
     expect(result.error).toMatch(/main\.lua:2: boom/)
   })
 
+  it("ignores spell lookups instead of failing on them", async () => {
+    const lua = `${totals}
+      damage.onComplete(function()
+        label:SetText("Spell 133")
+        Chronicle.GetSpell(133, function(spell) label:SetText(spell.name) end)
+      end)`
+    const result = await runPreview({ panel: panel(lua), streams, encounterIds: ["e1"] }, undefined, fakeWorker)
+    expect(result).toMatchObject({ ok: true, output: expect.stringContaining('"Spell 133"') })
+  })
+
   it("finishes after startup for panels without a stream", async () => {
     const result = await runPreview({ panel: panel(`CreateFrame("Frame", "only", UIParent)`, []), encounterIds: [] }, undefined, fakeWorker)
     expect(result).toMatchObject({ ok: true, nodes: 1, output: 'frame "only" 1x1 at 0,0' })
