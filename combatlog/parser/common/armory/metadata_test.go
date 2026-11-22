@@ -152,11 +152,11 @@ func TestUnitLevelObservationProvenance(t *testing.T) {
 	tracker.Unit(unit)
 	player := combatant.Combatant{Guid: unit.Guid, Seen: at.Add(2 * time.Hour)}
 	tracker.Player(&messages.Combatant{Combatant: player})
-	require.EqualValues(t, 30, *tracker.Players[player.Guid].Level)
-	require.Equal(t, database.Timestamptz(at), tracker.playerObservations(player).Level)
+	require.Nil(t, tracker.Players[player.Guid].Level)
+	require.False(t, tracker.playerObservations(player).Level.Valid)
 
-	// An actual known level after the scouting observation wins, even if the
-	// carrying UNIT_INFO message was later than that actual observation.
+	// Raw combat levels remain eligible. Supplemental levels cannot overwrite
+	// them, even if carried by a later UNIT_INFO message.
 	level := int32(40)
 	player.Seen = at.Add(30 * time.Minute)
 	player.Level = &level

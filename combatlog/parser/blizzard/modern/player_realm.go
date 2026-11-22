@@ -90,3 +90,6 @@ func (p *Parser) ObservedPlayerNames(id guid.GUID) []string {
 	}
 	return names
 }
+
+// NormalizePlayerName applies the Forever display-name normalization, not identity inference.
+func NormalizePlayerName(name string) string { return stripRealm(name) }

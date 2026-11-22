@@ -51,3 +51,12 @@ func (s *Scouting) IdentityName(id guid.GUID) (string, bool) {
 	}
 	return name, name != ""
 }
+
+// ForPlayer returns an immutable single-player view for streaming reconciliation.
+// Public accessors return copies; the backing index is never modified.
+func (s *Scouting) ForPlayer(id guid.GUID) *Scouting {
+	if s == nil || len(s.players[id]) == 0 {
+		return &Scouting{}
+	}
+	return &Scouting{players: map[guid.GUID][]Player{id: s.players[id]}, ids: []guid.GUID{id}}
+}

@@ -127,14 +127,29 @@ func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID)
 // remain event-time evidence. Never synthesize party, affiliation, or guild
 // membership, which could change raid ownership votes.
 type scoutingAdvancer struct {
-	realms   map[guid.GUID]uuid.UUID
-	identity *foreverIdentity
-	source   consumers.Advancer
-	players  *scouting.Scouting
+	realms     map[guid.GUID]uuid.UUID
+	identity   *foreverIdentity
+	source     consumers.Advancer
+	players    *scouting.Scouting
+	catalog    *participantRealmCatalog
+	reconciled map[guid.GUID]scoutingReconciliation
 }
 
 func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, error) {
 	batch, err := s.source.Advance(ctx)
+	if s.catalog != nil && s.identity != nil {
+		raw := s.identity.combat.(*combatIdentity)
+		for _, message := range batch {
+			switch m := message.(type) {
+			case *messages.Unit:
+				raw.observe(m.Guid, m.Name, m.RawRealm)
+			case *messages.Combatant:
+				raw.observe(m.Guid, m.Name, m.RawRealm)
+			case *messages.CombatantTalents:
+				raw.observe(m.Guid, m.PlayerName, "")
+			}
+		}
+	}
 	for i, message := range batch {
 		var id guid.GUID
 		var unitName string
@@ -146,26 +161,30 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 		default:
 			continue
 		}
-		if !s.safeIdentity(id, unitName) {
+		players, realms := s.currentScouting(id)
+		if !s.safeIdentity(players, realms, id, unitName) {
 			continue
 		}
 		if combatant, ok := message.(*messages.Combatant); ok {
 			copy := *combatant
-			race, gender := s.players.StaticAttributes(id)
+			race, gender := players.StaticAttributes(id)
 			if copy.Race == "" || copy.Race == types.HeroRacesUnknown {
 				copy.Race = race
+				copy.ScoutingRace = race != types.HeroRacesUnknown
 			}
 			if copy.Gender <= types.HeroGenderUnknown {
 				copy.Gender = gender
+				copy.ScoutingGender = gender != types.HeroGenderUnknown
 			}
 			batch[i] = &copy
 			continue
 		}
 		unit := message.(*messages.Unit)
-		known := s.players.KnownAt(unit.Guid, unit.Date().Unix())
+		known := players.KnownAt(unit.Guid, unit.Date().Unix())
 		copy := *unit
 		if (copy.Name == "" || copy.Name == "Unknown") && known.Name != nil {
 			copy.Name = known.Name.Name
+			copy.ScoutingName = true
 		}
 		if copy.Level <= 0 && known.Level != nil {
 			copy.Level = int32(*known.Level.Level)
@@ -178,19 +197,51 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 }
 
 // The same realm/name reconciliation gates both temporal and static enrichment.
-func (s *scoutingAdvancer) safeIdentity(id guid.GUID, unitName string) bool {
-	if realmID, resolved := s.realms[id]; !resolved || realmID == uuid.Nil {
+func (s *scoutingAdvancer) safeIdentity(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID, id guid.GUID, unitName string) bool {
+	if realmID, resolved := realms[id]; !resolved || realmID == uuid.Nil {
 		return false
 	}
-	sourceName, ok := s.players.IdentityName(id)
+	sourceName, ok := players.IdentityName(id)
 	if !ok || (meaningfulIdentityName(unitName) && sourceName != unitName) {
 		return false
 	}
 	if s.identity != nil {
 		name, safe := uniqueIdentityName(s.identity.ObservedPlayerNames(id))
-		if !safe || (meaningfulIdentityName(unitName) && name != "" && name != unitName) {
+		if !safe || (name != "" && name != sourceName) || (meaningfulIdentityName(unitName) && name != "" && name != unitName) {
 			return false
 		}
 	}
 	return true
+}
+
+// Cache only while the raw name/realm evidence is unchanged. This permits late
+// combat evidence to discard incompatible sources BEFORE merging their deltas.
+type scoutingReconciliation struct {
+	name, realm      string
+	safe, realmKnown bool
+	players          *scouting.Scouting
+	realms           map[guid.GUID]uuid.UUID
+}
+
+func (s *scoutingAdvancer) currentScouting(id guid.GUID) (*scouting.Scouting, map[guid.GUID]uuid.UUID) {
+	if s.catalog == nil || s.identity == nil {
+		return s.players, s.realms
+	}
+	evidence := s.identity.combat
+	name, safe := uniqueIdentityName(evidence.ObservedPlayerNames(id))
+	realm, known := evidence.LookupPlayerRealm(id, name)
+	cached, ok := s.reconciled[id]
+	if ok && cached.name == name && cached.safe == safe && cached.realm == realm && cached.realmKnown == known {
+		return cached.players, cached.realms
+	}
+	players, realms, identity := reconcileForeverScouting(s.players.ForPlayer(id), evidence, s.catalog)
+	delete(s.identity.inferred, id)
+	if value, ok := identity.inferred[id]; ok {
+		s.identity.inferred[id] = value
+	}
+	if s.reconciled == nil {
+		s.reconciled = make(map[guid.GUID]scoutingReconciliation)
+	}
+	s.reconciled[id] = scoutingReconciliation{name: name, realm: realm, safe: safe, realmKnown: known, players: players, realms: realms}
+	return players, realms
 }

@@ -197,6 +197,9 @@ func (u Unit) Affects() []guid.GUID { return []guid.GUID{u.Guid} }
 func (*Unit) isMessage()            {}
 
 type Combatant struct {
+	// Supplemental fields are valid for instance display, but only final reconciled
+	// scouting writes may persist them to armory.
+	ScoutingRace, ScoutingGender bool
 	MessageBase
 	combatant.Combatant
 }

@@ -299,7 +299,7 @@ func persistedPlayerLevel(player combatant.Combatant, udb *unitdb.Units) int16 {
 	if player.Level != nil && *player.Level > 0 {
 		return int16(*player.Level)
 	}
-	if info, ok := udb.Get(player.Guid); ok {
+	if info, ok := udb.Get(player.Guid); ok && info.LevelObservedAt == nil {
 		return int16(info.Level)
 	}
 	return 0
@@ -562,8 +562,10 @@ func (g *Tracker) Guild(msg *messages.Combatant) {
 	g.Guilds[msg.Guild.Name][msg.Guid] = struct{}{}
 }
 
+// Supplemental levels belong to the final reconciled scouting write, not this
+// raw combat tracker: a later identity mismatch may invalidate their source.
 func (g *Tracker) Unit(unit *messages.Unit) {
-	if !unit.Guid.IsPlayer() || unit.Level <= 0 {
+	if !unit.Guid.IsPlayer() || unit.Level <= 0 || unit.LevelObservedAt != nil {
 		return
 	}
 
@@ -573,9 +575,6 @@ func (g *Tracker) Unit(unit *messages.Unit) {
 		observed = prior
 	}
 	seen := unit.Date()
-	if unit.LevelObservedAt != nil {
-		seen = *unit.LevelObservedAt
-	}
 	if observed.Level.Valid && seen.Before(observed.Level.Time) {
 		return
 	}
@@ -595,6 +594,14 @@ func (g *Tracker) Player(msg *messages.Combatant) {
 		return
 	}
 	c := msg.Combatant
+	// Do not let tentative scouting enrichment survive a late identity mismatch.
+	// The final reconciled direct scouting write owns these supplemental fields.
+	if msg.ScoutingRace {
+		c.Race = types.HeroRacesUnknown
+	}
+	if msg.ScoutingGender {
+		c.Gender = types.HeroGenderUnknown
+	}
 
 	// If COMBATANT_TALENTS arrived before COMBATANT_INFO, merge the
 	// detailed talent data (which includes tab names) into this player.

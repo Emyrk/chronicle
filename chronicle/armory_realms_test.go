@@ -11,10 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/common/armory"
+	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/dbtestutil"
 	"github.com/Emyrk/chronicle/internal/testutil"
@@ -269,4 +271,91 @@ func TestScoutingAndCombatArmoryShareInferredIdentity(t *testing.T) {
 	row, err = store.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: home.ID, Identifier: id})
 	require.NoError(t, err)
 	require.True(t, observed.Equal(row.UpdatedAt.Time))
+}
+
+func TestStreamingScoutingFinalArmoryEligibility(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, earlyName, lateName, lateRealm string
+		blocked                              bool
+	}{
+		{"collision excludes all writes", "Alice", "Bob", "Normal-US", true},
+		{"mismatched scout preserves combat identity", "", "Bob", "Normal-US", false},
+		{"different authoritative realm drops scout values", "Alice", "Alice", "Normal-EU", false},
+		{"unmapped authoritative realm excludes all writes", "Alice", "Alice", "Unmapped", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := testutil.Context(t, testutil.WaitLong)
+			store, _ := dbtestutil.NewDB(t)
+			owner, instanceRealm := insertVisibilityTestOwnerAndRealm(t, ctx, store)
+			realm, err := store.GetWoWServerRealm(ctx, instanceRealm)
+			require.NoError(t, err)
+			us, err := store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: uuid.New(), ServerID: realm.ServerID, Name: "Normal-US"})
+			require.NoError(t, err)
+			eu, err := store.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: uuid.New(), ServerID: realm.ServerID, Name: "Normal-EU"})
+			require.NoError(t, err)
+			catalog := newParticipantRealmCatalog(realm.ServerID, []database.WowServerRealm{us, eu})
+			const id guid.GUID = 1<<32 | 1
+			scouts := newTestScouting(t, map[guid.GUID][]scouting.Player{id: {{Name: "Alice", Realm: "Normal-US", Race: "NightElf", Gender: ptr.Ref(3), LastSeen: 100, Observations: []scouting.Observation{{At: 10, Name: "Alice", Level: ptr.Ref(60), Guild: ptr.Ref("ScoutGuild")}}}}})
+			raw := &combatIdentity{}
+			_, realms, identity := reconcileForeverScouting(scouts, raw, catalog)
+			units := unitdb.New(nil)
+			units.SetPlayerRealmLookup(identity)
+			tracker := armory.New(units)
+			early := &messages.Combatant{MessageBase: messages.Base(time.Unix(5, 0)), Combatant: combatant.Combatant{Guid: id, Name: tc.earlyName, Seen: time.Unix(5, 0)}}
+			unit := &messages.Unit{MessageBase: messages.Base(time.Unix(20, 0)), Info: unitinfo.Info{Guid: id, Name: tc.earlyName}}
+			late := &messages.Combatant{MessageBase: messages.Base(time.Unix(30, 0)), Combatant: combatant.Combatant{Guid: id, Name: tc.lateName, RawRealm: tc.lateRealm, Seen: time.Unix(30, 0), HeroClass: types.HeroClassesMAGE, Guild: &combatant.Guild{Name: "CombatGuild"}, GearSetups: make([]combatant.GearItem, 19)}}
+			late.GearSetups[0].ItemID = 123
+			source := &streamingScoutingSource{batches: [][]messages.Message{{early, unit}, {late}}}
+			adv := scoutingAdvancer{source: source, players: scouts, realms: realms, identity: identity, catalog: catalog}
+			for range 2 {
+				batch, err := adv.Advance(ctx)
+				require.NoError(t, err)
+				for _, message := range batch {
+					switch m := message.(type) {
+					case *messages.Combatant:
+						units.UpdatePlayer(m.Combatant)
+						tracker.Player(m)
+						tracker.Guild(m)
+					case *messages.Unit:
+						units.Update(m.Info)
+						tracker.Unit(m)
+					}
+				}
+			}
+			tracker.Participant[id] = struct{}{}
+			filtered, finalRealms := finalizeForeverScouting(scouts, identity, catalog)
+			units.RefreshPlayerRealms()
+			finalizeScoutingRealms(units, finalRealms)
+			payload, err := scoutingPayload(filtered, finalRealms)
+			require.NoError(t, err)
+			require.JSONEq(t, `[]`, string(payload), "incompatible scouting must not reach direct persistence")
+			observed := time.Unix(30, 0).UTC()
+			log := insertVisibilityTestLogGroup(t, ctx, store, owner)
+			instance := insertVisibilityTestInstance(t, ctx, store, log, instanceRealm, "streaming identity", observed)
+			recorder := &armoryWriteRecorder{Store: store}
+			_, err = tracker.Insert(ctx, units, instance, instanceRealm, uuid.New(), recorder, armoryRealmResolver(database.LogFormatV22Cleu, units, catalog))
+			require.NoError(t, err)
+			if tc.blocked {
+				require.Zero(t, recorder.playerCalls)
+				require.Zero(t, recorder.metadataCalls)
+				require.Empty(t, recorder.guilds)
+				require.Empty(t, recorder.histories)
+				return
+			}
+			require.Len(t, recorder.players, 1)
+			require.Len(t, recorder.histories, 1)
+			player := recorder.players[0]
+			require.Equal(t, tc.lateName, player.Name)
+			require.Equal(t, catalog.resolve(tc.lateRealm).UUID, player.RealmID)
+			require.Equal(t, database.WowPlayableRaceUnknown, player.Race)
+			require.Equal(t, database.WowPlayableGenderNotSet, player.Gender)
+			require.Zero(t, player.Level)
+			require.Equal(t, int32(123), player.Gear[0].ItemID)
+			for _, guild := range recorder.guilds {
+				require.Equal(t, "CombatGuild", guild.Name)
+			}
+		})
+	}
 }

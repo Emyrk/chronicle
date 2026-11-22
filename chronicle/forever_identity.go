@@ -19,29 +19,78 @@ import (
 // It is internal parse metadata only; it does not create catalog or API records.
 type inferredRealm struct{ name, raw string }
 type foreverIdentity struct {
-	combat   *modern.PlayerIdentityIndex
-	live     unitdb.PlayerRealmLookup
-	inferred map[guid.GUID]inferredRealm
+	combat    playerIdentityEvidence
+	inferred  map[guid.GUID]inferredRealm
+	finalized bool
 }
 
 func (i *foreverIdentity) LookupPlayerRealm(id guid.GUID, name string) (string, bool) {
 	if raw, ok := i.combat.LookupPlayerRealm(id, name); ok {
 		return raw, true
 	}
+	value, ok := i.inferred[id]
+	if ok && value.name == name {
+		return value.raw, true
+	}
+	return "", i.finalized
+}
+func (i *foreverIdentity) ObservedPlayerNames(id guid.GUID) []string {
+	return i.combat.ObservedPlayerNames(id)
+}
+
+// combatIdentity retains raw evidence during the normal parse, before scouting
+// enrichment. Supplementary names must never manufacture a combat collision.
+type playerIdentityEvidence interface {
+	unitdb.PlayerRealmLookup
+	ObservedPlayerNames(guid.GUID) []string
+}
+type combatIdentity struct {
+	live   playerIdentityEvidence
+	names  map[guid.GUID]map[string]struct{}
+	realms map[guid.GUID]map[string]string
+}
+
+func (i *combatIdentity) LookupPlayerRealm(id guid.GUID, name string) (string, bool) {
 	if i.live != nil {
 		if raw, ok := i.live.LookupPlayerRealm(id, name); ok {
 			return raw, true
 		}
 	}
-	value, ok := i.inferred[id]
-	return value.raw, ok && value.name == name
+	raw, ok := i.realms[id][name]
+	return raw, ok
 }
-func (i *foreverIdentity) ObservedPlayerNames(id guid.GUID) []string {
-	names := i.combat.ObservedPlayerNames(id)
-	if live, ok := i.live.(interface{ ObservedPlayerNames(guid.GUID) []string }); ok {
-		names = append(names, live.ObservedPlayerNames(id)...)
+func (i *combatIdentity) ObservedPlayerNames(id guid.GUID) []string {
+	var names []string
+	if i.live != nil {
+		names = i.live.ObservedPlayerNames(id)
+	}
+	for name := range i.names[id] {
+		names = append(names, name)
 	}
 	return names
+}
+func (i *combatIdentity) observe(id guid.GUID, name, rawRealm string) {
+	if !id.IsPlayer() || id.IsZero() || !meaningfulIdentityName(name) {
+		return
+	}
+	if i.names == nil {
+		i.names = make(map[guid.GUID]map[string]struct{})
+	}
+	if i.names[id] == nil {
+		i.names[id] = make(map[string]struct{})
+	}
+	i.names[id][name] = struct{}{}
+	if rawRealm != "" {
+		if i.realms == nil {
+			i.realms = make(map[guid.GUID]map[string]string)
+		}
+		if i.realms[id] == nil {
+			i.realms[id] = make(map[string]string)
+		}
+		if _, known := i.realms[id][name]; !known {
+			i.realms[id][name] = rawRealm
+		}
+	}
 }
 
 func meaningfulIdentityName(name string) bool {
@@ -94,7 +143,10 @@ func loadForeverIdentityCatalog(ctx context.Context, db scoutingRealmStore, tena
 // reconcileForeverScouting discards incompatible sources BEFORE merging deltas.
 // Combat identity controls names and realms. Scouting-only GUIDs must have one
 // meaningful name and unanimous, catalog-resolved source realms.
-func reconcileForeverScouting(players *scouting.Scouting, combat *modern.PlayerIdentityIndex, catalog *participantRealmCatalog) (*scouting.Scouting, map[guid.GUID]uuid.UUID, *foreverIdentity) {
+func reconcileForeverScouting(players *scouting.Scouting, combat playerIdentityEvidence, catalog *participantRealmCatalog) (*scouting.Scouting, map[guid.GUID]uuid.UUID, *foreverIdentity) {
+	if combat == nil {
+		combat = &combatIdentity{}
+	}
 	identity := &foreverIdentity{combat: combat, inferred: make(map[guid.GUID]inferredRealm)}
 	filtered := players.FilterSources(func(id guid.GUID, player scouting.Player) (scouting.Player, bool) {
 		player.Name = modern.NormalizePlayerName(player.Name)
@@ -162,4 +214,13 @@ func finalizeScoutingRealms(units *unitdb.Units, realms map[guid.GUID]uuid.UUID)
 			delete(realms, id)
 		}
 	}
+}
+
+// Finalization revokes tentative inferred realms before any armory write. A
+// revoked inference must not survive through UnitDB's cached RawRealm fallback.
+func finalizeForeverScouting(players *scouting.Scouting, identity *foreverIdentity, catalog *participantRealmCatalog) (*scouting.Scouting, map[guid.GUID]uuid.UUID) {
+	filtered, realms, finalIdentity := reconcileForeverScouting(players, identity.combat, catalog)
+	identity.inferred = finalIdentity.inferred
+	identity.finalized = true
+	return filtered, realms
 }

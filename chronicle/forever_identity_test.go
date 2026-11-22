@@ -1,7 +1,9 @@
 package chronicle
 
 import (
-	"fmt"
+	"context"
+	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -19,15 +21,34 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func combatIdentityFixture(t *testing.T, names ...string) *modern.PlayerIdentityIndex {
+type identityFixture struct {
+	names  []string
+	realms map[string]string
+}
+
+func (f *identityFixture) ObservedPlayerNames(guid.GUID) []string {
+	return append([]string(nil), f.names...)
+}
+func (f *identityFixture) LookupPlayerRealm(_ guid.GUID, name string) (string, bool) {
+	raw, ok := f.realms[name]
+	return raw, ok
+}
+func combatIdentityFixture(t *testing.T, names ...string) *identityFixture {
 	t.Helper()
-	var input strings.Builder
-	for _, name := range names {
-		fmt.Fprintf(&input, "10/7/2026 22:00:02.000  SPELL_CAST_SUCCESS,Player-1-00000001,%q,0x518,0x80000000,0000000000000000,nil,0x80000000,0x80000000,686,\"Shadow Bolt\",0x20\n", name)
+	f := &identityFixture{realms: make(map[string]string)}
+	for _, raw := range names {
+		f.add(raw)
 	}
-	index, err := modern.PreflightPlayerIdentities(t.Context(), strings.NewReader(input.String()))
-	require.NoError(t, err)
-	return index
+	return f
+}
+func (f *identityFixture) add(raw string) {
+	name := modern.NormalizePlayerName(raw)
+	f.names = append(f.names, name)
+	if raw != name {
+		if _, ok := f.realms[name]; !ok {
+			f.realms[name] = strings.TrimPrefix(raw, name+"-")
+		}
+	}
 }
 
 func TestForeverIdentityReconciliation(t *testing.T) {
@@ -145,4 +166,101 @@ func TestLateCombatMetadataBlocksDirectScoutingWrite(t *testing.T) {
 	payload, err := scoutingPayload(filtered, realms)
 	require.NoError(t, err)
 	require.JSONEq(t, `[]`, string(payload))
+}
+
+// Each call exposes exactly one batch, so these tests cannot accidentally rely
+// on parser read-ahead or a preflight having already seen the late identity.
+type streamingScoutingSource struct{ batches [][]messages.Message }
+
+func (s *streamingScoutingSource) Advance(context.Context) ([]messages.Message, error) {
+	if len(s.batches) == 0 {
+		return nil, io.EOF
+	}
+	batch := s.batches[0]
+	s.batches = s.batches[1:]
+	return batch, nil
+}
+
+func TestStreamingScoutingLateIdentity(t *testing.T) {
+	t.Parallel()
+	const id guid.GUID = 1<<32 | 1
+	server, us, eu := uuid.New(), uuid.New(), uuid.New()
+	catalog := newParticipantRealmCatalog(server, []database.WowServerRealm{{ID: us, ServerID: server, Name: "Normal-US"}, {ID: eu, ServerID: server, Name: "Normal-EU"}})
+	for _, tc := range []struct {
+		name, first, late, realm string
+		collision                bool
+		want                     uuid.UUID
+	}{
+		{name: "late collision", first: "Alice", late: "Bob", realm: "Normal-US", collision: true},
+		{name: "late different combat identity", late: "Bob", realm: "Normal-US"},
+		{name: "late unmapped authoritative realm", first: "Alice", late: "Alice", realm: "Unmapped"},
+		{name: "late different realm", first: "Alice", late: "Alice", realm: "Normal-EU"},
+		{name: "late matching realm", first: "Alice", late: "Alice", realm: "Normal-US", want: us},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			scouts := newTestScouting(t, map[guid.GUID][]scouting.Player{id: {{Name: "Alice", Realm: "Normal-US", Race: "Human", Gender: ptr.Ref(3), LastSeen: 50, Observations: []scouting.Observation{{At: 10, Name: "Alice", Level: ptr.Ref(60)}}}}})
+			raw := &combatIdentity{}
+			_, realms, identity := reconcileForeverScouting(scouts, raw, catalog)
+			units := unitdb.New(nil)
+			units.SetPlayerRealmLookup(identity)
+			first := &messages.Combatant{MessageBase: messages.Base(time.Unix(5, 0)), Combatant: combatant.Combatant{Guid: id, Name: tc.first, Seen: time.Unix(5, 0)}}
+			unit := &messages.Unit{MessageBase: messages.Base(time.Unix(20, 0)), Info: unitinfo.Info{Guid: id, Name: tc.first}}
+			late := &messages.Combatant{MessageBase: messages.Base(time.Unix(30, 0)), Combatant: combatant.Combatant{Guid: id, Name: tc.late, RawRealm: tc.realm, Seen: time.Unix(30, 0)}}
+			source := &streamingScoutingSource{batches: [][]messages.Message{{first, unit}, {late}}}
+			adv := scoutingAdvancer{source: source, players: scouts, realms: realms, identity: identity, catalog: catalog}
+			batch, err := adv.Advance(t.Context())
+			require.NoError(t, err)
+			require.Equal(t, types.HeroRacesHuman, batch[0].(*messages.Combatant).Race)
+			require.Equal(t, int32(60), batch[1].(*messages.Unit).Level)
+			units.Update(batch[1].(*messages.Unit).Info)
+			units.UpdatePlayer(batch[0].(*messages.Combatant).Combatant)
+			require.False(t, units.PlayerIdentityAmbiguous(id))
+			batch, err = adv.Advance(t.Context())
+			require.NoError(t, err)
+			if tc.want == uuid.Nil {
+				require.Empty(t, batch[0].(*messages.Combatant).Race)
+			}
+			units.UpdatePlayer(batch[0].(*messages.Combatant).Combatant)
+			filtered, finalRealms := finalizeForeverScouting(scouts, identity, catalog)
+			units.RefreshPlayerRealms()
+			finalizeScoutingRealms(units, finalRealms)
+			require.Equal(t, tc.collision, units.PlayerIdentityAmbiguous(id))
+			require.Equal(t, tc.want, finalRealms[id])
+			if tc.want == uuid.Nil {
+				require.Zero(t, filtered.Len())
+			}
+			// A now-rejected inferred realm must not survive a stale cached fallback.
+			if tc.late == "Bob" {
+				require.Empty(t, units.PlayerRawRealm(id, "Alice", "Normal-US"))
+			}
+		})
+	}
+}
+
+func TestStreamingScoutingFiltersSourcesBeforeMerge(t *testing.T) {
+	t.Parallel()
+	const id guid.GUID = 1<<32 | 1
+	server, us, eu := uuid.New(), uuid.New(), uuid.New()
+	catalog := newParticipantRealmCatalog(server, []database.WowServerRealm{{ID: us, ServerID: server, Name: "Normal-US"}, {ID: eu, ServerID: server, Name: "Normal-EU"}})
+	scouts := newTestScouting(t, map[guid.GUID][]scouting.Player{id: {
+		{Name: "Alice", Realm: "Normal-US", Race: "Human", Observations: []scouting.Observation{{At: 10, Name: "Alice", Level: ptr.Ref(20)}}},
+		{Name: "Alice", Realm: "Normal-EU", Race: "Orc", Observations: []scouting.Observation{{At: 20, Name: "Alice", Level: ptr.Ref(60)}}},
+		{Name: "Bob", Realm: "Normal-US", Race: "Troll", Observations: []scouting.Observation{{At: 30, Name: "Bob", Level: ptr.Ref(70)}}},
+	}})
+	raw := &combatIdentity{}
+	_, realms, identity := reconcileForeverScouting(scouts, raw, catalog)
+	require.Empty(t, realms)
+	source := &streamingScoutingSource{batches: [][]messages.Message{{
+		&messages.Unit{MessageBase: messages.Base(time.Unix(40, 0)), Info: unitinfo.Info{Guid: id, Name: "Alice", RawRealm: "Normal-US"}},
+		&messages.Combatant{MessageBase: messages.Base(time.Unix(5, 0)), Combatant: combatant.Combatant{Guid: id, Name: "Alice"}},
+	}}}
+	adv := scoutingAdvancer{source: source, players: scouts, realms: realms, identity: identity, catalog: catalog}
+	batch, err := adv.Advance(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, int32(20), batch[0].(*messages.Unit).Level)
+	require.Equal(t, types.HeroRacesHuman, batch[1].(*messages.Combatant).Race)
+	filtered, finalRealms := finalizeForeverScouting(scouts, identity, catalog)
+	require.Equal(t, us, finalRealms[id])
+	require.Equal(t, 20, *filtered.KnownAt(id, 40).Level.Level)
 }

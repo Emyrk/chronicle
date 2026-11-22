@@ -111,6 +111,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	var scoutPlayers *scouting.Scouting
 	var scoutRealms map[guid.GUID]uuid.UUID
 	var identity *foreverIdentity
+	var scoutCatalog *participantRealmCatalog
 	if logFormat == database.LogFormatV22Cleu {
 		var err error
 		scoutPlayers, err = w.loadForeverScouting(ctx, artifacts)
@@ -284,19 +285,12 @@ func (w *WorkerLogParse) parseCombatLog(
 		loadFileDuration = time.Since(loadStart)
 
 		if logFormat == database.LogFormatV22Cleu && scoutPlayers.Len() > 0 {
-			evidence, err := blizzardmodern.PreflightPlayerIdentities(ctx, bytes.NewReader(data))
-			if err != nil {
-				return nil, fmt.Errorf("forever identity preflight: %w", err)
-			}
-			catalog, err := loadForeverIdentityCatalog(ctx, w.parent.Zed, tenantID)
+			var err error
+			scoutCatalog, err = loadForeverIdentityCatalog(ctx, w.parent.Zed, tenantID)
 			if err != nil {
 				return nil, err
 			}
-			originalCount := scoutPlayers.Len()
-			scoutPlayers, scoutRealms, identity = reconcileForeverScouting(scoutPlayers, evidence, catalog)
-			if skipped := originalCount - len(scoutRealms); skipped > 0 {
-				w.parent.logger.WarnContext(ctx, "skipping unsafe scouting identities", "skipped_players", skipped)
-			}
+			_, scoutRealms, identity = reconcileForeverScouting(scoutPlayers, &combatIdentity{}, scoutCatalog)
 		}
 
 		var p *blizzardmodern.Parser
@@ -317,12 +311,12 @@ func (w *WorkerLogParse) parseCombatLog(
 		if logFormat == database.LogFormatV22Cleu {
 			encountersState.Units.SetPlayerRealmLookup(p)
 			if identity != nil {
-				identity.live = p
+				identity.combat.(*combatIdentity).live = p
 				encountersState.Units.SetPlayerRealmLookup(identity)
 			}
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
 			if scoutPlayers.Len() > 0 {
-				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, identity: identity}
+				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, identity: identity, catalog: scoutCatalog}
 			}
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
@@ -396,6 +390,11 @@ func (w *WorkerLogParse) parseCombatLog(
 		return nil, consumeErr
 	}
 
+	if identity != nil {
+		// Reconcile the original independent sources against COMPLETE raw evidence
+		// before either direct scouting or encounter armory transactions can run.
+		scoutPlayers, scoutRealms = finalizeForeverScouting(scoutPlayers, identity, scoutCatalog)
+	}
 	encountersState.Units.RefreshPlayerRealms()
 	finalizeScoutingRealms(encountersState.Units, scoutRealms)
 
