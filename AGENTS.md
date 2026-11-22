@@ -442,6 +442,15 @@ type ProcessorEvent =
 - **Filter early** - check `context.entitySelection` and `context.selectedEncounterIds` before expensive work
 - **Breakout data is optional** - only compute ability/target breakouts when entity is selected
 
+### Lua module API
+
+The Lua API that modules call is documented in `frontend/chronicle/src/pages/LuaProjects/lua-panel-api.md` and `lua-panel-api.d.lua`. The markdown is the `/modules/api` page, the MCP and Workshop assistants' `lua-module-api` skill, and part of the assistant prompt, so stale docs mislead people and agents alike.
+
+- When you add, change or remove a Lua function, method, callback or limit, update the prose in `lua-panel-api.md` and the definition in `lua-panel-api.d.lua` in the same change.
+- Then run `cd frontend/chronicle && pnpm generate:lua-api`, which regenerates the widget definitions and the reference section of the markdown.
+- CI fails when either is stale: `apiContract.test.ts` compares the runtime's functions with the definitions, and `pnpm check:lua-api` checks the generated reference.
+- New widgets and widget options are generated from their specs; see `src/pages/Guides/widgets/README.md`.
+
 ## Anti-Patterns
 
 ### Do Not

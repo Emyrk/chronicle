@@ -664,7 +664,31 @@ Fix the x axis range. nil means fit the data.
 
 Fix the y axis range. nil means fit the data. The minimum defaults to 0.
 
+### `Panel`
+
+#### `Panel:OnEvent(stream?: string, callback: fun(event: table))`
+
+Call `callback(event)` for every event of `stream`, or for every declared stream when `stream` is omitted; `event.stream` says which. Subscribing to a stream project.json does not declare is an error. Registering again replaces the previous callback.
+
+- `stream`: A stream from project.json, such as "damage".
+
+#### `Panel:OnComplete(callback: fun())`
+
+Call `callback()` once after the last event. Draw your results here.
+
 ### `Chronicle`
+
+#### `Chronicle.GetUnit(guid: string)`
+
+Look up a unit by the GUID in an event's source or target.
+
+**Returns:** `ChronicleUnit?` unit nil when the GUID is unknown.
+
+#### `Chronicle.GetPlayers()`
+
+Return every player's GUID in the instance, sorted by name.
+
+**Returns:** `string[]` guids
 
 #### `Chronicle.Filter(message: table)`
 

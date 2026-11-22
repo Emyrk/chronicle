@@ -329,8 +329,41 @@ function CreateFrame(frameType, id, parent) end
 ---@type ChronicleFrame
 UIParent = UIParent
 
+---Receives the module's combat events. chronicle.v1.events and chronicle.v1.events.<stream> wrap these.
+---@class Panel
+Panel = {}
+
+---Call `callback(event)` for every event of `stream`, or for every declared stream when `stream` is omitted; `event.stream` says which. Subscribing to a stream project.json does not declare is an error. Registering again replaces the previous callback.
+---@param stream? string A stream from project.json, such as "damage".
+---@param callback fun(event: table)
+function Panel:OnEvent(stream, callback) end
+
+---Call `callback()` once after the last event. Draw your results here.
+---@param callback fun()
+function Panel:OnComplete(callback) end
+
+---A unit from Chronicle.GetUnit. Lookups return a new table each call, so cache what you need.
+---@class ChronicleUnit
+---@field guid string
+---@field name string
+---@field player boolean True for player characters.
+---@field class? string Upper-case class token such as "MAGE"; players only.
+---@field race? string Upper-case race token such as "ORC"; players only.
+---@field level? integer Players only.
+---@field owner? string GUID of the controlling player, for pets and summons.
+---@field entry? integer Creature entry ID, for NPCs, pets and summons.
+
 ---@class Chronicle
 Chronicle = {}
+
+---Look up a unit by the GUID in an event's source or target.
+---@param guid string
+---@return ChronicleUnit? unit nil when the GUID is unknown.
+function Chronicle.GetUnit(guid) end
+
+---Return every player's GUID in the instance, sorted by name.
+---@return string[] guids
+function Chronicle.GetPlayers() end
 
 ---Test a combat-event message against the viewer's panel filters without mutating it. No active filters, or filter_mode none, returns true. Invalid messages raise an API error.
 ---@param message table A supported combat-event message received by Panel:OnEvent.
