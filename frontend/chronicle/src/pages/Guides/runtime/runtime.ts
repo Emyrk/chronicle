@@ -8,7 +8,7 @@ import { PANEL_STREAMS, validatePanelEvent, type PanelEvent, type PanelStream } 
 import type { PanelUnit, PanelUnits } from "./panelUnits"
 
 const encoder = new TextEncoder()
-const UI_KINDS = new Map<string, NodeKind>([["Frame", "frame"], ["FontString", "text"], ["Texture", "texture"], ["Button", "button"], ...WIDGETS.map((spec) => [spec.luaType, spec.kind] as const)])
+const UI_KINDS = new Map<string, NodeKind>([["Frame", "frame"], ["FontString", "text"], ["Texture", "texture"], ["Button", "button"], ["Breakout", "breakout"], ...WIDGETS.map((spec) => [spec.luaType, spec.kind] as const)])
 const WIDGET_SETTERS = widgetSettersByMethod()
 const MAP_KINDS = new Map<string, NodeKind>([
   ["CreateUnit", "unit"], ["CreateUnitMarker", "unit"], ["CreateIcon", "icon"], ["CreateText", "map-text"],
@@ -18,6 +18,13 @@ const ANCHORS: Record<string, string> = {
   TOPLEFT: "top-left", TOP: "top", TOPRIGHT: "top-right", LEFT: "left", CENTER: "center",
   RIGHT: "right", BOTTOMLEFT: "bottom-left", BOTTOM: "bottom", BOTTOMRIGHT: "bottom-right",
 }
+
+/** A spell as Chronicle.GetSpell reports it. icon is a name SetIcon accepts. */
+export interface PanelSpellInfo { id: number; name: string; rank?: string; icon?: string }
+
+/** Spell lookups are fetched by the host, so they are bounded per run. */
+export const MAX_SPELL_LOOKUPS = 1_000
+const MAX_SPELL_WAITERS = 4_000
 
 /** The page's time range filter, in ms from encounter start. A null bound is open. */
 export interface PanelTimeRange { startMs: number | null; endMs: number | null }
@@ -69,6 +76,7 @@ const SUPPORTED_PROPS: Record<NodeKind, ReadonlySet<string>> = Object.fromEntrie
   ["text", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText"]],
   ["texture", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor", "tooltipText"]],
   ["button", ["x", "y", "width", "height", "anchor", "visible", "alpha", "zIndex", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText"]],
+  ["breakout", ["width", "height", "visible", "alpha", "title", "anchorTo", "borderColor"]],
   ["unit", ["visible", "alpha", "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"]],
   ["icon", ["visible", "alpha", "x", "y", "size", "asset", "label", "color", "facing"]],
   ["map-text", ["visible", "alpha", "x", "y", "text", "fontSize", "color", "align"]],
@@ -86,6 +94,8 @@ function defaultProps(kind: NodeKind): Record<string, unknown> {
     case "text": return { x: 0, y: 0, text: " ", fontSize: 14, color: "#ffffffff", anchor: "center", visible: true }
     case "texture": return { x: 0, y: 0, width: 1, height: 1, asset: "unset", textureType: "asset", tooltip: false, anchor: "center", visible: true }
     case "button": return { x: 0, y: 0, width: 1, height: 1, text: " ", anchor: "center", visible: true }
+    // Breakouts open with Show(), usually from a click.
+    case "breakout": return { width: 320, height: 200, visible: false }
     case "unit": return { x: 0, y: 0, size: 1, unit: "unknown", visible: true }
     case "icon": return { x: 0, y: 0, size: 1, asset: "unset", visible: true }
     case "map-text": return { x: 0, y: 0, text: " ", fontSize: 14, color: "#ffffffff", visible: true }
@@ -126,6 +136,11 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   let timeRangeRequest: { range: PanelTimeRange | null } | undefined
   let handlingClick = false
   let timeRangeCallback: number | undefined // Chronicle.OnTimeRangeChanged
+  // Chronicle.GetSpell: answers the host sent (null when unknown), callbacks waiting per spell, and IDs to request.
+  const spells = new Map<number, PanelSpellInfo | null>()
+  const spellWaiters = new Map<number, number[]>()
+  let spellWaiterCount = 0
+  const spellRequests = new Set<number>()
   let nextTimerId = 1
   let stopped = false
 
@@ -245,8 +260,11 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     if (!capabilities.has("input")) luaError(state, "guide did not declare the input capability")
     const id = objectIdAt(state)
     const script = stringAt(state, 2, "script")
-    const event = script === "OnClick" ? "click" : script === "OnSizeChanged" ? "resize" : null
+    const event = script === "OnClick" ? "click" : script === "OnSizeChanged" ? "resize" : script === "OnClose" ? "close" : null
     if (!event) luaError(state, `unsupported script '${script}'`)
+    const breakout = kindAt(id) === "breakout"
+    if (event === "close" && !breakout) luaError(state, "OnClose is only supported for Breakout frames")
+    if (event === "click" && breakout) luaError(state, "OnClick is not supported for Breakout frames; put a Button inside it")
     lauxlib.luaL_checktype(state, 3, lua.LUA_TFUNCTION)
     const key = `${id}:${event}`
     if (!callbacks.has(key) && callbacks.size >= limits.maxCallbacks) luaError(state, "callback limit exceeded")
@@ -260,7 +278,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   }
   const makeObject = (state: LuaState, id: string) => {
     lua.lua_createtable(state, 0, 30); pushString(state, id); setField(state, -2, "__guide_id")
-    registerFunction(state, "SetParent", (inner) => { const objectId = objectIdAt(inner); const parentId = objectIdAt(inner, 2); objects.get(objectId)!.parentId = parentId; addOperation({ op: "set", id: objectId, parentId, props: {} }); return 0 })
+    registerFunction(state, "SetParent", (inner) => { const objectId = objectIdAt(inner); const parentId = objectIdAt(inner, 2); if (kindAt(objectId) === "breakout") luaError(inner, "Breakout frames cannot be reparented"); objects.get(objectId)!.parentId = parentId; addOperation({ op: "set", id: objectId, parentId, props: {} }); return 0 })
     registerFunction(state, "SetPoint", propertyMethod((inner) => {
       const rawAnchor = stringAt(inner, 2, "anchor").toUpperCase(); const anchor = ANCHORS[rawAnchor]
       if (!anchor) luaError(inner, `unsupported anchor '${rawAnchor}'`)
@@ -270,7 +288,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       const kind = kindAt(objectIdAt(inner))
       const width = numberAt(inner, 2); const height = numberAt(inner, 3)
       if (kind === "unit" || kind === "icon") return { size: Math.max(width, height) }
-      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button" || kind === "root" || isWidgetKind(kind)) return { width, height }
+      if (kind === "frame" || kind === "text" || kind === "texture" || kind === "button" || kind === "breakout" || kind === "root" || isWidgetKind(kind)) return { width, height }
       return luaError(inner, `SetSize is not supported for ${kind}`)
     }))
     registerFunction(state, "SetWidth", propertyMethod((inner) => ({ width: numberAt(inner, 2) })))
@@ -318,6 +336,14 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     registerFunction(state, "SetPoints", propertyMethod((inner) => ({ points: readPoints(inner, 2) })))
     // Hover text drawn by the host: hovering never runs Lua. nil or "" removes it.
     registerFunction(state, "SetTooltip", propertyMethod((inner) => ({ tooltipText: optionalString(inner, 2, "") })))
+    registerFunction(state, "SetTitle", propertyMethod((inner) => ({ title: optionalString(inner, 2, "") })))
+    // Breakouts open beside this frame; nil opens them beside the panel.
+    registerFunction(state, "SetAnchor", propertyMethod((inner) => {
+      if (lua.lua_isnoneornil(inner, 2)) return { anchorTo: null }
+      const anchorId = objectIdAt(inner, 2)
+      if (anchorId === UI_ROOT_ID || kindAt(anchorId) === "breakout") luaError(inner, "SetAnchor expects a frame inside the panel")
+      return { anchorTo: anchorId }
+    }))
     registerFunction(state, "Show", (inner) => { const objectId = objectIdAt(inner); objects.get(objectId)!.shown = true; setProps(objectId, { visible: true }); return 0 })
     registerFunction(state, "Hide", (inner) => { const objectId = objectIdAt(inner); objects.get(objectId)!.shown = false; setProps(objectId, { visible: false }); return 0 })
     registerFunction(state, "IsShown", (inner) => { pushBoolean(inner, objects.get(objectIdAt(inner))!.shown); return 1 })
@@ -346,7 +372,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const createObject = (state: LuaState, kind: NodeKind, id: string, parentId: string | null = null) => {
     if (objects.size - 1 >= limits.maxObjects) luaError(state, "object limit exceeded")
     if (objects.has(id)) luaError(state, `duplicate object '${id}'`)
-    objects.set(id, { kind, shown: true, parentId }); addOperation({ op: "create", id, kind, parentId, props: defaultProps(kind) })
+    objects.set(id, { kind, shown: kind !== "breakout", parentId }); addOperation({ op: "create", id, kind, parentId, props: defaultProps(kind) })
     return makeObject(state, id)
   }
 
@@ -420,6 +446,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       pushFunction(L, (state) => {
         const frameType = stringAt(state, 1, "frame type"); const kind = UI_KINDS.get(frameType); if (!kind) return luaError(state, `unsupported frame type '${frameType}'`)
         const id = optionalString(state, 2, `${kind}-${nextObjectId++}`); const parentId = lua.lua_isnoneornil(state, 3) ? UI_ROOT_ID : objectIdAt(state, 3)
+        if (kind === "breakout" && parentId !== UI_ROOT_ID) return luaError(state, "Breakout frames are top-level; omit the parent")
         return createObject(state, kind, id, parentId)
       }); lua.lua_setglobal(L, to_luastring("CreateFrame"))
     }
@@ -557,6 +584,27 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         for (const bound of [timeRange.startMs, timeRange.endMs]) if (bound === null) lua.lua_pushnil(state); else pushNumber(state, bound)
         return 2
       })
+      // Spell data is fetched by the host, so answers arrive later as callbacks. A spell this
+      // module already looked up calls back immediately, like WoW's ContinueOnSpellLoad.
+      registerFunction(L, "GetSpell", (state) => {
+        const offset = lua.lua_istable(state, 1) ? 1 : 0
+        const spellId = positiveIdAt(state, 1 + offset, "spell ID")
+        lauxlib.luaL_checktype(state, 2 + offset, lua.LUA_TFUNCTION)
+        if (spells.has(spellId)) {
+          lua.lua_pushvalue(state, 2 + offset); pushSpell(state, spells.get(spellId)!)
+          lua.lua_call(state, 1, 0)
+          return 0
+        }
+        if (!spellWaiters.has(spellId) && spells.size + spellWaiters.size >= MAX_SPELL_LOOKUPS) return luaError(state, `spell lookup limit exceeded (${MAX_SPELL_LOOKUPS} spells)`)
+        if (spellWaiterCount >= MAX_SPELL_WAITERS) return luaError(state, "too many pending GetSpell callbacks")
+        lua.lua_pushvalue(state, 2 + offset)
+        const ref = lauxlib.luaL_ref(state, lua.LUA_REGISTRYINDEX)
+        const waiting = spellWaiters.get(spellId)
+        if (waiting) waiting.push(ref)
+        else { spellWaiters.set(spellId, [ref]); spellRequests.add(spellId) }
+        spellWaiterCount++
+        return 0
+      })
       registerFunction(L, "GetPlayers", (state) => {
         lua.lua_createtable(state, playerGuids.length, 0)
         playerGuids.forEach((guid, index) => { pushString(state, guid); lua.lua_rawseti(state, -2, index + 1) })
@@ -575,6 +623,14 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
     else if (typeof value === "number" && Number.isFinite(value)) pushNumber(state, value)
     else if (typeof value === "boolean") pushBoolean(state, value)
     else fail("unsupported callback argument")
+  }
+  const pushSpell = (state: LuaState, spell: PanelSpellInfo | null) => {
+    if (!spell) { lua.lua_pushnil(state); return }
+    lua.lua_createtable(state, 0, 4)
+    pushNumber(state, spell.id); setField(state, -2, "id")
+    pushString(state, spell.name); setField(state, -2, "name")
+    if (spell.rank) { pushString(state, spell.rank); setField(state, -2, "rank") }
+    if (spell.icon) { pushString(state, spell.icon); setField(state, -2, "icon") }
   }
   const keys = new Map<string, Uint8Array>()
   const key = (name: string) => { let bytes = keys.get(name); if (!bytes) { bytes = to_luastring(name); keys.set(name, bytes) } return bytes }
@@ -649,6 +705,34 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       timeRange = next
       if (timeRangeCallback !== undefined) callRef(timeRangeCallback, null, [next?.startMs ?? null, next?.endMs ?? null])
     },
+    /** The viewer closed a Breakout: Lua sees it hidden, then OnClose runs. */
+    close(nodeId: string) {
+      ensureActive()
+      const object = objects.get(nodeId)
+      if (!object || object.kind !== "breakout" || !object.shown) return
+      object.shown = false
+      setProps(nodeId, { visible: false })
+      const ref = callbacks.get(`${nodeId}:close`)
+      if (ref !== undefined) callRef(ref, nodeId, [])
+    },
+    /** Spell IDs Lua asked for since the last call. Taking them resets the list. */
+    takeSpellRequests(): number[] { const ids = [...spellRequests]; spellRequests.clear(); return ids },
+    /** Answers from the host; null or a missing name means unknown. Runs each waiting GetSpell callback. */
+    deliverSpells(answers: ReadonlyArray<{ id: number; spell: PanelSpellInfo | null }>) {
+      ensureActive()
+      for (const { id, spell } of answers) {
+        const waiting = spellWaiters.get(id)
+        if (!waiting) continue
+        spellWaiters.delete(id); spellWaiterCount -= waiting.length
+        spells.set(id, spell)
+        try {
+          for (const ref of waiting) {
+            lua.lua_rawgeti(L, lua.LUA_REGISTRYINDEX, ref); pushSpell(L, spell)
+            protectedCall(L, 1, 0, limits.callbackInstructions)
+          }
+        } finally { for (const ref of waiting) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref) }
+      }
+    },
     resize(width: number, height: number) { ensureActive(); const ref = callbacks.get(`${UI_ROOT_ID}:resize`); if (ref !== undefined) callRef(ref, UI_ROOT_ID, [width, height]) },
     timer(id: number) { ensureActive(); const ref = timers.get(id); if (ref === undefined) throw new GuideLuaError(`unknown timer '${id}'`); timers.delete(id); callRef(ref, null, []); lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref) },
     panelEvent(raw: unknown) {
@@ -689,7 +773,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       if (completeCallback !== undefined) callRef(completeCallback, null, [])
     },
     flush,
-    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback); anyEventCallback = undefined; if (timeRangeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, timeRangeCallback); timeRangeCallback = undefined; callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
+    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback); anyEventCallback = undefined; if (timeRangeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, timeRangeCallback); timeRangeCallback = undefined; for (const refs of spellWaiters.values()) for (const ref of refs) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); spellWaiters.clear(); spellRequests.clear(); callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
     stats() { return { callbacks: callbacks.size, objects: Math.max(0, objects.size - 1), operations: operations.length, timers: timers.size, stopped } },
   }
 }

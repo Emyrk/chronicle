@@ -23,6 +23,8 @@ const BASE_PROPERTIES: Partial<Record<NodeKind, readonly string[]>> = {
   text: [...COMMON_UI, "width", "height", "text", "fontSize", "color", "align", "backgroundColor", "borderColor", "tooltipText"],
   texture: [...COMMON_UI, "width", "height", "asset", "textureType", "textureId", "iconName", "tooltip", "tint", "borderColor", "tooltipText"],
   button: [...COMMON_UI, "width", "height", "text", "enabled", "color", "backgroundColor", "borderColor", "tooltipText"],
+  // A floating panel the host draws outside the module's panel, beside anchorTo.
+  breakout: ["visible", "alpha", "zIndex", "width", "height", "title", "anchorTo", "borderColor"],
   unit: [...COMMON_MAP, "x", "y", "size", "unit", "label", "color", "facing", "entry", "role"],
   icon: [...COMMON_MAP, "x", "y", "size", "asset", "label", "color", "facing"],
   "map-text": [...COMMON_MAP, "x", "y", "text", "fontSize", "color", "align"],
@@ -38,6 +40,7 @@ const BASE_REQUIRED: Partial<Record<NodeKind, readonly string[]>> = {
   text: ["x", "y", "text", "fontSize", "color", "anchor"],
   texture: ["x", "y", "width", "height", "asset", "anchor"],
   button: ["x", "y", "width", "height", "text", "anchor"],
+  breakout: ["width", "height"],
   unit: ["x", "y", "size", "unit"],
   icon: ["x", "y", "size", "asset"],
   "map-text": ["x", "y", "text", "fontSize", "color"],
@@ -84,7 +87,8 @@ function validateProps(kind: NodeKind, input: unknown, partial: boolean): Record
   for (const [key, value] of Object.entries(props)) {
     const arg = widget?.get(key)
     if (arg) arg.type.validate(value, `${kind}.${key}`)
-    else if (key === "text" || key === "tooltipText") displayText(value, `${kind}.${key}`)
+    else if (key === "text" || key === "tooltipText" || key === "title") displayText(value, `${kind}.${key}`)
+    else if (key === "anchorTo") { if (value !== null) id(value, `${kind}.anchorTo`) }
     else if (key === "asset") {
       const asset = string(value, `${kind}.asset`, 255)
       const segments = asset.split("/")
@@ -186,10 +190,11 @@ function assertParent(nodes: Map<string, SceneNode>, nodeId: string, kind: NodeK
     return
   }
   if (parentId === null) throw new SceneValidationError(`${kind} nodes require a UI parent`)
+  if (kind === "breakout" && parentId !== UI_ROOT_ID) throw new SceneValidationError("breakout nodes must be top-level")
   if (parentId !== UI_ROOT_ID) {
     const parent = nodes.get(parentId)
     if (!parent) throw new SceneValidationError(`unknown ID ${parentId}`)
-    if (parent.kind !== "frame") throw new SceneValidationError("UI nodes may only be parented to frames")
+    if (parent.kind !== "frame" && parent.kind !== "breakout") throw new SceneValidationError("UI nodes may only be parented to frames")
   }
 
   const visited = new Set([nodeId])

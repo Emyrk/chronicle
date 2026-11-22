@@ -17,6 +17,11 @@ vi.mock("react", async importOriginal => ({
   },
 }))
 
+// Chronicle.GetSpell answers come from the cached spell query.
+const fetchQuery = vi.hoisted(() => vi.fn())
+vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({ fetchQuery }) }))
+vi.mock("@/hooks/useDatasetId", () => ({ useDatasetId: () => "dataset-1" }))
+
 afterEach(() => {
   vi.useRealTimers()
   vi.unstubAllGlobals()
@@ -154,6 +159,39 @@ describe("LuaPanelHost time range", () => {
     try {
       worker.onmessage?.({ data: { type: "set-time-range", range } })
       expect(onSetTimeRange).not.toHaveBeenCalled()
+      expect(hooks.states[1]).not.toBeNull()
+    } finally { cleanup?.() }
+  })
+})
+
+describe("LuaPanelHost spell lookups", () => {
+  it("answers spell requests from the spell query and stops on malformed ones", async () => {
+    const workers: Array<{ onmessage: ((event: { data: unknown }) => void) | null; postMessage: ReturnType<typeof vi.fn>; terminate: ReturnType<typeof vi.fn> }> = []
+    vi.stubGlobal("Worker", class {
+      onmessage = null
+      onerror = null
+      terminate = vi.fn()
+      postMessage = vi.fn()
+      constructor() { workers.push(this) }
+    })
+    fetchQuery.mockReset()
+    fetchQuery.mockImplementation(async ({ queryKey }: { queryKey: readonly unknown[] }) => {
+      if (queryKey[2] === "404") throw new Error("Spell not found")
+      return { name: { "0": "Frostbolt" }, subtext: { "0": "Rank 4" }, spell_icon: { TextureFilename: "Spell_Frost_FrostBolt02" } }
+    })
+    LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": "" }, streams: [], capabilities: ["ui"] })
+    const cleanup = hooks.effects[1]()
+    try {
+      const worker = workers[0]
+      worker.onmessage?.({ data: { type: "spell-request", ids: [116, 404] } })
+      await vi.waitFor(() => expect(worker.postMessage).toHaveBeenCalledWith({ type: "spell-info", spells: [
+        { id: 116, spell: { id: 116, name: "Frostbolt", rank: "Rank 4", icon: "spell_frost_frostbolt02" } },
+        { id: 404, spell: null },
+      ] }))
+      expect(fetchQuery.mock.calls[0][0].queryKey).toEqual(["wowdb", "spell", "116", "dataset-1"])
+      expect(hooks.states[1]).toBeNull()
+
+      worker.onmessage?.({ data: { type: "spell-request", ids: [0] } })
       expect(hooks.states[1]).not.toBeNull()
     } finally { cleanup?.() }
   })

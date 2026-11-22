@@ -1,4 +1,4 @@
-import type { CSSProperties, MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import { useRef, type CSSProperties, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import { useItemTooltip } from "@/api/gamedata";
 import { useSpell } from "@/api/queries";
 import { getSpellIconUrl } from "@/api/wowdb";
@@ -9,6 +9,7 @@ import { ItemTooltip } from "@/components/ui/ItemTooltip/ItemTooltip";
 import { SpellTooltip } from "@/pages/WoWDB/SpellTooltip";
 import { isWidgetKind } from "../widgets";
 import { renderWidget } from "./widgetRenderers";
+import { LuaBreakout } from "./LuaBreakout";
 import { UI_ROOT_ID } from "./scene";
 import type { RetainedScene, SceneNode } from "./types";
 
@@ -174,9 +175,13 @@ interface GuideUiSceneProps {
   scene: RetainedScene;
   assets: ReadonlyMap<string, string>;
   onNodeClick(node: SceneNode, event: ReactMouseEvent): void;
+  /** The viewer closed a Breakout frame; the host tells Lua, which hides it and runs OnClose. */
+  onBreakoutClose?(node: SceneNode): void;
 }
 
-export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) {
+export function GuideUiScene({ scene, assets, onNodeClick, onBreakoutClose }: GuideUiSceneProps) {
+  // Breakouts find their anchor frames inside this scene, not elsewhere on the page.
+  const sceneRoot = useRef<HTMLDivElement>(null);
   const childrenByParent = new Map<string, SceneNode[]>();
   for (const node of scene.nodes.values()) {
     if (node.parentId === null || node.kind === "unit" || node.kind === "icon" || node.kind === "map-text"
@@ -196,6 +201,11 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
     }
     if (node.kind === "text") {
       return <TextTooltip key={node.id} text={hoverText(node)}><div data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</div></TextTooltip>;
+    }
+    if (node.kind === "breakout") {
+      // Mounted only while open and keyed by its anchor, so it is placed afresh each time it opens.
+      if (node.props.visible !== true) return null;
+      return <LuaBreakout key={`${node.id}:${String(node.props.anchorTo)}`} node={node} sceneRoot={sceneRoot} onClose={(closed) => onBreakoutClose?.(closed)}>{children}</LuaBreakout>;
     }
     if (node.kind === "texture") return <GuideTextureNode key={node.id} node={node} assets={assets} style={style} onClick={click} />;
     if (isWidgetKind(node.kind)) return renderWidget(node.kind, node, style);
@@ -218,5 +228,9 @@ export function GuideUiScene({ scene, assets, onNodeClick }: GuideUiSceneProps) 
     return null;
   };
 
-  return <TooltipProvider delayDuration={150}>{(childrenByParent.get(UI_ROOT_ID) ?? []).map(renderNode)}</TooltipProvider>;
+  return (
+    <TooltipProvider delayDuration={150}>
+      <div ref={sceneRoot} className="contents">{(childrenByParent.get(UI_ROOT_ID) ?? []).map(renderNode)}</div>
+    </TooltipProvider>
+  );
 }

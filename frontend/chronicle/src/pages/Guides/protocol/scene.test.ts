@@ -90,6 +90,17 @@ describe("retained guide scene reducer", () => {
     expect(() => frame("bad\u0007")).toThrow(/tooltipText/)
   })
 
+  it("keeps breakouts top-level and lets them hold UI nodes", () => {
+    const breakout = (parentId: string, props: Record<string, unknown> = {}): SceneOperation => ({ op: "create", id: "b", kind: "breakout", parentId, props: { width: 300, height: 200, visible: false, ...props } })
+    const scene = applySceneBatch(createInitialScene(), [breakout(UI_ROOT_ID, { title: "Jaina", anchorTo: "row" }), create("inside", "text", "b")])
+    expect(scene.nodes.get("inside")?.parentId).toBe("b")
+    expect(applySceneBatch(scene, [{ op: "set", id: "b", props: { anchorTo: null, visible: true } }]).nodes.get("b")?.props.anchorTo).toBeNull()
+    expect(() => applySceneBatch(createInitialScene(), [create("f"), breakout("f")])).toThrow(/top-level/)
+    expect(() => applySceneBatch(createInitialScene(), [breakout(UI_ROOT_ID, { x: 4 })])).toThrow(/unknown property/)
+    expect(() => applySceneBatch(createInitialScene(), [breakout(UI_ROOT_ID, { title: "bad\u0007" })])).toThrow(/title/)
+    expect(() => applySceneBatch(createInitialScene(), [breakout(UI_ROOT_ID), { op: "listen", id: "b", event: "click", enabled: true }])).toThrow(/does not support events/)
+  })
+
   it("rejects invalid and kind-inappropriate properties", () => {
     expect(() => applySceneBatch(createInitialScene(), [{ op: "create", id: "bad", kind: "frame", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: -1, height: 10, anchor: "top-left" } }])).toThrow(/width/)
     expect(() => applySceneBatch(createInitialScene(), [{ op: "create", id: "bad", kind: "circle", parentId: null, props: { x: 1.1, y: 0, radius: 0.2, color: "red", width: 2 } }])).toThrow(SceneValidationError)

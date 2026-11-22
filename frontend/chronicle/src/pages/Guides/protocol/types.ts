@@ -3,6 +3,7 @@ export const NODE_KINDS = [
   "text",
   "texture",
   "button",
+  "breakout",
   "player-metric-chart",
   "line-chart",
   "unit",

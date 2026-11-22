@@ -33,7 +33,8 @@ for (const line of stub.split("\n")) {
     description.push(descriptionMatch[1].trim());
     continue;
   }
-  const paramMatch = line.match(/^---@param\s+(\w+\??)\s+(\S+)(?:\s+(.*))?$/);
+  // fun(...) types contain spaces, so match them up to their closing parenthesis.
+  const paramMatch = line.match(/^---@param\s+(\w+\??)\s+(fun\([^)]*\)|\S+)(?:\s+(.*))?$/);
   if (paramMatch) {
     params.push({ name: paramMatch[1], type: paramMatch[2], description: paramMatch[3] ?? "" });
     continue;

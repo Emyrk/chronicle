@@ -144,6 +144,30 @@ local ChronicleButton = {}
 ---@param text string
 function ChronicleButton:SetText(text) end
 
+---A floating panel Chronicle draws outside your module's panel, so it is never cut off by the panel's size. It looks like Chronicle's own pinned breakouts: a title bar the viewer can drag and a close button. Create it with CreateFrame("Breakout", id); it is always top-level and starts hidden. Put Frames, FontStrings, Textures and Buttons inside it, then call Show(), usually from an OnClick handler.
+---@class ChronicleBreakout: ChronicleFrame
+local ChronicleBreakout = {}
+
+---Set the text in the title bar.
+---@param title? string
+function ChronicleBreakout:SetTitle(title) end
+
+---Open beside this frame (to its right, else its left, else below it). nil opens beside the panel.
+---@param frame? ChronicleRegion
+function ChronicleBreakout:SetAnchor(frame) end
+
+---Register OnClose, which runs after the viewer closes the breakout with its close button. The breakout is already hidden when it runs. Requires the input capability.
+---@param script "OnClose"
+---@param callback fun(self:ChronicleBreakout)
+function ChronicleBreakout:SetScript(script, callback) end
+
+---Spell data from Chronicle.GetSpell.
+---@class ChronicleSpellInfo
+---@field id integer
+---@field name string
+---@field rank? string For example "Rank 4".
+---@field icon? string Icon name for Texture:SetIcon.
+
 -- BEGIN GENERATED WIDGET DEFINITIONS
 -- Generated from src/pages/Guides/widgets. Run pnpm generate:lua-api after changing a widget spec.
 
@@ -294,10 +318,10 @@ function ChronicleLineChart:SetXRange(xMin, xMax) end
 function ChronicleLineChart:SetYRange(yMin, yMax) end
 
 ---Create a retained UI object. parent defaults to UIParent.
----@param frameType "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart"|"LineChart"
+---@param frameType "Frame"|"FontString"|"Texture"|"Button"|"Breakout"|"PlayerMetricChart"|"LineChart"
 ---@param id? string
 ---@param parent? ChronicleFrame
----@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart|ChronicleLineChart object
+---@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChronicleBreakout|ChroniclePlayerMetricChart|ChronicleLineChart object
 function CreateFrame(frameType, id, parent) end
 
 -- END GENERATED WIDGET DEFINITIONS
@@ -324,6 +348,11 @@ function Chronicle.ClearTimeRange() end
 ---Call `callback(startMs, endMs)` whenever the page's time range changes, for example when a viewer drags across a chart or moves the time slider. Bounds are nil when open; both are nil when the range is cleared. It is also called right after loading if a range is already set. It is not called for the module's own Chronicle.SetTimeRange, and cannot call SetTimeRange itself. Registering again replaces the previous callback.
 ---@param callback fun(startMs: number?, endMs: number?)
 function Chronicle.OnTimeRangeChanged(callback) end
+
+---Look up a spell's name, rank and icon. Chronicle fetches spell data from its server, so `callback(spell)` runs later, after the current callback returns; `spell` is nil when Chronicle has no data for that ID. A spell this module has already looked up calls back immediately. Each run may look up at most 1,000 different spells.
+---@param spellId integer
+---@param callback fun(spell: ChronicleSpellInfo?)
+function Chronicle.GetSpell(spellId, callback) end
 
 ---Return the page's current time range in milliseconds from encounter start. Either bound is nil when open; both are nil when no range is set.
 ---@return number? startMs

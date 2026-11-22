@@ -1,4 +1,7 @@
 import { useEffect, useRef, useState } from "react"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
+import { spellQueryOptions } from "@/api/queries"
+import { useDatasetId } from "@/hooks/useDatasetId"
 import { HelpCircle } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/Tooltip/tooltip"
 import { formatNumber } from "@/lib/format"
@@ -10,7 +13,7 @@ import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/ty
 import type { EventStreams, PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
-import type { PanelTimeRange } from "../../../Guides/runtime/runtime"
+import type { PanelSpellInfo, PanelTimeRange } from "../../../Guides/runtime/runtime"
 import { explainModuleError, type ModuleErrorContext, type ModuleErrorExplanation, type ModulePhase } from "../../../Guides/runtime/moduleErrors"
 import type { PanelFilterMode } from "../../../Guides/runtime/panelFilters"
 import type { ProcessorContext } from "../processorTypes"
@@ -57,6 +60,19 @@ function parseTimeRange(value: unknown): PanelTimeRange | null | undefined {
   return { startMs, endMs }
 }
 
+/** Largest spell-request the host serves; the runtime caps lookups per run anyway. */
+const MAX_SPELL_REQUEST = 1_000
+
+/** Chronicle.GetSpell's answer for one spell, or null when Chronicle has no data for it. */
+async function fetchSpellInfo(queryClient: QueryClient, datasetId: string | undefined, id: number): Promise<PanelSpellInfo | null> {
+  try {
+    const spell = await queryClient.fetchQuery(spellQueryOptions(String(id), datasetId))
+    const name = spell.name?.["0"]
+    if (!name) return null
+    return { id, name, rank: spell.subtext?.["0"] || undefined, icon: spell.spell_icon?.TextureFilename?.toLowerCase() || undefined }
+  } catch { return null }
+}
+
 const EMPTY_EVENTS: readonly PanelEvent[] = []
 const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
@@ -73,7 +89,11 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   const onMetricsRef = useRef(onMetrics)
   const timeRangeRef = useRef(timeRange)
   const onSetTimeRangeRef = useRef(onSetTimeRange)
-  useEffect(() => { onMetricsRef.current = onMetrics; onSetTimeRangeRef.current = onSetTimeRange }, [onMetrics, onSetTimeRange])
+  // Chronicle.GetSpell answers come from the same cached spell query as spell icons and tooltips.
+  const queryClient = useQueryClient()
+  const datasetId = useDatasetId()
+  const spellSourceRef = useRef({ queryClient, datasetId })
+  useEffect(() => { onMetricsRef.current = onMetrics; onSetTimeRangeRef.current = onSetTimeRange; spellSourceRef.current = { queryClient, datasetId } }, [onMetrics, onSetTimeRange, queryClient, datasetId])
   useEffect(() => {
     const replaying = streams.length > 0 && !!eventStreams && streams.every(stream => eventStreams[stream])
     let postedAt = 0
@@ -108,6 +128,14 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
             const run = { ...(data.metrics as PanelReplayMetrics), wallMs: performance.now() - postedAt, drawMs: drawMs.current }
             setMetrics(run); setProgress(null); onMetricsRef.current?.(run)
           }
+          return
+        }
+        if (data && typeof data === "object" && "type" in data && data.type === "spell-request") {
+          const ids = "ids" in data ? data.ids : undefined
+          if (!Array.isArray(ids) || ids.length > MAX_SPELL_REQUEST || !ids.every(id => Number.isInteger(id) && id > 0)) throw new Error("Invalid spell request from panel")
+          const source = spellSourceRef.current
+          void Promise.all(ids.map(async (id: number) => ({ id, spell: await fetchSpellInfo(source.queryClient, source.datasetId, id) })))
+            .then(spells => { if (workerRef.current === runtime) runtime.postMessage({ type: "spell-info", spells }) })
           return
         }
         if (data && typeof data === "object" && "type" in data && data.type === "set-time-range") {
@@ -169,7 +197,12 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     <div className="styled-scrollbar relative min-h-[240px] flex-1 overflow-auto" data-lua-panel-host>
       <div className="relative" style={{ width: scene.canvas.width ?? "100%", height: scene.canvas.height ?? "100%", minWidth: "100%", minHeight: "100%" }}>
         <PanelTimeRangeContext.Provider value={timeRangeContext}>
-          <GuideUiScene scene={scene} assets={assets} onNodeClick={(node) => workerRef.current?.postMessage({ type: "click", nodeId: node.id })} />
+          <GuideUiScene
+            scene={scene}
+            assets={assets}
+            onNodeClick={(node) => workerRef.current?.postMessage({ type: "click", nodeId: node.id })}
+            onBreakoutClose={(node) => workerRef.current?.postMessage({ type: "close", nodeId: node.id })}
+          />
         </PanelTimeRangeContext.Provider>
       </div>
     </div>

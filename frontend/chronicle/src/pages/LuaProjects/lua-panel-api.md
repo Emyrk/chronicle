@@ -194,7 +194,7 @@ local image = frame:CreateTexture("my-icon")
 local button = CreateFrame("Button", "my-button", UIParent)
 ```
 
-`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"`, `"Button"` and the Chronicle-owned `"PlayerMetricChart"` and `"LineChart"`. `id` must be unique within the module; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
+`CreateFrame(type, id, parent)` accepts `"Frame"`, `"FontString"`, `"Texture"`, `"Button"`, `"Breakout"` and the Chronicle-owned `"PlayerMetricChart"` and `"LineChart"`. `id` must be unique within the module; omit it to get a generated one. `parent` defaults to `UIParent`, the panel's root. Objects persist until you call `:Destroy()`, so create them once and update them, rather than creating new ones each time.
 
 ### Panel size and scrolling
 
@@ -229,6 +229,8 @@ UIParent:SetHeight(40 + #rows * ROW)   -- tall enough for a title and every row
 | `SetTooltip(text)` | Frame, FontString, Texture, Button | Plain hover text drawn by Chronicle; hovering never runs Lua. Newlines start new lines. `nil` or `""` removes it. A Texture with a spell or item tooltip shows that instead. |
 | `Destroy()` | all except UIParent | Removes the object, everything parented to it, and their click handlers. Their IDs can be reused. |
 | `SetScript("OnClick", fn)` | Button, Frame | Needs the `input` capability. `fn(self)` runs on click. |
+| `SetTitle(text)`, `SetAnchor(frame)` | Breakout | See [Breakout panels](#breakout-panels). |
+| `SetScript("OnClose", fn)` | Breakout | Needs the `input` capability. `fn(self)` runs after the viewer closes it. |
 
 `UIParent` supports only `SetSize`, `SetWidth`, `SetHeight` and `SetScript`.
 
@@ -306,6 +308,57 @@ A chart holds at most 12 series and 2,000 points in total, plus up to 64 bands a
 
 The chart also supports `SetSeries`, `SetBands`, `SetMarkers`, `SetFillParent`, `SetTimeSelection`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
 
+### Breakout panels
+
+A `Breakout` is a floating panel for details: a player's spells, a death recap, a pull's timeline. Chronicle draws it outside your module's panel, so it is never cut off by the panel's size, and it looks like Chronicle's own pinned breakouts. The viewer can drag it by its title bar and close it.
+
+```lua
+local details = CreateFrame("Breakout", "player-details")   -- always top-level; starts hidden
+details:SetSize(360, 220)                                     -- the content area, below the title bar
+
+local heading = details:CreateFontString("details-heading")
+heading:SetPoint("TOPLEFT", details, "TOPLEFT", 10, -10)
+
+row:SetScript("OnClick", function()
+  details:SetTitle("Jaina")
+  heading:SetText("1.2M damage")
+  details:SetAnchor(row)   -- open beside the row that was clicked
+  details:Show()
+end)
+
+details:SetScript("OnClose", function() selected = nil end)
+```
+
+- Put any `Frame`, `FontString`, `Texture` or `Button` inside it, positioned with `SetPoint` as in a `Frame`. Content larger than `SetSize` scrolls.
+- `SetAnchor(frame)` opens it to the right of that frame, or to its left, or below it, whichever fits on screen. Without an anchor it opens beside the panel. It is placed each time it opens; after that the viewer can move it.
+- `Hide()` closes it from Lua. The close button hides it too, then runs `OnClose`, so `IsShown()` is always accurate.
+- Create one breakout and refill it for each player, rather than one per player. Several can be open at once.
+- `SetBorderColor` tints its border and title, for example with a class colour.
+
+### Spell names
+
+`Chronicle.GetSpell(spellId, callback)` looks up a spell's name, rank and icon. Chronicle fetches spell data from its server, so the answer arrives later: `callback(spell)` runs after the current callback returns, usually after `onComplete`. `spell` is `nil` when Chronicle has no data for that ID.
+
+```lua
+local label = CreateFrame("FontString", "top-spell", UIParent)
+label:SetText("Spell " .. spellId)                -- shown until the name arrives
+Chronicle.GetSpell(spellId, function(spell)
+  if spell then label:SetText(spell.name .. (spell.rank and (" (" .. spell.rank .. ")") or "")) end
+end)
+```
+
+| Field | Meaning |
+| --- | --- |
+| `id` | The spell ID you asked for. |
+| `name` | The spell's name, such as `"Frostbolt"`. |
+| `rank` | Its rank text, such as `"Rank 4"`, or `nil`. |
+| `icon` | Its icon name for `Texture:SetIcon`, or `nil`. |
+
+- Draw first with a placeholder, then update the text in the callback. Never wait for names before drawing.
+- A spell this module already looked up calls back immediately, so calling `GetSpell` again for the same ID is cheap.
+- Each run may look up at most 1,000 different spells. Look up the spells you show, not every spell in the log.
+- Event names are already on some streams: `cast` and `spell_go` have `spell.name`, and `aura` has `spellName`. `GetSpell` is for streams that only have `spellId`, such as `damage` and `heal`.
+
 ### Page time range
 
 The instance page has one time range filter that every panel uses. The Line Chart panel sets it when you drag across it. A module can set it from a click handler, for example when a viewer clicks a phase or a timeline column:
@@ -351,11 +404,11 @@ Every global and method below comes from `lua-panel-api.d.lua`, the [EmmyLua/Lua
 
 ### Globals
 
-#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button"|"PlayerMetricChart"|"LineChart", id?: string, parent?: ChronicleFrame)`
+#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button"|"Breakout"|"PlayerMetricChart"|"LineChart", id?: string, parent?: ChronicleFrame)`
 
 Create a retained UI object. parent defaults to UIParent.
 
-**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChroniclePlayerMetricChart|ChronicleLineChart` object
+**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChronicleBreakout|ChroniclePlayerMetricChart|ChronicleLineChart` object
 
 ### `ChronicleRegion`
 
@@ -484,6 +537,20 @@ Render a named icon from Chronicle's current dataset CDN. Names contain only ASC
 #### `ChronicleButton:SetText(text: string)`
 
 Set the button label.
+
+### `ChronicleBreakout` extends `ChronicleFrame`
+
+#### `ChronicleBreakout:SetTitle(title?: string)`
+
+Set the text in the title bar.
+
+#### `ChronicleBreakout:SetAnchor(frame?: ChronicleRegion)`
+
+Open beside this frame (to its right, else its left, else below it). nil opens beside the panel.
+
+#### `ChronicleBreakout:SetScript(script: "OnClose", callback: fun(self:ChronicleBreakout))`
+
+Register OnClose, which runs after the viewer closes the breakout with its close button. The breakout is already hidden when it runs. Requires the input capability.
 
 ### `ChroniclePlayerMetricChart` extends `ChronicleRegion`
 
@@ -617,11 +684,13 @@ Set the page's time range filter, which every panel on the instance page uses. T
 
 Clear the page's time range filter. Same rules as Chronicle.SetTimeRange.
 
-#### `Chronicle.OnTimeRangeChanged(callback: fun(startMs:)`
+#### `Chronicle.OnTimeRangeChanged(callback: fun(startMs: number?, endMs: number?))`
 
 Call `callback(startMs, endMs)` whenever the page's time range changes, for example when a viewer drags across a chart or moves the time slider. Bounds are nil when open; both are nil when the range is cleared. It is also called right after loading if a range is already set. It is not called for the module's own Chronicle.SetTimeRange, and cannot call SetTimeRange itself. Registering again replaces the previous callback.
 
-- `callback`: number?, endMs: number?)
+#### `Chronicle.GetSpell(spellId: integer, callback: fun(spell: ChronicleSpellInfo?))`
+
+Look up a spell's name, rank and icon. Chronicle fetches spell data from its server, so `callback(spell)` runs later, after the current callback returns; `spell` is nil when Chronicle has no data for that ID. A spell this module has already looked up calls back immediately. Each run may look up at most 1,000 different spells.
 
 #### `Chronicle.GetTimeRange()`
 
@@ -664,6 +733,7 @@ These protect viewers' browsers from runaway modules. There is no limit on how m
 | Objects alive at once | 2,000 | `object limit exceeded` |
 | Pending UI changes | 2,000 per startup, per `onComplete`, per click, and per 100 events | `operation limit exceeded` |
 | String length | 4 KiB | `… exceeds string limit` |
+| Spell lookups | 1,000 different spells per run | `spell lookup limit exceeded` |
 | No progress | 10 seconds without finishing an event batch | `Panel worker made no progress for 10 seconds` |
 | `main.lua` in the browser editor | 64 KiB | shown in the editor |
 | Uploaded package | 8 MiB tar, 1 MiB of Lua, 128 files | shown on upload |

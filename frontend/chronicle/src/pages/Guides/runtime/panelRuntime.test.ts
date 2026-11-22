@@ -207,6 +207,86 @@ describe("safe panel profile", () => {
     }
   })
 
+  it("answers Chronicle.GetSpell later, once per spell, and immediately once known", () => {
+    const runtime = panel(`
+      local log = CreateFrame("FontString", "log", UIParent)
+      local seen = {}
+      local function record(spell) seen[#seen + 1] = spell and (spell.name .. "|" .. (spell.rank or "") .. "|" .. (spell.icon or "")) or "nil"; log:SetText(table.concat(seen, ",")) end
+      Chronicle.GetSpell(116, record)
+      Chronicle.GetSpell(116, record)
+      Chronicle.GetSpell(999, record)
+      local again = CreateFrame("Button", "again", UIParent)
+      again:SetScript("OnClick", function() Chronicle.GetSpell(116, record) end)
+    `)
+    const texts = () => runtime.flush().filter((op) => op.op === "set" && op.id === "log").map((op) => (op as unknown as { props: { text: string } }).props.text)
+    runtime.start()
+    expect(texts()).toEqual([])
+    // Each spell is requested once, however many callbacks wait for it.
+    expect(runtime.takeSpellRequests()).toEqual([116, 999])
+    expect(runtime.takeSpellRequests()).toEqual([])
+
+    runtime.deliverSpells([{ id: 116, spell: { id: 116, name: "Frostbolt", rank: "Rank 4", icon: "spell_frost_frostbolt02" } }, { id: 999, spell: null }])
+    expect(texts().at(-1)).toBe("Frostbolt|Rank 4|spell_frost_frostbolt02,Frostbolt|Rank 4|spell_frost_frostbolt02,nil")
+
+    runtime.event({ id: "again", event: "click" })
+    expect(texts()).toEqual(["Frostbolt|Rank 4|spell_frost_frostbolt02,Frostbolt|Rank 4|spell_frost_frostbolt02,nil,Frostbolt|Rank 4|spell_frost_frostbolt02"])
+    expect(runtime.takeSpellRequests()).toEqual([])
+    runtime.stop()
+  })
+
+  it("bounds Chronicle.GetSpell lookups", () => {
+    const runtime = panel(`for id = 1, 1001 do Chronicle.GetSpell(id, function() end) end`)
+    expect(() => runtime.start()).toThrow(/spell lookup limit exceeded/)
+    runtime.stop()
+  })
+
+  it("opens Breakout frames with Show and tells Lua when the viewer closes one", () => {
+    const runtime = panel(`
+      local row = CreateFrame("Frame", "row", UIParent)
+      local details = CreateFrame("Breakout", "details")
+      details:SetSize(300, 160)
+      details:SetTitle("Jaina")
+      details:SetBorderColor(0.41, 0.8, 0.94)
+      local label = details:CreateFontString("details-label")
+      label:SetText("1.2M damage")
+      local closes = CreateFrame("FontString", "closes", UIParent)
+      details:SetScript("OnClose", function(self) closes:SetText(tostring(self:IsShown())) end)
+      row:SetScript("OnClick", function() details:SetAnchor(row); details:Show() end)
+    `)
+    const scene = applySceneBatch(createInitialScene(), runtime.start())
+    const details = scene.nodes.get("details")!
+    expect(details).toMatchObject({ kind: "breakout", parentId: "__chronicle_ui_root__", props: { width: 300, height: 160, title: "Jaina", visible: false } })
+    expect(scene.nodes.get("details-label")?.parentId).toBe("details")
+
+    runtime.event({ id: "row", event: "click" })
+    const opened = applySceneBatch(scene, runtime.flush())
+    expect(opened.nodes.get("details")?.props).toMatchObject({ visible: true, anchorTo: "row" })
+
+    runtime.close("details")
+    const closed = applySceneBatch(opened, runtime.flush())
+    expect(closed.nodes.get("details")?.props.visible).toBe(false)
+    expect(closed.nodes.get("closes")?.props.text).toBe("false")
+    // Closing an already closed breakout is a no-op.
+    runtime.close("details")
+    expect(runtime.flush()).toEqual([])
+    runtime.stop()
+  })
+
+  it("keeps Breakout frames top-level and off OnClick", () => {
+    for (const [source, error] of [
+      [`CreateFrame("Breakout", "b", CreateFrame("Frame", "f"))`, /top-level/],
+      [`CreateFrame("Breakout", "b"):SetParent(CreateFrame("Frame", "f"))`, /cannot be reparented/],
+      [`CreateFrame("Breakout", "b"):SetScript("OnClick", function() end)`, /put a Button inside it/],
+      [`CreateFrame("Frame", "f"):SetScript("OnClose", function() end)`, /only supported for Breakout/],
+      [`CreateFrame("Breakout", "b"):SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)`, /not supported for breakout/],
+      [`local b = CreateFrame("Breakout", "b"); b:SetAnchor(CreateFrame("Breakout", "c"))`, /frame inside the panel/],
+    ] as const) {
+      const runtime = panel(source)
+      expect(() => runtime.start()).toThrow(error)
+      runtime.stop()
+    }
+  })
+
   it("rejects uploaded reserved names and unknown Chronicle modules", () => {
     expect(() => panel(``, { "chronicle/v1/ui.lua": "return {}" })).toThrow(/reserved/)
     const runtime = panel(`require("chronicle.v1.other")`)

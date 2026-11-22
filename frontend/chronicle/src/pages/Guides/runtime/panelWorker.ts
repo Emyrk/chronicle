@@ -1,5 +1,5 @@
 /// <reference lib="webworker" />
-import { createGuideRuntime, type PanelTimeRange } from "./runtime"
+import { createGuideRuntime, type PanelSpellInfo, type PanelTimeRange } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, validatePanelEvent, type PanelStream, type PanelStreamScope } from "./panelEvents"
 import { replayStreams } from "./panelReplay"
 import { PANEL_FILTER_MODES, type PanelFilterMode } from "./panelFilters"
@@ -40,6 +40,10 @@ type Input =
   | { type: "click"; nodeId: string }
   /** The page's current time range filter; null when none is set. */
   | { type: "time-range"; range: PanelTimeRange | null }
+  /** The viewer closed a Breakout frame. */
+  | { type: "close"; nodeId: string }
+  /** Answers to a spell-request; spell is null when the host has no data for that ID. */
+  | { type: "spell-info"; spells: Array<{ id: number; spell: PanelSpellInfo | null }> }
   | { type: "stop" }
 
 export function createPanelWorkerHandler(send: (value: unknown) => void) {
@@ -63,6 +67,9 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   let delivered = 0
   const flush = (operations: ReturnType<NonNullable<typeof runtime>["flush"]>) => {
     for (const chunk of splitBatchOperations(operations)) send(parseWorkerMessage({ type: "batch", batchId: String(++batchId), operations: chunk }))
+    // Chronicle.GetSpell calls since the last flush; the host fetches them and replies with spell-info.
+    const ids = runtime?.takeSpellRequests()
+    if (ids?.length) send({ type: "spell-request", ids })
   }
   return (input: Input) => {
     try {
@@ -193,6 +200,14 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         // Chronicle.SetTimeRange / ClearTimeRange during the click; the host decides whether to apply it.
         const request = runtime.takeTimeRangeRequest()
         if (request) send({ type: "set-time-range", range: request.range })
+      } else if (input.type === "close") {
+        if (!runtime) return
+        phase = "close"
+        runtime.close(String(input.nodeId)); flush(runtime.flush())
+      } else if (input.type === "spell-info") {
+        if (!runtime) return
+        phase = "spell"
+        runtime.deliverSpells(parseSpellAnswers(input.spells)); flush(runtime.flush())
       } else if (input.type === "time-range") {
         if (!runtime) return
         phase = "timeRange"
@@ -203,6 +218,20 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
       send({ type: "error", message: error instanceof Error ? error.message : String(error), phase, ...(phase === "onEvent" ? { events: delivered } : {}) })
     }
   }
+}
+
+/** Host answers become Lua strings, so keep them to plain, bounded values. */
+function parseSpellAnswers(value: unknown): Array<{ id: number; spell: PanelSpellInfo | null }> {
+  if (!Array.isArray(value)) throw new Error("invalid spell-info")
+  const text = (field: unknown, max: number) => typeof field === "string" && field.length > 0 && field.length <= max ? field : undefined
+  return value.map((entry: { id?: unknown; spell?: Partial<PanelSpellInfo> | null }) => {
+    if (!entry || !Number.isInteger(entry.id) || (entry.id as number) < 1) throw new Error("invalid spell-info")
+    const id = entry.id as number
+    const name = text(entry.spell?.name, 256)
+    if (!name) return { id, spell: null }
+    const icon = text(entry.spell?.icon, 128)
+    return { id, spell: { id, name, rank: text(entry.spell?.rank, 64), icon: icon && /^[a-z0-9][a-z0-9_-]*$/.test(icon) ? icon : undefined } }
+  })
 }
 
 const scope = typeof self === "undefined" ? null : self as DedicatedWorkerGlobalScope
