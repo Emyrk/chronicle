@@ -110,6 +110,19 @@ func TestParticipantRealmsPersistWithoutFallback(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: eu.ID, Valid: true}, byID[2])
 	require.False(t, byID[3].Valid)
 	require.False(t, byID[4].Valid)
+	// Deleting only a participant's realm preserves attendance and does not
+	// replace the missing evidence with the still-existing instance realm.
+	require.NoError(t, store.DeleteWoWServerRealm(ctx, eu.ID))
+	afterDelete, err := store.InstancePlayersByInstanceID(ctx, instance)
+	require.NoError(t, err)
+	require.Len(t, afterDelete, len(rows))
+	for i := range rows {
+		if rows[i].UnitGuid == 2 {
+			rows[i].RealmID = uuid.NullUUID{}
+		}
+	}
+	require.ElementsMatch(t, rows, afterDelete)
+
 	// No resolver (legacy formats) writes NULL even if raw metadata is present.
 	legacy := newInstanceBuilder(units, instance)
 	legacy.participate(1)
