@@ -90,13 +90,14 @@ func (ce *CombatantInfoEmitter) player(id guid.GUID) (combatant.Combatant, bool)
 	if ce.units == nil {
 		return player, ok
 	}
-	parseWide, parseWideOK := ce.units.Players[id]
+	parseWide, parseWideOK := ce.units.GetPlayer(id)
 	if !ok {
 		return parseWide, parseWideOK
 	}
 	if parseWideOK {
 		player.MergeExisting(parseWide)
 	}
+	player.RawRealm = ce.units.PlayerRawRealm(id, player.Name, player.RawRealm)
 	return player, true
 }
 

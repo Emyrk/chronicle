@@ -283,6 +283,7 @@ func (w *WorkerLogParse) parseCombatLog(
 		c.Advancer = p
 		var parseAdvancer consumers.Advancer = p
 		if logFormat == database.LogFormatV22Cleu {
+			encountersState.Units.SetPlayerRealmLookup(p)
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
@@ -355,6 +356,8 @@ func (w *WorkerLogParse) parseCombatLog(
 	if consumeErr != nil {
 		return nil, consumeErr
 	}
+
+	encountersState.Units.RefreshPlayerRealms()
 
 	return &parseResult{
 		encountersState: encountersState,

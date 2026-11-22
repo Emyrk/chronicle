@@ -26,6 +26,10 @@ type Buff struct {
 }
 
 type Info struct {
+	// RawRealm is unresolved evidence for Name, not realm-qualified ownership of
+	// this GUID-only compatibility record's gear or other merged metadata.
+	RawRealm string
+
 	Seen         time.Time
 	Guid         guid.GUID
 	IsPlayer     bool
