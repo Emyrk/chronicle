@@ -46,7 +46,18 @@ func (l *Location) Process(z messages.Zone) zone.ZoneChangeResult {
 		return zone.ZoneChanged
 	}
 
-	// Same zone (name + instanceID match). Check for difficulty changes.
+	// Same zone (name + instanceID match). A new copy of the map is a reset.
+	if l.CopyDiffers(z.Zone) {
+		l.Zone = z.Zone
+		return zone.ZoneChanged
+	}
+	if l.CopyID == 0 && z.CopyID != 0 {
+		// The copy is learned after entering; adopt it without a new instance.
+		l.CopyID = z.CopyID
+		return zone.InfoUpdated
+	}
+
+	// Check for difficulty changes.
 	if z.HasDifficulty() {
 		if l.DifficultyDiffers(z.Zone) {
 			// Difficulty was already set and now differs → new instance needed.

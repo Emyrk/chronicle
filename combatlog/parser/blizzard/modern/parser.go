@@ -199,6 +199,10 @@ func (p *Parser) zoneChange(ts time.Time, m *wotlk.Matched, _ string) ([]message
 	mapID := m.Uint32()
 	name := m.String()
 	instanceType := m.String()
+	var copyID uint32
+	if m.Remain() > 0 {
+		copyID = m.Uint32()
+	}
 	if err := m.Error(); err != nil {
 		return nil, err
 	}
@@ -209,6 +213,7 @@ func (p *Parser) zoneChange(ts time.Time, m *wotlk.Matched, _ string) ([]message
 			Name:         strings.ToLower(name),
 			MapID:        mapID,
 			InstanceID:   mapID,
+			CopyID:       copyID,
 			InstanceType: instanceType,
 			IsInstance:   instanceType != "0",
 		},
