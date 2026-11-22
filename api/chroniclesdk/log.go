@@ -404,10 +404,13 @@ type InstanceUnit struct {
 }
 
 type InstancePlayer struct {
-	Name  string            `json:"name"`
-	Class types.HeroClasses `json:"class"`
-	Race  types.HeroRaces   `json:"race"`
-	Level int32             `json:"level"`
+	// RealmID is stored participant evidence. Null is explicit; callers may choose
+	// the instance realm as a display fallback, but the API does not assert it.
+	RealmID *uuid.UUID        `json:"realm_id"`
+	Name    string            `json:"name"`
+	Class   types.HeroClasses `json:"class"`
+	Race    types.HeroRaces   `json:"race"`
+	Level   int32             `json:"level"`
 }
 
 // WoWAttendanceInstance is the lightweight instance detail response used when

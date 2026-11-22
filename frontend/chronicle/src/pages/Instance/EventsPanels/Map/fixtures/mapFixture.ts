@@ -139,7 +139,7 @@ export function loadMapFixture(fixture: MapFixture, options: { selectPlayers?: b
   });
 
   const players: Record<string, InstancePlayer> = Object.fromEntries(Object.entries(fixture.players)
-    .map(([guid, player]) => [guid, { name: player.name, class: player.class as WoWHeroClasses, race: "Unknown", level: 0 }]));
+    .map(([guid, player]) => [guid, { realm_id: null, name: player.name, class: player.class as WoWHeroClasses, race: "Unknown", level: 0 }]));
   const instance: Instance = {
     id: fixture.source.instanceId,
     name: fixture.instance.name,

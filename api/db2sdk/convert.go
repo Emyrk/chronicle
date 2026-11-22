@@ -450,11 +450,17 @@ func WowAttendanceInstance(instance database.LogInstancesGuild, players []databa
 
 func InstancePlayers(players []database.LogInstancePlayer) map[guid.GUID]chroniclesdk.InstancePlayer {
 	return maps.MapFromSlice(players, func(u database.LogInstancePlayer) guid.GUID { return u.UnitGuid }, func(u database.LogInstancePlayer) chroniclesdk.InstancePlayer {
+		var realmID *uuid.UUID
+		if u.RealmID.Valid {
+			id := u.RealmID.UUID
+			realmID = &id
+		}
 		return chroniclesdk.InstancePlayer{
-			Name:  u.Name,
-			Class: HeroClass(u.Class),
-			Race:  HeroRace(u.Race),
-			Level: u.Level,
+			RealmID: realmID,
+			Name:    u.Name,
+			Class:   HeroClass(u.Class),
+			Race:    HeroRace(u.Race),
+			Level:   u.Level,
 		}
 	})
 }
