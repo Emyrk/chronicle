@@ -15,7 +15,6 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
-	"github.com/Emyrk/chronicle/database/authz"
 	"github.com/Emyrk/chronicle/internal/ptr"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -71,7 +70,7 @@ func New(units *unitdb.Units) *Tracker {
 	}
 }
 
-func (g *Tracker) insertGuilds(ctx context.Context, realmID uuid.UUID, tx *authz.AuthzTX) (map[string]uuid.UUID, *database.Guild, error) {
+func (g *Tracker) insertGuilds(ctx context.Context, realmID uuid.UUID, tx database.Store) (map[string]uuid.UUID, *database.Guild, error) {
 	guildIDs := make(map[string]uuid.UUID)
 	mostGuildPlayers := 0
 	var guildWithMostPlayers *database.Guild
@@ -107,8 +106,30 @@ func (g *Tracker) insertGuilds(ctx context.Context, realmID uuid.UUID, tx *authz
 	return guildIDs, guildWithMostPlayers, nil
 }
 
-func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid.UUID, realmID uuid.UUID, datasetID uuid.UUID, tx *authz.AuthzTX) (*database.Guild, error) {
-	guildIDs, guildWithMostPlayers, err := g.insertGuilds(ctx, realmID, tx)
+func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid.UUID, realmID uuid.UUID, datasetID uuid.UUID, tx database.Store, resolve PlayerRealmResolver) (*database.Guild, error) {
+	// Build a persistence-only view. Never mutate the tracker used by combat,
+	// participant and ranking consumers when rejecting ambiguous armory data.
+	playerRealms := make(map[guid.GUID]uuid.UUID, len(g.Players))
+	if resolve != nil {
+		g, playerRealms = g.eligiblePlayers(udb, resolve)
+	} else {
+		for id := range g.Players {
+			playerRealms[id] = realmID
+		}
+	}
+	var guildIDs map[guildKey]uuid.UUID
+	var guildWithMostPlayers *database.Guild
+	var err error
+	if resolve == nil {
+		var legacyIDs map[string]uuid.UUID
+		legacyIDs, guildWithMostPlayers, err = g.insertGuilds(ctx, realmID, tx)
+		guildIDs = make(map[guildKey]uuid.UUID, len(legacyIDs))
+		for name, id := range legacyIDs {
+			guildIDs[guildKey{realmID, name}] = id
+		}
+	} else {
+		guildIDs, guildWithMostPlayers, err = g.insertPlayerRealmGuilds(ctx, realmID, playerRealms, tx)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -155,7 +176,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		player := g.Players[playerGUID]
 		guildID := uuid.Nil
 		if player.Guild != nil {
-			guildID = guildIDs[player.Guild.Name]
+			guildID = guildIDs[guildKey{playerRealms[playerGUID], player.Guild.Name}]
 		}
 
 		var dbGear database.PlayerOutfit
@@ -199,7 +220,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		if hasGear && instanceID != uuid.Nil {
 			gearHistory = append(gearHistory, database.UpsertPlayerGearHistoryParams{
 				PlayerID:   player.Guid,
-				RealmID:    realmID,
+				RealmID:    playerRealms[playerGUID],
 				InstanceID: instanceID,
 				Gear:       dbGear,
 				AvgIlvl:    averageItemLevel(dbGear),
@@ -224,7 +245,7 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 
 		inserts = append(inserts, database.UpsertPlayersParams{
 			ID:      player.Guid,
-			RealmID: realmID,
+			RealmID: playerRealms[playerGUID],
 			Name:    player.Name,
 			GuildID: uuid.NullUUID{
 				UUID:  guildID,
@@ -245,9 +266,11 @@ func (g *Tracker) Insert(ctx context.Context, udb *unitdb.Units, instanceID uuid
 		})
 	}
 
-	res := tx.UpsertPlayers(ctx, inserts)
-	if err := res.Close(); err != nil {
-		return nil, fmt.Errorf("closing upsert players batch: %w", err)
+	if len(inserts) > 0 {
+		res := tx.UpsertPlayers(ctx, inserts)
+		if err := res.Close(); err != nil {
+			return nil, fmt.Errorf("closing upsert players batch: %w", err)
+		}
 	}
 
 	// Gear history rows FK into game_players, so they must be inserted after

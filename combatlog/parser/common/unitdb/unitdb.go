@@ -14,6 +14,7 @@ import (
 
 type Units struct {
 	playerRealmLookup PlayerRealmLookup
+	playerNames       map[guid.GUID]map[string]struct{}
 	flavor            database.WoWFlavor
 	// TODO: Slain to remove units?
 	Info         map[guid.GUID]unitinfo.Info
@@ -100,6 +101,8 @@ func (us *Units) ProcessMessage(m messages.Message) error {
 	us.expirePossessions(m.Date())
 
 	switch msg := m.(type) {
+	case *messages.CombatantTalents:
+		us.ObservePlayerName(msg.Guid, msg.PlayerName)
 	case *messages.Combatant:
 		us.UpdatePlayer(msg.Combatant)
 	case *messages.Unit:
@@ -252,6 +255,7 @@ func (us *Units) GetPlayerByName(name string) (combatant.Combatant, bool) {
 }
 
 func (us *Units) Update(u unitinfo.Info) {
+	us.ObservePlayerName(u.Guid, u.Name)
 	us.ensureDirectOwners()
 	existing, exists := us.Info[u.Guid]
 	if u.Name == "" && exists {
@@ -317,6 +321,7 @@ func (us *Units) Update(u unitinfo.Info) {
 }
 
 func (us *Units) UpdateUnitName(gid guid.GUID, name string) {
+	us.ObservePlayerName(gid, name)
 	if info, ok := us.Info[gid]; ok {
 		if info.Name != "" {
 			return
@@ -351,6 +356,7 @@ func (us *Units) UpdatePlayerTalents(gid guid.GUID, talents *combatant.Talents) 
 }
 
 func (us *Units) UpdatePlayer(c combatant.Combatant) {
+	us.ObservePlayerName(c.Guid, c.Name)
 	existing, ok := us.Players[c.Guid]
 	if ok {
 		c.MergeExisting(existing)

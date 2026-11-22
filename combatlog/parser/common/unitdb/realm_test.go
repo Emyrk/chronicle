@@ -47,3 +47,21 @@ func TestPlayerRealmAttachment(t *testing.T) {
 	units.UpdatePlayer(combatant.Combatant{Guid: id, Name: "Second"})
 	require.Empty(t, units.Players[id].RawRealm)
 }
+
+func TestPlayerIdentityAmbiguityBeforeMerge(t *testing.T) {
+	t.Parallel()
+	units := New(nil)
+	id := guid.GUID(42)
+	for _, name := range []string{"", "Unknown", "nil", "Alice"} {
+		units.UpdateUnitName(id, name)
+	}
+	require.False(t, units.PlayerIdentityAmbiguous(id))
+	// Existing names make UpdateUnitName return early, but evidence must survive.
+	units.UpdateUnitName(id, "Bob")
+	units.UpdatePlayer(combatant.Combatant{Guid: id, Name: "Alice"})
+	require.True(t, units.PlayerIdentityAmbiguous(id))
+	other := guid.GUID(43)
+	units.Update(unitinfo.Info{Guid: other, Name: "Alice"})
+	units.UpdatePlayer(combatant.Combatant{Guid: other, Name: "Bob"})
+	require.True(t, units.PlayerIdentityAmbiguous(other))
+}

@@ -68,6 +68,7 @@ type Parser struct {
 	// playerRealms accumulates raw name/realm evidence in input order. It is not
 	// yet used for event attribution or exposed to consumers.
 	playerRealms map[guid.GUID]map[string]PlayerRealmInfo
+	playerNames  map[guid.GUID]map[string]struct{}
 	inner        *wotlk.Parser
 	wowDB        gamedb.SpellFetcher
 	talentTrees  *talents.TalentTreeData
@@ -87,6 +88,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	// index even when the inner scanner buffers ahead. Other formats leave it nil.
 	if format == database.LogFormatV22Cleu {
 		transformer.playerRealms = make(map[guid.GUID]map[string]PlayerRealmInfo)
+		transformer.playerNames = make(map[guid.GUID]map[string]struct{})
 	}
 	p, err := newParser(ctx, logger, transformer, wowDB, gear, reg)
 	if err != nil {
@@ -94,6 +96,7 @@ func New(ctx context.Context, logger *slog.Logger, r io.Reader, wowDB gamedb.Gam
 	}
 	p.guids = transformer.guids
 	p.playerRealms = transformer.playerRealms
+	p.playerNames = transformer.playerNames
 	p.inner.SetBaseYear(year)
 	switch format {
 	case database.LogFormatV22Cleu:

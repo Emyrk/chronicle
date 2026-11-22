@@ -593,7 +593,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 			// Unlisted logs still update current player gear and talents, but must not
 			// expose the source instance or add it to public gear history.
 			armoryInstanceID := armoryProvenanceInstanceID(instanceID, lg.Unlisted)
-			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, armoryInstanceID, realmID, resolved.DatasetID, tx)
+			guild, err := finalized.Guilds.Insert(ctx, encountersState.Units, armoryInstanceID, realmID, resolved.DatasetID, tx, armoryRealmResolver(lg.Format.LogFormat, encountersState.Units, builder.realmCatalog))
 			if err != nil {
 				return fmt.Errorf("insert guild: %w", err)
 			}
