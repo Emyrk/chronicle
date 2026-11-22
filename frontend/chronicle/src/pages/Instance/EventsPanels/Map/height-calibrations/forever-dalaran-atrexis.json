@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "id": "forever-dalaran-atrexis-v1",
+  "dataset": "forever",
+  "datasetId": "b69b601c-d247-44c6-9cb6-3f71053fd052",
+  "mapID": 2959,
+  "encounterID": 3311,
+  "encounterName": "Atrexis the Grave Knight",
+  "enemyEntry": 247126,
+  "referenceZ": 60,
+  "meshSHA256": "f0db942c2686301549604896000a3bac4d145fb122ab645863c63bf481a33ef8",
+  "frame": "wow-yup-mirrored-x",
+  "review": {
+    "status": "operator-reviewed",
+    "note": "Operator confirmed Atrexis is in the sewers and reference60 looks correct in the local replay. One encounter reviewed, not held-out accuracy. Reference seeds geometry-constrained movement; downward drops remain allowed."
+  }
+}
