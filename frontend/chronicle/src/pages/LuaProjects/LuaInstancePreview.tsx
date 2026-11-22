@@ -20,8 +20,6 @@ export interface LuaInstancePreviewProps {
   events: LuaPreviewEventProvider
   /** The previewed instance's units for Chronicle.GetUnit. */
   units?: PanelUnits
-  /** Sends a prompt to the workshop assistant, for the error card's "Ask the assistant" button. */
-  onAskAssistant?: (prompt: string) => void
   /** Fixed preview size for checking layouts; null fills the canvas. Omit to hide the size controls. */
   frameSize?: FrameSize
   onFrameSizeChange?: (size: FrameSize) => void
@@ -42,7 +40,7 @@ function readAutoPreview(): boolean {
  * Ephemeral browser-only preview. No package lookup, upload or server execution. Runs on click, or
  * with Auto on, after every edit (including AI diffs) and encounter selection change.
  */
-export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, onAskAssistant, autoRun = false, frameSize = null, onFrameSizeChange }: LuaInstancePreviewProps) {
+export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, autoRun = false, frameSize = null, onFrameSizeChange }: LuaInstancePreviewProps) {
   const [measured, setMeasured] = useState<{ width: number; height: number } | null>(null)
   const [run, setRun] = useState<Run | null>(null)
   const [busy, setBusy] = useState(false)
@@ -147,7 +145,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
       {visible && (() => {
         const host = <div className={`flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border bg-background transition-opacity ${current ? "" : "opacity-60"}`}>
           <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope} filterMode={visible.panel.filterMode}
-            maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} eventStreams={visible.streams} encounterIds={visible.encounterIds} assets={assetUrls} onAskAssistant={onAskAssistant} /></div>
+            maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} eventStreams={visible.streams} encounterIds={visible.encounterIds} assets={assetUrls} /></div>
         return onFrameSizeChange ? <PreviewFrame size={frameSize} onChange={onFrameSizeChange} onMeasure={setMeasured}>{host}</PreviewFrame> : host
       })()}
     </>}

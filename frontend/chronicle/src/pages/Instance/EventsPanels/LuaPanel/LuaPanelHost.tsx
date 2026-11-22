@@ -40,8 +40,6 @@ export interface LuaPanelHostProps {
   units?: PanelUnits
   /** Called once per completed replay. */
   onMetrics?: (metrics: LuaPanelRunMetrics) => void
-  /** Shows an "Ask the assistant to fix it" button on errors (Module Workshop only). */
-  onAskAssistant?: (prompt: string) => void
   /** The page's time range filter, readable from Lua with Chronicle.GetTimeRange. */
   timeRange?: PanelTimeRange | null
   /** Applies Chronicle.SetTimeRange / ClearTimeRange from a click; omit where there is no page time range. */
@@ -78,7 +76,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, onAskAssistant, timeRange = null, onSetTimeRange }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, timeRange = null, onSetTimeRange }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const sceneRef = useRef(scene)
   const [error, setError] = useState<ModuleErrorExplanation | null>(null)
@@ -191,7 +189,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   // Lets widgets such as a selectable LineChart read and set the page time range.
   const timeRangeContext: PanelTimeRangeValue = { range: startMs === null && endMs === null ? null : { startMs, endMs }, select: onSetTimeRange }
 
-  if (error) return <ModuleErrorCard error={error} onAskAssistant={onAskAssistant} />
+  if (error) return <ModuleErrorCard error={error} />
   return <div className="flex min-h-0 flex-1 flex-col">
     {/* Content larger than the panel (or than UIParent:SetSize asks for) scrolls instead of being cut off. */}
     <div className="styled-scrollbar relative min-h-[240px] flex-1 overflow-auto" data-lua-panel-host>

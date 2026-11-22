@@ -800,7 +800,7 @@ Make sure `project.json` lists every stream you subscribe to in `streams`. Make 
 Content past the panel's edge scrolls. Set `UIParent:SetHeight(...)` to the height your rows need so the panel scrolls to all of it. See [Panel size and scrolling](#panel-size-and-scrolling).
 
 **What happens when my module stops?**
-Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. In the workshop, **Ask the assistant to fix it** sends that explanation to the assistant.
+Chronicle shows what went wrong, where (file, line, and whether it was startup, `onEvent`, `onComplete` or a click), and how to fix it. **Copy error** copies that explanation, ready to paste into an AI assistant such as Claude.
 
 **"Module stopped: instruction budget exceeded".**
 One callback did too much work, for example sorting a large table inside `onEvent`. Move heavy work to `onComplete`, and keep each callback under 100,000 instructions.

@@ -160,6 +160,11 @@ export function explainModuleError(message: string, context: ModuleErrorContext 
 }
 
 /** Plain-text version for tool results and "ask the assistant" prompts. */
+/** What the error card's Copy error button copies: the explanation, ready to paste into an AI assistant. */
+export function moduleErrorReport(explanation: ModuleErrorExplanation): string {
+  return `My Chronicle module stopped with this error. Please help me fix it.\n\n${formatModuleError(explanation)}`
+}
+
 export function formatModuleError(explanation: ModuleErrorExplanation): string {
   return [
     `${explanation.title}${explanation.where ? ` (${explanation.where})` : ""}: ${explanation.detail}`,

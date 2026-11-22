@@ -14,7 +14,6 @@ import { useOptionalLocalMcp } from "@/features/chat/mcp/LocalMcpProvider"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
 import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
-import type { WorkshopChatRequest } from "./LuaWorkshopChat"
 import { parseRunPreviewArgs, runPreview } from "./previewRun"
 import { runStartupCheck } from "./startupCheck"
 import { buildPanelUnits } from "../Guides/runtime/panelUnits"
@@ -184,7 +183,6 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   // Browser chat loads only once opened, then stays mounted to keep its thread.
   const [chatMounted, setChatMounted] = useState(() => readLayout().chatOpen)
-  const [chatRequest, setChatRequest] = useState<WorkshopChatRequest>()
   const [aiEdit, setAiEdit] = useState<AiEdit | null>(null)
   const [diffOpen, setDiffOpen] = useState(false)
   const setLayout = useCallback((next: Partial<Layout>) => setLayoutState(current => {
@@ -320,7 +318,6 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   const openChat = () => { setChatMounted(true); setLayout({ chatOpen: true }) }
   const toggleChat = () => chatOpen ? setLayout({ chatOpen: false }) : openChat()
   // From the preview's error card: send the explanation to the browser chat and open it.
-  const askAssistant = (text: string) => { setChatRequest({ id: Date.now(), text }); openChat() }
   const aiEditCurrent = !!aiEdit && copy?.revision === aiEdit.revision
   const status = releaseStatus(project, copy)
   const released = !!copy && !copy.dirty && copy.saved && !!project.main && latestRelease(project)?.sha256 === project.main.sha256
@@ -442,7 +439,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
             {!copy?.valid && copy && <p className="text-xs text-muted-foreground">Fix the source errors to enable previews.</p>}
             {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
             {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
-              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits} onAskAssistant={askAssistant}
+              <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits}
                 frameSize={layout.frame} onFrameSizeChange={frame => setLayout({ frame })} />
             </Suspense>}
           </div>
@@ -470,7 +467,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
         className="hidden lg:col-start-2 lg:row-start-1 lg:block" />}
       {chatMounted && <section aria-label="Browser chat" hidden={!chatOpen} className="h-[70vh] min-w-0 flex-col border-t border-border bg-black/20 lg:col-start-2 lg:row-start-1 lg:h-auto lg:border-t-0 [&:not([hidden])]:flex">
         <Suspense fallback={<p role="status" className="p-4 text-sm text-muted-foreground">Loading chat…</p>}>
-          <LuaWorkshopChat projectId={project.id} projectName={project.name} request={chatRequest}
+          <LuaWorkshopChat projectId={project.id} projectName={project.name}
             windowControls={<button type="button" className={iconButton} onClick={() => setLayout({ chatOpen: false })} title="Close browser chat" aria-label="Close browser chat"><PanelRightClose className="size-4" /></button>}
             onShowCode={view === "code" ? undefined : () => setLayout({ view: "code" })} />
         </Suspense>
