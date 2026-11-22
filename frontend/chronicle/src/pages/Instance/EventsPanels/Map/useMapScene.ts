@@ -1,3 +1,4 @@
+import { encounterHeightReference } from "./encounterHeightCalibration";
 import { firstFloorEncounter } from "./encounterFloor";
 import { useEncounterFloor } from "./useEncounterFloor";
 import { useMemo } from "react";
@@ -622,7 +623,26 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
   const tankGuids = cachedTankGuids(encounter.effects, props.context.instance.players ?? {});
   // The same units the markers show (players and bosses on this map and
   // floor), at any replay time, for the Director to look ahead in.
-  const followKey = `${encounter.encounterId}|${encounter.startMs}|${mapId}|${selectedFloorNumber}|${projectionKey}|${wholeRun}|${[...bossGuids].join(",")}`;
+  const activeEncounter = props.context.instance.encounters.find((candidate) => candidate.id === encounter.encounterId);
+  const heightReference = encounterHeightReference({
+    datasetId: props.context.instance.datasetId,
+    mapId,
+    coordinateSpace: props.context.instance.positionCoordinateSpace,
+    frame: mesh?.frame,
+    wholeRun,
+    selectedEncounterIds: props.context.selectedEncounterIds,
+    activeEncounter: activeEncounter ? {
+      id: activeEncounter.id,
+      name: activeEncounter.name,
+      mapId: activeEncounter.mapId,
+      enemyEntries: (activeEncounter.enemies ?? []).flatMap((enemy) => {
+        const entry = props.context.instance.units?.[enemy.id]?.entry;
+        return entry === undefined ? [] : [entry];
+      }),
+    } : undefined,
+  });
+  const heightKey = `${props.context.instance.datasetId ?? "no-dataset"}|${heightReference?.id ?? "no-anchor"}`;
+  const followKey = `${heightKey}|${encounter.encounterId}|${encounter.startMs}|${mapId}|${selectedFloorNumber}|${projectionKey}|${wholeRun}|${[...bossGuids].join(",")}`;
   const followSource = cachedFollowSource(
     encounter,
     followKey,
@@ -630,6 +650,7 @@ export function useMapScene(props: PanelRenderProps<MapResult>, options: MapScen
       const players = props.context.instance.players ?? {};
       return {
         key: followKey,
+        heightReference,
         startMs: encounter.startMs,
         // Read live: the processor grows the encounter while the result streams in.
         get endMs() {

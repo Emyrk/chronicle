@@ -1,4 +1,4 @@
-import type { InstancePlayer, KillType, WoWHeroClasses } from "@/api/typesGenerated";
+import type { InstancePlayer, KillType, PositionCoordinateSpace, WoWHeroClasses } from "@/api/typesGenerated";
 import type { ResolvedInstanceUnit } from "@/pages/Instance/instanceUnits";
 import type { WowMapManifest } from "@/pages/Technical/mapGallery";
 import type { StreamType } from "@/hooks/instanceEvents";
@@ -15,7 +15,13 @@ import { mapProcessor, type MapProcessorEvent, type MapResult } from "../map.pro
  */
 export interface MapFixture {
   source: { host: string; instanceId: string; encounterId: string };
-  instance: { name: string; iconBaseUrl: string; capabilities: string[] };
+  instance: {
+    name: string;
+    iconBaseUrl: string;
+    capabilities: string[];
+    datasetId?: string;
+    positionCoordinateSpace?: PositionCoordinateSpace;
+  };
   encounter: {
     id: string;
     name: string;
@@ -138,6 +144,8 @@ export function loadMapFixture(fixture: MapFixture, options: { selectPlayers?: b
     id: fixture.source.instanceId,
     name: fixture.instance.name,
     iconBaseUrl: fixture.instance.iconBaseUrl,
+    datasetId: fixture.instance.datasetId,
+    positionCoordinateSpace: fixture.instance.positionCoordinateSpace,
     startTime: fixture.encounter.startTime,
     endTime: fixture.encounter.endTime,
     capabilities: fixture.instance.capabilities,

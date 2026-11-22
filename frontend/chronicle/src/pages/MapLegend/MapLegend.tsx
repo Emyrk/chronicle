@@ -211,6 +211,12 @@ export function MapLegend() {
           Choose Auto to clear the manual choice and restore the computed estimate. The same picker is available in World settings,
           and remains available when the selected floor has no artwork.
         </p>
+        <p className="text-sm text-muted-foreground">
+          In 3D, reviewed encounter references can seed inferred height for a single selected encounter.
+          They never replace logged Z, and movement still follows walkable geometry, including drops.
+          Whole-run and multiple-encounter views do not use these references. Missing references or a changed
+          mesh revision fall back to ordinary height inference.
+        </p>
       </Section>
 
       <Section id="tokens" title="Unit tokens" note="Flat discs that lie on the ground, so the space above them stays free for one live value.">
