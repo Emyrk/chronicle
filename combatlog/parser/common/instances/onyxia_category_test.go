@@ -65,6 +65,9 @@ func TestOnyxiaEnvironmentCategories(t *testing.T) {
 func TestOnyxiaSharedLavaFissures(t *testing.T) {
 	t.Parallel()
 	samples := map[uint32]string{
+		176513: "0xF11002B181014037", 176514: "0xF11002B182014038",
+		176811: "0xF11002B2AB01403C", 176831: "0xF11002B2BF014050",
+		176832: "0xF11002B2C0014051", 176842: "0xF11002B2CA01405B",
 		176827: "0xF11002B2BB01404C", 176828: "0xF11002B2BC01404D",
 		176829: "0xF11002B2BD01404E", 176830: "0xF11002B2BE01404F",
 	}
@@ -116,11 +119,17 @@ func TestFinalizeOnyxiaSharedObjects(t *testing.T) {
 	units := unitdb.New(flavor)
 	h := &Hookable{units: units, Identifier: OnyxiaFactory.Hostiles(flavor)}
 	want := map[guid.GUID]unitdb.Category{
-		objectGUID(176827, 1): unitdb.CategoryEnvironment,
-		objectGUID(176828, 1): unitdb.CategoryEnvironment,
-		objectGUID(176829, 1): unitdb.CategoryEnvironment,
-		objectGUID(176830, 1): unitdb.CategoryEnvironment,
-		objectGUID(176499, 1): unitdb.CategoryObject,
+		guid.GUID(0xF11002B181014037): unitdb.CategoryEnvironment,
+		guid.GUID(0xF11002B182014038): unitdb.CategoryEnvironment,
+		guid.GUID(0xF11002B2AB01403C): unitdb.CategoryEnvironment,
+		guid.GUID(0xF11002B2BF014050): unitdb.CategoryEnvironment,
+		guid.GUID(0xF11002B2C0014051): unitdb.CategoryEnvironment,
+		guid.GUID(0xF11002B2CA01405B): unitdb.CategoryEnvironment,
+		objectGUID(176827, 1):         unitdb.CategoryEnvironment,
+		objectGUID(176828, 1):         unitdb.CategoryEnvironment,
+		objectGUID(176829, 1):         unitdb.CategoryEnvironment,
+		objectGUID(176830, 1):         unitdb.CategoryEnvironment,
+		objectGUID(176499, 1):         unitdb.CategoryObject,
 	}
 	for id := range want {
 		msg := &messages.Unit{Info: unitinfo.Info{Guid: id}}
