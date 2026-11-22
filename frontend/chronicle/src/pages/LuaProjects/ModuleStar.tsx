@@ -17,10 +17,10 @@ export function ModuleStar({ project, canUse }: { project: LuaProject; canUse: b
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState("")
   const owner = session?.user_id === project.owner_id
-  const shape = "inline-flex items-center overflow-hidden rounded-md border text-sm font-medium"
+  const shape = "inline-flex h-9 items-stretch overflow-hidden rounded-md border text-sm font-medium"
   const label = state.starred ? "Tracking" : "Track"
   const icon = <Star className={`size-4 ${state.starred ? "fill-amber-300 text-amber-300" : ""}`} />
-  const count = <span className="border-l border-border px-2.5 py-2 tabular-nums text-muted-foreground" aria-label={`${state.stars} stars`}>{state.stars.toLocaleString()}</span>
+  const count = <span className="flex items-center border-l border-border px-2.5 tabular-nums text-muted-foreground" aria-label={`${state.stars} stars`}>{state.stars.toLocaleString()}</span>
 
   async function toggle() {
     const previous = state, next = !state.starred
@@ -36,12 +36,12 @@ export function ModuleStar({ project, canUse }: { project: LuaProject; canUse: b
   }
 
   if (!session) return <Link to={`/login?from=${encodeURIComponent(window.location.pathname)}`} className={`${shape} border-border hover:bg-accent`} title="Sign in to track this module">
-    <span className="inline-flex items-center gap-2 px-3 py-2">{icon} Track</span>{count}</Link>
+    <span className="inline-flex items-center gap-2 px-3">{icon} Track</span>{count}</Link>
   return <div className="flex flex-col items-end gap-1">
     <button type="button" onClick={() => void toggle()} disabled={busy || owner || !canUse} aria-pressed={state.starred}
       title={owner ? "Owners always track their own modules" : state.starred ? "Stop tracking: it leaves your instance panel picker" : "Track it: it appears in your instance panel picker"}
       className={`${shape} ${state.starred ? "border-amber-300/40 bg-amber-300/10" : "border-border"} enabled:hover:bg-accent disabled:cursor-default`}>
-      <span className="inline-flex items-center gap-2 px-3 py-2">{icon} {label}</span>{count}
+      <span className="inline-flex items-center gap-2 px-3">{icon} {label}</span>{count}
     </button>
     {error && <p role="alert" className="text-xs text-destructive">{error}</p>}
   </div>
