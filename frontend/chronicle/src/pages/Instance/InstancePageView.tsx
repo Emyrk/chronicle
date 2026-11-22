@@ -41,7 +41,7 @@ import { cn } from "@/lib/utils";
 import { entityAttributes, type EntityRef } from "@/components/EntityMenu/entity";
 import { EntityActionScope, type EntityAction } from "@/components/EntityMenu/EntityMenu";
 import { pullDurationMs } from "./encounterKillTimes";
-import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { getArmoryUrl, instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { SeamlessLayoutContext } from "./EventsPanels/SeamlessLayoutContext";
 import { useFocusMode } from "@/hooks/useFocusMode";
 import type { Instance, Encounter, EnemyUnit } from "./InstancePage";
@@ -2162,9 +2162,9 @@ function EncounterDetail({
                                         {formatRaceLabel(player.race)} {formatClassLabel(player.class)}
                                       </span>
                                     </div>
-                                    {instance.realm && (
+                                    {getArmoryUrl(instance, player.guid) && (
                                       <Link
-                                        to={`/armory/${encodeURIComponent(instance.realm)}/${encodeURIComponent(player.guid)}`}
+                                        to={getArmoryUrl(instance, player.guid)!}
                                         className="text-xs text-primary hover:underline flex items-center gap-1"
                                         onClick={(e) => e.stopPropagation()}
                                       >

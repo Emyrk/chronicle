@@ -1,3 +1,4 @@
+import { isInstancePlayerFavorite } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ArrowLeftRight, CircleHelp } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
@@ -179,19 +180,13 @@ function PlayerTimelineView({
         .sort((a, b) => b[1] - a[1]),
     [damageByPlayer, healingByPlayer, metric, instance.players],
   );
-  // Favorited characters (name + realm) seed the defaults when nothing was picked.
+  // Favorited characters (GUID + realm) seed the defaults when nothing was picked.
   const { isAuthenticated } = useAuth();
   const { data: favorites } = useMyFavorites({ enabled: isAuthenticated });
-  const isFavorite = useMemo(() => {
-    const realm = instance.realm?.toLowerCase();
-    const keys = new Set(
-      (favorites?.players ?? []).map((f) => `${f.name.toLowerCase()}|${realm ? f.realm_name.toLowerCase() : ""}`),
-    );
-    return (guid: string) => {
-      const name = instance.players?.[guid]?.name;
-      return name != null && keys.has(`${name.toLowerCase()}|${realm ?? ""}`);
-    };
-  }, [favorites, instance.players, instance.realm]);
+  const isFavorite = useMemo(
+    () => (guid: string) => isInstancePlayerFavorite(instance, guid, favorites?.players ?? []),
+    [favorites, instance],
+  );
 
   const picked = useMemo((): [string | null, string | null] => {
     const [top, next] = defaultPlayers(ranked, (guid) => instance.players?.[guid]?.class, isFavorite);

@@ -8,7 +8,7 @@ import { GenericPanel } from "../GenericPanel";
 import { useItemTooltip } from "@/api/gamedata";
 import { cn } from "@/lib/utils";
 import { entityAttributes } from "@/components/EntityMenu/entity";
-import { instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
+import { getArmoryUrl, instanceEntityAttributes, instanceGuildEntity } from "@/components/ui/PlayerMetricChart/instanceEntity";
 import type { Instance } from "@/pages/Instance/InstancePage";
 import { getQualityBorderClass, getQualityTextClass, getClassColorVar } from "@/pages/ArmoryPage/types";
 import { formatRaceLabel } from "@/pages/ArmoryPage/characterDisplay";
@@ -356,9 +356,9 @@ export function EquipmentContent(props: PanelRenderProps<EquipmentResult>) {
                 // Its own flex item here, so cancel the row gap to keep the text flowing as before.
                 <span {...entityAttributes(guildEntity)} className="-ml-1">{` · <${selected.guildName}>`}</span>
               ) : ` · <${selected.guildName}>`)}
-              {context.instance.realm && (
+              {getArmoryUrl(context.instance, selected.guid) && (
                 <Link
-                  to={`/armory/${encodeURIComponent(context.instance.realm)}/${encodeURIComponent(selected.guid)}`}
+                  to={getArmoryUrl(context.instance, selected.guid)!}
                   className="inline-flex items-center gap-0.5 text-blue-400 hover:text-blue-300"
                   target="_blank"
                 >
