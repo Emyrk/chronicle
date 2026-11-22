@@ -23749,6 +23749,73 @@ func (q *sqlQuerier) IsParsedLogGroupVisible(ctx context.Context, id uuid.UUID) 
 	return exists, err
 }
 
+const listDungeonInstanceSet = `-- name: ListDungeonInstanceSet :many
+SELECT
+    li.id,
+    li.hashed_slug AS slug,
+    li.name,
+    li.start_time,
+    li.end_time,
+    (SELECT COUNT(DISTINCT lie.name) FROM log_instance_encounters lie
+     WHERE lie.instance_id = li.id AND lie.boss AND lie.kill_type IN ('clean', 'partial'))::bigint AS boss_kills,
+    (SELECT COUNT(*) FROM log_instance_encounters lie
+     WHERE lie.instance_id = li.id AND lie.kill_type = 'wipe')::bigint AS wipes
+FROM log_instances li
+JOIN parsed_log_group plg ON plg.id = li.log_group_id
+JOIN wow_log_groups wlg ON wlg.id = plg.id
+  AND plg.parse_generation = wlg.parse_generation
+  AND plg.finalized_at IS NOT NULL
+WHERE li.log_group_id = $1
+  AND li.name = $2
+  AND li.category = 'dungeon'
+ORDER BY li.start_time, li.id
+`
+
+type ListDungeonInstanceSetParams struct {
+	LogGroupID uuid.UUID `db:"log_group_id" json:"log_group_id"`
+	Name       string    `db:"name" json:"name"`
+}
+
+type ListDungeonInstanceSetRow struct {
+	ID        uuid.UUID          `db:"id" json:"id"`
+	Slug      pgtype.Text        `db:"slug" json:"slug"`
+	Name      string             `db:"name" json:"name"`
+	StartTime pgtype.Timestamptz `db:"start_time" json:"start_time"`
+	EndTime   pgtype.Timestamptz `db:"end_time" json:"end_time"`
+	BossKills int64              `db:"boss_kills" json:"boss_kills"`
+	Wipes     int64              `db:"wipes" json:"wipes"`
+}
+
+// A dungeon instance set is every instance in one uploaded log with the same
+// dungeon name, e.g. several resets of one dungeon. Raids are never grouped.
+func (q *sqlQuerier) ListDungeonInstanceSet(ctx context.Context, arg ListDungeonInstanceSetParams) ([]ListDungeonInstanceSetRow, error) {
+	rows, err := q.db.Query(ctx, listDungeonInstanceSet, arg.LogGroupID, arg.Name)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDungeonInstanceSetRow
+	for rows.Next() {
+		var i ListDungeonInstanceSetRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Slug,
+			&i.Name,
+			&i.StartTime,
+			&i.EndTime,
+			&i.BossKills,
+			&i.Wipes,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listInstancesByDuplicateGroup = `-- name: ListInstancesByDuplicateGroup :many
 SELECT
     li.id,

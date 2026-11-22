@@ -919,6 +919,9 @@ type sqlcQuerier interface {
 	ListDueLeaderboardD2(ctx context.Context, arg ListDueLeaderboardD2Params) ([]ListDueLeaderboardD2Row, error)
 	ListDueLeaderboardOperations(ctx context.Context, afterTenant uuid.UUID) ([]ListDueLeaderboardOperationsRow, error)
 	ListDueLeaderboardRuns(ctx context.Context, arg ListDueLeaderboardRunsParams) ([]uuid.UUID, error)
+	// A dungeon instance set is every instance in one uploaded log with the same
+	// dungeon name, e.g. several resets of one dungeon. Raids are never grouped.
+	ListDungeonInstanceSet(ctx context.Context, arg ListDungeonInstanceSetParams) ([]ListDungeonInstanceSetRow, error)
 	ListEncounterPlayerPerformanceInvalidationsForInstance(ctx context.Context, instanceID uuid.UUID) ([]ListEncounterPlayerPerformanceInvalidationsForInstanceRow, error)
 	ListEventRepairItems(ctx context.Context, arg ListEventRepairItemsParams) ([]EventRepairItem, error)
 	ListEventRepairOperations(ctx context.Context, arg ListEventRepairOperationsParams) ([]EventRepairOperation, error)

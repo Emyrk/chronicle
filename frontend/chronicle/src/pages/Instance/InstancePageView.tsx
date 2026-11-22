@@ -111,6 +111,7 @@ import { EncounterDifficultyMark } from "@/components/EncounterDifficulty/Encoun
 import { AdSlot } from "@/components/Ads/AdSlot";
 import { isHeroic } from "@/lib/wowUtils";
 import { DuplicatesBadge } from "./DuplicatesBadge";
+import { DungeonInstanceSetSwitcher } from "./LogInstanceSwitcher";
 import { getInstanceBackground } from "@/pages/Logs/utils/instanceImages";
 import { formatClassLabel, formatRaceLabel } from "../ArmoryPage/characterDisplay";
 import type { LayoutActionBarSlots } from "@/features/layoutBook/layoutBookStore";
@@ -4294,6 +4295,7 @@ function InstancePageViewContent({
             {duplicateGroupId && (
               <DuplicatesBadge instanceId={instance.id} duplicateGroupId={duplicateGroupId} />
             )}
+            {isMobile && !reconstruction && <DungeonInstanceSetSwitcher instanceId={instance.id} variant="stepper" />}
             {!reconstruction && <OwnerAdFreeBadge subject="log" />}
           </>
         )}
@@ -4434,6 +4436,7 @@ function InstancePageViewContent({
           </>
         )}
       />
+      {!isMobile && !reconstruction && <DungeonInstanceSetSwitcher instanceId={instance.id} variant="tabs" />}
       </>)}
 
 
