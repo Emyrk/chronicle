@@ -2989,6 +2989,7 @@ type LogInstancePlayer struct {
 	Race       WowPlayableRace      `db:"race" json:"race"`
 	GuildID    uuid.NullUUID        `db:"guild_id" json:"guild_id"`
 	Faction    NullWowPlayerFaction `db:"faction" json:"faction"`
+	RealmID    uuid.NullUUID        `db:"realm_id" json:"realm_id"`
 }
 
 type LogInstanceRaidGroupSnapshot struct {

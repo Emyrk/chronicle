@@ -1688,9 +1688,9 @@ func (b *InsertInstanceLootBatchResults) Close() error {
 
 const insertInstancePlayers = `-- name: InsertInstancePlayers :batchexec
 INSERT INTO
-  log_instance_players (instance_id, unit_guid, name, level, class, race, faction, guild_id)
+  log_instance_players (instance_id, unit_guid, name, level, class, race, faction, guild_id, realm_id)
 VALUES
-  ($1, $2, $3, $4, $5, $6, $7, $8)
+  ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 `
 
 type InsertInstancePlayersBatchResults struct {
@@ -1708,6 +1708,7 @@ type InsertInstancePlayersParams struct {
 	Race       WowPlayableRace      `db:"race" json:"race"`
 	Faction    NullWowPlayerFaction `db:"faction" json:"faction"`
 	GuildID    uuid.NullUUID        `db:"guild_id" json:"guild_id"`
+	RealmID    uuid.NullUUID        `db:"realm_id" json:"realm_id"`
 }
 
 func (q *sqlQuerier) InsertInstancePlayers(ctx context.Context, arg []InsertInstancePlayersParams) *InsertInstancePlayersBatchResults {
@@ -1722,6 +1723,7 @@ func (q *sqlQuerier) InsertInstancePlayers(ctx context.Context, arg []InsertInst
 			a.Race,
 			a.Faction,
 			a.GuildID,
+			a.RealmID,
 		}
 		batch.Queue(insertInstancePlayers, vals...)
 	}
