@@ -25,6 +25,38 @@ function floorsOf(track: FloorTrack): number[] {
 }
 
 describe("buildFloorTracks", () => {
+  it("uses a reviewed reference to start below overlapping city streets", () => {
+    const options = {
+      units: [{ guid: "a", samples: walk(0, 20) }], scale: 1,
+      candidatesAt: () => [98, 58],
+    };
+    expect(buildFloorTracks(options).reference).toBe(98);
+    const anchored = buildFloorTracks({ ...options, referenceY: 60 });
+    expect(anchored.reference).toBe(60);
+    expect(floorsOf(anchored.units.get("a")!).every(y => y === 58)).toBe(true);
+  });
+
+  it("still permits downward drops from an anchored path", () => {
+    const result = buildFloorTracks({
+      units: [{ guid: "a", samples: walk(0, 20) }], scale: 1, referenceY: 60,
+      candidatesAt: (x) => x < 10 ? [98, 58] : [28],
+    });
+    const track = result.units.get("a")!;
+    expect(track.y[0]).toBe(58);
+    expect(track.y[track.y.length - 1]).toBe(28);
+  });
+
+  it("accepts zero and scaled references but ignores non-finite seeds", () => {
+    const options = {
+      units: [{ guid: "a", samples: walk(0, 20) }], scale: 2,
+      candidatesAt: () => [196, 116, 0],
+    };
+    expect(buildFloorTracks({ ...options, referenceY: 0 }).units.get("a")!.y[0]).toBe(0);
+    expect(buildFloorTracks({ ...options, referenceY: 120 }).units.get("a")!.y[0]).toBe(116);
+    expect(buildFloorTracks({ ...options, referenceY: NaN }).reference).toBe(196);
+    expect(buildFloorTracks({ ...options, referenceY: Infinity }).reference).toBe(196);
+  });
+
   it("never puts a unit on a roof 20 yd up over part of its path", () => {
     const tracks = buildFloorTracks({
       units: [{ guid: "a", samples: walk(0, 40) }],

@@ -15,6 +15,12 @@ const config: StorybookConfig = {
   ],
   "framework": "@storybook/react-vite",
   // Boss minis and local dungeon meshes, as `pnpm dev` serves them.
-  "staticDirs": ["../public"],
+  "staticDirs": [
+    "../public",
+    // Opt-in local replay experiments; logs and extracted meshes stay outside Git.
+    ...(process.env.CHRONICLE_STORY_ASSETS
+      ? [{ from: process.env.CHRONICLE_STORY_ASSETS, to: "/dalaran-demo" }]
+      : []),
+  ],
 };
 export default config;

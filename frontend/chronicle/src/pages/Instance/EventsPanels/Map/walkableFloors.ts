@@ -8,8 +8,9 @@
  * (Viterbi): climbing more than CLIMB_LIMIT_YARDS in a step is impossible,
  * dropping costs a little, staying level is free. A fresh start (the first
  * sample, a long gap, a teleport) takes the candidate nearest a reference
- * height: the median of the highest floors under every unit's samples, since
- * most of a fight is not under an overhang.
+ * height: an optional reviewed encounter reference, otherwise the median of
+ * the highest floors under every unit's samples. A reference is a seed, not
+ * a fixed height; ramps, stairs and downward drops retain their usual costs.
  *
  * Built in slices off the frame loop, like the follow camera's track, so a
  * seek or a scrub reads the same floor every time and a frame only looks up.
@@ -62,6 +63,9 @@ export interface FloorTrackOptions {
   scale: number;
   /** Every walkable surface height (scene units) under (x, z), walls already left out; any order. */
   candidatesAt: (x: number, z: number) => readonly number[];
+  /** Reviewed encounter seed in scene units, not a fixed height or logged telemetry.
+   * Omitted/non-finite uses the median top surface. Does not restrict drops. */
+  referenceY?: number;
 }
 
 /** One unit's chosen floor (`y`, scene units; NaN where there is none) at each step of its path. */
@@ -266,7 +270,7 @@ export function startFloorTrackBuild(options: FloorTrackOptions, now: () => numb
         if (path.sample[i] && floors.length > 0) highest.push(floors[0]!);
       }
     }
-    reference = median(highest);
+    reference = Number.isFinite(options.referenceY) ? options.referenceY : median(highest);
     sampleCasts.clear();
   };
 

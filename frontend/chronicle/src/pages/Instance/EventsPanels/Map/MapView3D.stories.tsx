@@ -8,11 +8,12 @@ import { GAHZRANKA_ANNOUNCEMENT_SLAM, HAKKAR_ANNOUNCEMENT_WALK_START, MANDOKIR_A
 import { hakkarOcto } from "./fixtures/hakkarOcto";
 import { DEFAULT_EFFECT_SETTINGS, type EffectSettings } from "./mapViewSettings";
 import { kreshReal } from "./fixtures/kreshReal";
+import atrexisHeightCalibration from "./height-calibrations/forever-dalaran-atrexis.json";
 import { LEEROY_FLOOR_Z, LEEROY_VIDEO_TIMESTAMPS, LEEROY_VIDEO_URL, leeroyChargeCamera, leeroyRookery } from "./fixtures/leeroyRookery";
 import { fetchMapManifest } from "@/pages/Technical/mapManifest";
 import { YouTubeOverlay } from "../../YouTubeOverlay";
 import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
-import { loadMapFixture, type LoadedMapFixture } from "./fixtures/mapFixture";
+import { loadMapFixture, type LoadedMapFixture, type MapFixture } from "./fixtures/mapFixture";
 import type { InstanceUnit, KillType, WoWHeroClasses } from "@/api/typesGenerated";
 import type { WoWSpell } from "@/api/wowdb";
 import type { WowMapInstance, WowMapManifest, WowMapMeshInstance } from "@/pages/Technical/mapGallery";
@@ -1074,6 +1075,7 @@ function FixturePlayer({ fixture, mesh = false, followGuid = null, effectSetting
           playbackSpeed={scene.playbackSpeed}
           view={view}
           effects={scene.effects}
+          followSource={scene.followSource}
           bossGuids={scene.bossGuids}
           tankGuids={scene.tankGuids}
           unitModelUrls={unitModelUrls}
@@ -1863,6 +1865,125 @@ function CastPhaseReplay({ playbackSpeed, events = castEvents, selected = CAST_S
   );
 }
 
+// Local assets only: never import the encounter data or GLB into the bundle.
+interface DalaranDemoTracks {
+  references: number[];
+  tracks: Record<string, Record<string, { timestampMs: number; x: number; y: number; z: number }[]>>;
+}
+
+const DALARAN_LOCAL_HINT = "Launch Storybook with CHRONICLE_STORY_ASSETS pointing to the local static root containing fixture.json, tracks.json and the mesh. Assets are served under /dalaran-demo; do not publish this local demo.";
+
+function DalaranLocalPlaybackControls({ fixture }: { fixture: LoadedMapFixture }) {
+  const { isPlaying, currentTimestamp, play, pause, setTimestamp } = useSyncModeContext();
+  const elapsed = Math.max(0, (currentTimestamp?.getTime() ?? fixture.startMs) - fixture.startMs);
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <button type="button" className="rounded border px-3 py-1" onClick={isPlaying ? pause : play}>{isPlaying ? "Pause" : "Play"}</button>
+      <button type="button" className="rounded border px-3 py-1" onClick={() => { pause(); setTimestamp(new Date(fixture.startMs)); }}>Rewind</button>
+      <input aria-label="Local replay time" type="range" className="flex-1" min={0} max={fixture.endMs - fixture.startMs} step={50} value={Math.min(elapsed, fixture.endMs - fixture.startMs)} onChange={(event) => { pause(); setTimestamp(new Date(fixture.startMs + Number(event.target.value))); }} />
+      <span>{(elapsed / 1000).toFixed(1)}s</span>
+    </div>
+  );
+}
+
+function DalaranLocalHeightLabReplay({ source, tracks }: { source: MapFixture; tracks: DalaranDemoTracks }) {
+  const [mode, setMode] = useState(() =>
+    source.encounter.mapId === atrexisHeightCalibration.mapID
+      && source.encounter.name === atrexisHeightCalibration.encounterName
+      && tracks.references.includes(atrexisHeightCalibration.referenceZ)
+      ? String(atrexisHeightCalibration.referenceZ) : "current");
+  const prepared = useMemo(() => {
+    try {
+      if (mode === "current") return { fixture: loadMapFixture(source), error: null };
+      const selected = tracks.tracks[mode];
+      if (!selected) throw new Error(`Missing precomputed tracks for reference ${mode}.`);
+      const guidIndexes = new Map(source.guids.map((guid, index) => [guid, index]));
+      const originalPositions = source.events.filter((row) => row[0] === "p");
+      // timestampMs is an offset from firstTimestamp, just like fixture rows.
+      // Keep every combat/resource row. Only positions are experimental.
+      const positions: MapFixture["events"] = Object.entries(selected).flatMap(([guid, samples]) => {
+        const guidIndex = guidIndexes.get(guid);
+        if (guidIndex === undefined) throw new Error(`Track GUID is absent from fixture: ${guid}`);
+        return samples.map(({ timestampMs, x, y, z }) => {
+          if (![timestampMs, x, y, z].every(Number.isFinite)) throw new Error(`Invalid position sample for ${guid}.`);
+          // Preserve the latest observed facing; only height/path sampling changes.
+          const observed = originalPositions.filter((row) => row[2] === guidIndex && Number(row[1]) <= timestampMs).at(-1);
+          const facing = observed ? observed[observed.length - 1] : 0;
+          return ["p", timestampMs, guidIndex, x, y, z, 2959, facing];
+        });
+      });
+      if (!positions.length) throw new Error(`No inferred samples for reference ${mode}.`);
+      // loadMapFixture processes rows in supplied order, without sorting.
+      // Stable sorting retains the original nonposition ordering at equal offsets.
+      const events = [...source.events.filter((row) => row[0] !== "p"), ...positions]
+        .sort((a, b) => Number(a[1]) - Number(b[1]));
+      return { fixture: loadMapFixture({ ...source, events }), error: null };
+    } catch (error) {
+      return { fixture: null, error: error instanceof Error ? error.message : String(error) };
+    }
+  }, [mode, source, tracks]);
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(["wow-map-manifest", source.instance.iconBaseUrl], source.manifest);
+    return client;
+  });
+  const references = tracks.references.map(String);
+  const choices = tracks.tracks.auto ? ["auto", ...references] : references;
+  return (
+    <div className="space-y-3" style={{ width: 1000, maxWidth: "100vw" }}>
+      <h2 className="text-lg font-semibold">Dalaran local height lab: {source.encounter.name}</h2>
+      <p className="text-sm text-muted-foreground">
+        {Object.keys(source.players).length} players · {source.guids.length} units · {source.events.length.toLocaleString()} original events · {((Date.parse(source.encounter.endTime) - Date.parse(source.encounter.startTime)) / 1000).toFixed(1)} seconds
+      </p>
+      <label className="flex items-center gap-2 text-sm">
+        Position mode
+        <select className="rounded border border-white/20 bg-background p-2" value={mode} onChange={(event) => setMode(event.target.value)}>
+          <option value="current">Current: original positions, no logged Z</option>
+          {choices.map((reference) => <option key={reference} value={reference}>Inferred experimental heights: {reference === "auto" ? "auto reference" : `reference ${reference}`}</option>)}
+        </select>
+      </label>
+      <p className="text-sm text-amber-300">Inferred experimental heights are not logged Z. Reference modes use precomputed stepped samples, not a production algorithm change.</p>
+      <p className="text-sm text-muted-foreground">Demo fixture adapter only, not the full parser: includes a subset of cast successes, damage, heals and health. Crits, overheal and cast durations are omitted.</p>
+      {prepared.fixture ? (
+        <QueryClientProvider client={queryClient}>
+          <WithSpellIcons>
+            <SyncModeProvider>
+              <DalaranLocalPlaybackControls fixture={prepared.fixture} />
+              <FixturePlayer fixture={prepared.fixture} mesh loop={false} />
+            </SyncModeProvider>
+          </WithSpellIcons>
+        </QueryClientProvider>
+      ) : <p role="alert">Unable to load this demo mode: {prepared.error} {DALARAN_LOCAL_HINT}</p>}
+    </div>
+  );
+}
+
+function DalaranLocalHeightLabDemo() {
+  const [data, setData] = useState<{ source: MapFixture; tracks: DalaranDemoTracks } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    const controller = new AbortController();
+    const read = async (path: string) => {
+      const response = await fetch(path, { signal: controller.signal });
+      if (!response.ok) throw new Error(`${path}: HTTP ${response.status}`);
+      return response.json();
+    };
+    Promise.all([read("/dalaran-demo/fixture.json"), read("/dalaran-demo/tracks.json")])
+      .then(([source, tracks]: [MapFixture, DalaranDemoTracks]) => {
+        if (!source.encounter || !source.guids || !source.events || !source.manifest || !source.instance) throw new Error("fixture.json is not a MapFixture.");
+        if (!Array.isArray(tracks.references) || !tracks.references.every(Number.isFinite) || !tracks.tracks) throw new Error("tracks.json must contain numeric references and precomputed tracks.");
+        if (!controller.signal.aborted) setData({ source, tracks });
+      })
+      .catch((reason: unknown) => {
+        if (!controller.signal.aborted) setError(reason instanceof Error ? reason.message : String(reason));
+      });
+    return () => controller.abort();
+  }, []);
+  if (error) return <div role="alert" className="max-w-2xl space-y-2"><p>Local Dalaran demo unavailable: {error}</p><p>{DALARAN_LOCAL_HINT}</p></div>;
+  if (!data) return <p>Loading local Dalaran encounter… {DALARAN_LOCAL_HINT}</p>;
+  return <DalaranLocalHeightLabReplay source={data.source} tracks={data.tracks} />;
+}
+
 const meta = {
   title: "Instance/Map/MapView3D",
   component: SyntheticReplay,
@@ -1872,6 +1993,11 @@ const meta = {
 
 export default meta;
 type Story = StoryObj<typeof meta>;
+
+/** Private local encounter and inferred heights, loaded only when this story mounts. */
+export const DalaranLocalHeightLab: Story = {
+  render: () => <DalaranLocalHeightLabDemo />,
+};
 
 export const FortyPlayersAt4x: Story = {};
 
