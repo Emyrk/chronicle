@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
-	"github.com/Emyrk/chronicle/frontend"
 	"github.com/stretchr/testify/require"
 )
 
@@ -30,6 +29,11 @@ func TestClientGuidanceParityWithoutProvider(t *testing.T) {
 				handler.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, path+query, nil))
 				require.Equal(t, 200, recorder.Code, recorder.Body.String())
 				require.Less(t, recorder.Body.Len(), maxClientResult-4096)
+				if page.capability == luaEditorCapabilityID {
+					envelope, err := json.Marshal(map[string]any{"result": recorder.Body.String()})
+					require.NoError(t, err)
+					require.Less(t, len(envelope), (64<<10)-4096)
+				}
 				require.NoError(t, json.Unmarshal(recorder.Body.Bytes(), into))
 			}
 			var context chroniclesdk.InferenceClientPageContext
@@ -48,7 +52,7 @@ func TestClientGuidanceParityWithoutProvider(t *testing.T) {
 			require.Equal(t, context.Skills, list.Skills)
 			count := len(expected.Skills)
 			if page.capability == luaEditorCapabilityID {
-				count++
+				count += len(luaReferenceSkills)
 			}
 			require.Len(t, list.Skills, count)
 			previous := ""
@@ -60,9 +64,15 @@ func TestClientGuidanceParityWithoutProvider(t *testing.T) {
 				require.Equal(t, skill.ID, result.ID)
 				require.Equal(t, skill.Name, result.Name)
 				require.Equal(t, skill.Version, result.Version)
-				if skill.ID == luaModuleAPISkillID {
-					require.Equal(t, frontend.ModuleAPIReference, result.Instructions)
-					require.Contains(t, context.Prompt, result.Instructions)
+				if strings.HasPrefix(skill.ID, luaModuleAPISkillID) {
+					output, err := readLuaReference(`{"skill_id":"` + skill.ID + `"}`)
+					require.NoError(t, err)
+					var canonical chroniclesdk.InferenceClientSkillResponse
+					require.NoError(t, json.Unmarshal([]byte(output), &canonical))
+					require.Equal(t, canonical, result)
+					if skill.ID == luaModuleAPISkillID {
+						require.Contains(t, context.Prompt, result.Instructions)
+					}
 				} else {
 					canonical := runtimeSkills[skill.ID]
 					require.Contains(t, expected.Skills, skill.ID)
@@ -72,7 +82,7 @@ func TestClientGuidanceParityWithoutProvider(t *testing.T) {
 				}
 			}
 			for _, tool := range pageGuidanceClientTools {
-				require.False(t, assistantAllowsTool(expected, tool.Name))
+				require.Equal(t, page.capability == luaEditorCapabilityID && tool.Name == "read_skill", assistantAllowsTool(expected, tool.Name))
 			}
 		})
 	}

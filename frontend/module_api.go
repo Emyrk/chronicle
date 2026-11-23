@@ -3,7 +3,7 @@ package frontend
 import _ "embed"
 
 // ModuleAPIReference is the human Module API reference shown at /modules/api.
-// The Lua workshop assistant receives it verbatim so both stay in sync.
+// Agent guidance derives a collapsed view and verbatim sections from this source.
 //
 //go:embed chronicle/src/pages/LuaProjects/lua-panel-api.md
 var ModuleAPIReference string

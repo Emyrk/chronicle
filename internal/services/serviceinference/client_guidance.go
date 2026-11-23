@@ -9,7 +9,6 @@ import (
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/api/httpapi"
-	"github.com/Emyrk/chronicle/frontend"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -53,7 +52,7 @@ func clientGuidanceAssistant(w http.ResponseWriter, r *http.Request) (assistant,
 func clientGuidanceSkills(a assistant) []runtimeSkill {
 	skills := debugRuntimeSkills(a)
 	if a.ClientCapability == luaEditorCapabilityID {
-		skills = append(skills, runtimeSkill{ID: luaModuleAPISkillID, Name: "Lua Module API", Version: "1", Instructions: frontend.ModuleAPIReference})
+		skills = append(skills, luaReferenceSkills...)
 	}
 	slices.SortFunc(skills, func(a, b runtimeSkill) int { return strings.Compare(a.ID, b.ID) })
 	return skills

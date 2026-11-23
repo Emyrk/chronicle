@@ -76,7 +76,7 @@ var assistants = map[string]assistant{
 		{Name: "find_pages", Description: "Find Chronicle pages by name or description.", Parameters: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string","maxLength":100}},"required":["query"],"additionalProperties":false}`)},
 		{Name: "query_rankings", Description: "Query a bounded Chronicle player leaderboard.", Parameters: json.RawMessage(`{"type":"object","properties":{"instance_name":{"type":"string","maxLength":100},"encounter":{"type":"string","maxLength":100},"class":{"type":"string","maxLength":30},"spec":{"type":"string","maxLength":50},"role":{"type":"string","maxLength":30},"metric":{"type":"string","enum":["dps","hps"]},"limit":{"type":"integer","minimum":1,"maximum":10}},"required":["instance_name"],"additionalProperties":false}`)},
 	}, ServerTools: webResearchTools},
-	addonWorkshopPanelAssistantID: {ID: addonWorkshopPanelAssistantID, Name: "Module Workshop: instance panels", Description: "Builds and edits Lua panel modules in the Module Workshop.", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem + webResearchPrompt, ServerTools: webResearchTools},
+	addonWorkshopPanelAssistantID: {ID: addonWorkshopPanelAssistantID, Name: "Module Workshop: instance panels", Description: "Builds and edits Lua panel modules in the Module Workshop.", Durable: true, ContextType: "lua_project", ClientCapability: luaEditorCapabilityID, System: luaWorkshopSystem + webResearchPrompt, Tools: []ToolDefinition{luaReferenceReadTool}, ServerTools: webResearchTools},
 	"instance-analyst": {ID: "instance-analyst", Name: "Raid instance analyst", Description: "Answers questions about a raid on its instance page, researches external context, and can adjust that page's panels.", Durable: true, ContextType: "instance", ClientCapability: instancePageCapabilityID, System: "You are a Chronicle raid instance analyst. Use instance_summary for bounded metadata, encounter, and roster context. You may inspect, query, or update the current instance UI only through advertised client tools. Do not claim access to raw event streams. If a client tool returns user_rejected or capability_unavailable, do not retry the same mutation; explain why it could not be completed. After stale_state, inspect once for fresh state before retrying at most once." + webResearchPrompt, Tools: []ToolDefinition{
 		{Name: "instance_summary", Description: "Return bounded metadata, encounters, and players for this authorized raid instance.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 	}, ServerTools: webResearchTools},
@@ -265,6 +265,8 @@ func boundedJSONWithoutHTMLEscaping(v any) (string, error) {
 
 func (s *Service) executeTool(ctx context.Context, tc toolContext, name, args string) (string, error) {
 	switch name {
+	case "read_skill":
+		return readLuaReference(args)
 	case "describe_instance_search":
 		return describeInstanceSearch(args)
 	case "build_instance_search_link":

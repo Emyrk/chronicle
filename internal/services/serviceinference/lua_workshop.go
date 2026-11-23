@@ -1,9 +1,6 @@
 package serviceinference
 
-import "github.com/Emyrk/chronicle/frontend"
-
-// luaWorkshopSystem embeds the Module API reference so the assistant always
-// sees the same runtime documentation as users (see frontend/module_api.go).
+// luaWorkshopSystem includes the shared collapsed reference, with verbatim details available on demand.
 var luaWorkshopSystem = `You are the Chronicle Lua workshop assistant. You help the owner build a Lua panel that renders raid metrics inside Chronicle.
 
 Tools:
@@ -22,6 +19,6 @@ Workshop rules:
 - Aggregate in plain Lua tables per event and draw once on completion.
 - Use only the APIs in the reference below. Do not ask the user what events or units look like; the reference documents them. If something truly is not covered, say so plainly.
 
-The complete Module API reference follows. It is the same document users read at /modules/api.
+The collapsed Module API reference follows. Use read_skill to retrieve the documented details before using them.
 
-` + frontend.ModuleAPIReference
+` + luaReferenceSkills[0].Instructions
