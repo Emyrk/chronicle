@@ -41,9 +41,22 @@ interface Peekable {
  */
 export function replayStreams(
   streams: ReadonlyArray<{ stream: PanelStream; data: Uint8Array }>,
-  options: { selected: ReadonlySet<string>; selectedOnly: boolean; unselectedStreams?: ReadonlySet<PanelStream> },
-  onEvent: (stream: PanelStream, event: ReplayEvent, encounterId: string, startMs: number) => void,
+  options: ReplayOptions,
+  onEvent: ReplayCallback,
 ): Set<string> {
+  const replay = createStreamReplay(streams, options)
+  replay.run(onEvent)
+  return replay.encounters
+}
+
+type ReplayOptions = { selected: ReadonlySet<string>; selectedOnly: boolean; unselectedStreams?: ReadonlySet<PanelStream> }
+type ReplayCallback = (stream: PanelStream, event: ReplayEvent, encounterId: string, startMs: number) => void
+
+/**
+ * A replay that can pause at a log timestamp and resume later, in the same order as replayStreams.
+ * Replay mode uses it to deliver events only up to the playhead.
+ */
+export function createStreamReplay(streams: ReadonlyArray<{ stream: PanelStream; data: Uint8Array }>, options: ReplayOptions) {
   const cursors: Peekable[] = streams.map(({ stream, data }) => ({ stream, cursor: new CURSORS[stream](data), event: null, encounterId: "", startMs: 0 }))
   const peek = (pc: Peekable): ReplayEvent | null => {
     while (!pc.event) {
@@ -58,23 +71,37 @@ export function replayStreams(
     return pc.event
   }
   const encounters = new Set<string>()
-  while (true) {
-    let current: Peekable | null = null
-    for (const pc of cursors) if (peek(pc) && (!current || pc.startMs < current.startMs)) current = pc
-    if (!current) break
-    const encounterId = current.encounterId
-    encounters.add(encounterId)
-    while (true) {
-      let next: Peekable | null = null
-      for (const pc of cursors) {
-        const event = peek(pc)
-        if (event && pc.encounterId === encounterId && (!next || event.index < next.event!.index)) next = pc
+  // The encounter being replayed; null between encounters.
+  let encounterId: string | null = null
+  let done = false
+  return {
+    /** Every encounter that delivered (or started delivering) events so far. */
+    encounters,
+    /**
+     * Delivers events whose log time (encounter start + offset, epoch ms) is at most untilMs, then pauses
+     * before the next one. Returns true once every event has been delivered.
+     */
+    run(onEvent: ReplayCallback, untilMs = Infinity): boolean {
+      while (!done) {
+        if (encounterId === null) {
+          let current: Peekable | null = null
+          for (const pc of cursors) if (peek(pc) && (!current || pc.startMs < current.startMs)) current = pc
+          if (!current) { done = true; break }
+          encounterId = current.encounterId
+        }
+        let next: Peekable | null = null
+        for (const pc of cursors) {
+          const event = peek(pc)
+          if (event && pc.encounterId === encounterId && (!next || event.index < next.event!.index)) next = pc
+        }
+        if (!next) { encounterId = null; continue }
+        const event = next.event!
+        if (next.startMs + event.offsetMilli > untilMs) return false
+        encounters.add(encounterId)
+        next.event = null
+        onEvent(next.stream, event, encounterId, next.startMs)
       }
-      if (!next) break
-      const event = next.event!
-      next.event = null
-      onEvent(next.stream, event, encounterId, next.startMs)
-    }
+      return true
+    },
   }
-  return encounters
 }

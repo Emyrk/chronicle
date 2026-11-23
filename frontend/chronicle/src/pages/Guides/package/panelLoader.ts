@@ -2,7 +2,7 @@ import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "./archive"
 import { normalizePackagePath } from "./paths"
 import { isReservedLuaPath } from "../runtime/trustedModules"
-import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "../runtime/panelEvents"
+import { PANEL_REPLAY_MODES, replayDebounceError, PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelReplayMode, type PanelStream, type PanelStreamScope } from "../runtime/panelEvents"
 import { PANEL_FILTER_MODES, type PanelFilterMode } from "../runtime/panelFilters"
 import type { GuideCapability } from "../protocol/types"
 
@@ -17,6 +17,10 @@ export interface PanelPackage {
   filterMode: PanelFilterMode
   /** project.json `max_events`: the panel's own replay bound. Omitted means every event in scope. */
   maxEvents?: number
+  /** project.json `replay`. Omitted means the panel did not opt into Replay mode and is disabled during playback. */
+  replay?: PanelReplayMode
+  /** project.json `replay_debounce_ms`; DEFAULT_REPLAY_DEBOUNCE_MS when omitted. */
+  replayDebounceMs?: number
   capabilities: GuideCapability[]
   assets: ReadonlyMap<string, Uint8Array>
   /** The optional root README.md, shown on the module page and never executed. */
@@ -70,6 +74,11 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
   if (!PANEL_FILTER_MODES.includes(filterMode as PanelFilterMode)) throw new Error("unsupported panel filter_mode")
   const maxEvents = data.max_events
   if (maxEvents !== undefined && (typeof maxEvents !== "number" || !Number.isSafeInteger(maxEvents) || maxEvents < 1)) throw new Error("invalid panel max_events")
+  const replay = data.replay
+  if (replay !== undefined && !PANEL_REPLAY_MODES.includes(replay as PanelReplayMode)) throw new Error("unsupported panel replay mode")
+  const replayDebounceMs = data.replay_debounce_ms
+  const debounceError = replayDebounceError(replay, replayDebounceMs)
+  if (debounceError) throw new Error(`invalid panel manifest: ${debounceError}`)
   const assets = names(data.assets, "assets").map((asset) => normalizePackagePath(asset))
   const assetSet = new Set(assets)
   if (assetSet.size !== assets.length) throw new Error("duplicate panel asset")
@@ -86,5 +95,5 @@ export async function loadPanelPackage(bytes: Uint8Array): Promise<PanelPackage>
   }
   if (assetFiles.size !== assets.length) throw new Error("missing panel asset")
   const readme = files.get("README.md")
-  return { name: data.name, entrypoint, sources, ...(readme && { readme: decoder.decode(readme) }), streams: streams as PanelStream[], streamScope: streamScope as PanelStreamScope, filterMode: filterMode as PanelFilterMode, ...(maxEvents !== undefined && { maxEvents }), capabilities: capabilities as GuideCapability[], assets: assetFiles }
+  return { name: data.name, entrypoint, sources, ...(readme && { readme: decoder.decode(readme) }), streams: streams as PanelStream[], streamScope: streamScope as PanelStreamScope, filterMode: filterMode as PanelFilterMode, ...(maxEvents !== undefined && { maxEvents }), ...(replay !== undefined && { replay: replay as PanelReplayMode }), ...(replayDebounceMs !== undefined && { replayDebounceMs: replayDebounceMs as number }), capabilities: capabilities as GuideCapability[], assets: assetFiles }
 }

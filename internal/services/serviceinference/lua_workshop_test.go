@@ -80,11 +80,11 @@ func TestLuaEditorToolArguments(t *testing.T) {
 		_, err := validateClientToolArguments("edit_lua_file", args)
 		require.Error(t, err, args)
 	}
-	for _, args := range []string{`{}`, `{"encounter_ids":["e1","e2"]}`} {
+	for _, args := range []string{`{}`, `{"encounter_ids":["e1","e2"]}`, `{"replay_ms":0}`, `{"encounter_ids":["e1"],"replay_ms":61500}`} {
 		_, err := validateClientToolArguments("run_preview", args)
 		require.NoError(t, err, args)
 	}
-	for _, args := range []string{`{"encounter_ids":[]}`, `{"encounter_ids":["e1","e1"]}`, `{"encounter_ids":[""]}`, `{"encounter_ids":"e1"}`, `{"instance_id":"x"}`} {
+	for _, args := range []string{`{"encounter_ids":[]}`, `{"encounter_ids":["e1","e1"]}`, `{"encounter_ids":[""]}`, `{"encounter_ids":"e1"}`, `{"instance_id":"x"}`, `{"replay_ms":-1}`, `{"replay_ms":"1"}`} {
 		_, err := validateClientToolArguments("run_preview", args)
 		require.Error(t, err, args)
 	}

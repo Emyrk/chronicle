@@ -64,6 +64,17 @@ end)
 const README = "# Raid Damage Meter\n\nDamage done per player for the selected encounters.\n"
 const DRAFT_ZIP = zipSync({ "project.json": strToU8(MANIFEST), "main.lua": strToU8(MAIN_LUA), "README.md": strToU8(README) })
 
+/** The same meter opted into incremental Replay: it redraws in OnReplayTime, so totals grow with the playhead. */
+const REPLAY_MANIFEST = JSON.stringify({ ...JSON.parse(MANIFEST), replay: "incremental" }, null, 2) + "\n"
+const REPLAY_LUA = MAIN_LUA.replace("damage.onComplete(function()", "local function draw()").replace(/end\)\n$/, `end
+damage.onComplete(draw)
+Chronicle.OnReplayTime(function(ms)
+  if ms then longest = math.max(1, ms) end
+  draw()
+end)
+`)
+const REPLAY_ZIP = zipSync({ "project.json": strToU8(REPLAY_MANIFEST), "main.lua": strToU8(REPLAY_LUA), "README.md": strToU8(README) })
+
 function project(overrides: Partial<LuaProject> = {}): LuaProject {
   return {
     id: PROJECT_ID, owner_id: "user-1", published: false, kind: "panel", name: "Raid Damage Meter", slug: "raid-damage-meter", revision: 7,
@@ -158,7 +169,7 @@ const TOP_TEN: AgentStep[] = [
 ]
 const SAVE: AgentStep = { toolName: "save_lua_files", args: last => ({ expected_revision: last.revision }) }
 
-function api({ current = project(), canRelease = true }: { current?: LuaProject; canRelease?: boolean } = {}) {
+function api({ current = project(), canRelease = true, draft = DRAFT_ZIP }: { current?: LuaProject; canRelease?: boolean; draft?: Uint8Array } = {}) {
   let revision = current.revision
   return [
     http.get("/api/v1/whoami", () => HttpResponse.json({ user_id: "user-1", session_id: "session-1", roles: [], ads_free: false })),
@@ -166,7 +177,7 @@ function api({ current = project(), canRelease = true }: { current?: LuaProject;
     http.get("/api/v1/modules/:author/:slug", () => HttpResponse.json({ project: { ...current, revision }, permissions: { view: true, use: true, edit: true, release: canRelease, manage: true } })),
     http.get("/api/v1/lua-projects/:id/page", () => HttpResponse.json({ project: { ...current, revision }, permissions: { view: true, use: true, edit: true, release: canRelease, manage: true } })),
     http.get("/api/v1/me/lua-projects/:id", () => HttpResponse.json({ ...current, revision })),
-    http.get("/api/v1/me/lua-projects/:id/draft/:sha/package", () => new HttpResponse(DRAFT_ZIP, { headers: { "Content-Type": "application/zip" } })),
+    http.get("/api/v1/me/lua-projects/:id/draft/:sha/package", () => new HttpResponse(draft, { headers: { "Content-Type": "application/zip" } })),
     http.put("/api/v1/me/lua-projects/:id/draft", async () => { await delay(400); revision += 1; return new HttpResponse(null, { status: 204 }) }),
     http.get("/api/v1/raidlogs/recent", () => HttpResponse.json(RECENT)),
     http.get("/api/v1/raidlogs/instances/:id", () => HttpResponse.json({ ...instanceFixture, realm_name: "Nordanaar", start_time: "2026-11-17T19:30:00Z" })),
@@ -279,6 +290,14 @@ export const BrowserChat: Story = {
 
 /** The daemon is not running or rejects this origin. */
 export const ConnectionFailed: Story = { play: connect }
+
+/**
+ * Replay in the preview: the module declares "replay": "incremental", so turning on Replay delivers Hakkar's
+ * events only up to the playhead. Turn on Replay, then press play, scrub or step and watch the meter grow.
+ */
+export const ReplayPreview: Story = {
+  parameters: { msw: { handlers: [...api({ draft: REPLAY_ZIP }), ...noDaemon] } },
+}
 
 /** A new module with nothing saved and no preview instance chosen yet. */
 export const NewModule: Story = {

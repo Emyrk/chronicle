@@ -121,6 +121,8 @@ When the viewer changes the encounter selection, the module starts again from st
 | `stream_scope` | no | `"selection"` (default): only the encounters the viewer selected. `"instance"`: every encounter in the log, each tagged with `selected`. |
 | `filter_mode` | no | `"none"` (default), `"prefilter"`, or `"manual"`. See [Panel filters](#panel-filters). |
 | `max_events` | no | A positive integer. The module stops with an error after this many events. Omit it to receive everything. |
+| `replay` | no | `"full"` or `"incremental"`. Opts into the instance page's Replay mode; see [Replay mode](#replay-mode). Omit it and the panel is disabled while Replay runs. |
+| `replay_debounce_ms` | no | Only with `"replay": "incremental"`. How long, in ms, the playhead must stay put after moving back before the module restarts. An integer from 0 to 5000; default 250. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
 | `icon` | no | The icon shown next to the module in the panel selector and on its page. One of the [icon names](#icons) below; omit it for the generic module icon. |
 
@@ -466,6 +468,36 @@ A `LineChart` can also set the range by dragging, like the Line Chart panel. See
 
 Setting or clearing the range needs the `input` capability and works only inside an `OnClick` handler, so a module cannot change other panels without a viewer's click. In the Module Workshop preview there is no page range: `SetTimeRange` does nothing and `GetTimeRange` returns `nil, nil`. The module's own events are not filtered by the range.
 
+### Replay mode
+
+Replay plays a fight back with a playhead. Built-in panels follow it, and a module follows it only if it opts in with `replay` in project.json. A module without `replay` shows "This panel did not opt into replay mode, and is disabled." while Replay runs.
+
+- `"replay": "full"`: Chronicle replays every event once, as usual, then tells the module where the playhead is. Use it for views of the whole fight that mark the current moment, like a death log that dims deaths still to come.
+- `"replay": "incremental"`: Chronicle delivers events only up to the playhead and keeps delivering as playback moves forward, so totals grow with the fight. Lua state cannot rewind, so moving the playhead back restarts the module and replays from the start. `onComplete` runs only once the playhead reaches the end of the data.
+  - So scrubbing back does not restart the module on every step, Chronicle waits until the playhead has stayed put for `replay_debounce_ms` (250 ms by default) before restarting. Until then the panel keeps showing its last drawing. If the viewer scrubs forward past what the module already received, it resumes instead of restarting. Raise the delay for modules that take long to replay; set it to `0` to restart at once.
+
+Either way, redraw in `Chronicle.OnReplayTime`, not just `onComplete`. It runs after the events up to the playhead have been delivered (in full mode, after `onComplete`). The playhead moves at most every 100 ms during playback.
+
+```lua
+local total = 0
+local label = CreateFrame("FontString", "total", UIParent)
+
+Panel:OnEvent(function(event) total = total + event.amount end)
+
+local function draw() label:SetText(string.format("%d damage", total)) end
+Panel:OnComplete(draw)
+Chronicle.OnReplayTime(function(ms)
+  -- ms is nil when Replay turns off; with "incremental", total covers events up to the playhead.
+  draw()
+end)
+```
+
+- `Chronicle.GetReplayTime()` returns the playhead in milliseconds from the start of the selected encounters, like `event.offsetMs`, or `nil` when Replay is off.
+- `Chronicle.OnReplayTime(function(ms) ... end)` runs whenever the playhead moves, with `ms` `nil` when Replay turns off.
+- `Chronicle.SetReplayTime(ms)` moves the playhead, for example to jump to the moment a row in your table happened. Like `SetTimeRange`, it needs the `input` capability, works only inside an `OnClick` handler, and does nothing while Replay is off.
+
+Try it in the Module Workshop: turn on **Replay** in the preview toolbar to get play, step, scrub and speed controls over the selected encounters.
+
 ### Lua Language Server definitions
 
 The repository includes `lua-panel-api.d.lua`, a documentation-only [EmmyLua/LuaLS](https://luals.github.io/wiki/annotations/) definition file. Download it from the **LuaLS definitions** button at the top of this page and copy it into your editor workspace for completion, parameter hints and type checking. Chronicle generates the technical reference below from that file so the editor contract and published documentation stay aligned.
@@ -807,6 +839,20 @@ Look up a spell's name, rank and icon. Chronicle fetches spell data from its ser
 Return the page's current time range in milliseconds from encounter start. Either bound is nil when open; both are nil when no range is set.
 
 **Returns:** `number?` startMs; `number?` endMs
+
+#### `Chronicle.GetReplayTime()`
+
+Return the Replay playhead in milliseconds from the start of the selected encounters, like event.offsetMs, or nil when Replay is off. Only modules whose project.json declares `replay` run during Replay.
+
+**Returns:** `number?` ms
+
+#### `Chronicle.OnReplayTime(callback: fun(ms: number?))`
+
+Call `callback(ms)` whenever the Replay playhead moves, after the events up to it have been delivered, so the callback can redraw. `ms` is nil when Replay turns off. With `"replay": "incremental"` it runs after every playhead step; with `"replay": "full"` it runs after onComplete. Registering again replaces the previous callback.
+
+#### `Chronicle.SetReplayTime(ms: number)`
+
+Move the Replay playhead to `ms` from the start of the selected encounters; values past the end are clamped. Needs the input capability and works only inside an OnClick handler. Does nothing while Replay is off. OnReplayTime runs once the page has moved.
 
 <!-- END GENERATED LUA API REFERENCE -->
 

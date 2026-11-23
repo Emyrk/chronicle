@@ -1,5 +1,5 @@
 /** Where an module was when it stopped, reported by the panel worker with its error. */
-export type ModulePhase = "startup" | "onEvent" | "onComplete" | "click" | "timeRange" | "close" | "spell"
+export type ModulePhase = "startup" | "onEvent" | "onComplete" | "click" | "timeRange" | "replayTime" | "close" | "spell"
 
 export interface ModuleErrorContext {
   phase?: ModulePhase
@@ -30,6 +30,7 @@ const phaseLabel: Record<ModulePhase, string> = {
   onComplete: "in onComplete",
   click: "in a click handler",
   timeRange: "in OnTimeRangeChanged",
+  replayTime: "in OnReplayTime",
   close: "in OnClose",
   spell: "in a GetSpell callback",
 }

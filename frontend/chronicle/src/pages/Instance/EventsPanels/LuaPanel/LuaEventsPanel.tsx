@@ -20,6 +20,7 @@ import { LuaPanelHost, type LuaPanelRunMetrics } from "./LuaPanelHost"
 import { useTimeRangeContextOptional } from "../../TimeRangeContext"
 import type { PanelTimeRange } from "../../../Guides/runtime/runtime"
 import { parseLuaPanelRef } from "./luaPanelRegistry"
+import { REPLAY_DISABLED_MESSAGE, useThrottledReplayTime } from "./replayTime"
 
 export default function LuaEventsPanel(props: EventsPanelProps) {
   // Module identity owns its local edits. Never carry filters into another module.
@@ -54,7 +55,8 @@ function LuaEventsPanelContent(props: EventsPanelProps) {
     },
   })
   const panel = packageQuery.data
-  const isSyncActive = useSyncModeContextOptional()?.enabled === true
+  const sync = useSyncModeContextOptional()
+  const isSyncActive = sync?.enabled === true
   const filteringSupported = panel?.filterMode === "prefilter" || panel?.filterMode === "manual"
   const [filters, setFilters] = useState<PanelFilter[]>(props.seedFilters ?? [])
   const [pendingFilters, setPendingFilters] = useState<PanelFilter[] | null>(null)
@@ -155,15 +157,26 @@ function LuaEventsPanelContent(props: EventsPanelProps) {
     const clamp = (value: number | null) => value === null || totalDurationMs <= 0 ? value : Math.min(value, totalDurationMs)
     setRange(clamp(range.startMs), clamp(range.endMs))
   } : undefined, [setRange, resetRange, totalDurationMs])
+  // Replay: modules that declare `replay` follow the playhead; the rest are disabled while it runs.
+  const replayStartMs = sync?.encounterBounds?.start.getTime() ?? null
+  const replayEndMs = sync?.encounterBounds?.end.getTime() ?? null
+  const playheadMs = isSyncActive ? sync?.currentTimestamp?.getTime() ?? null : null
+  const replay = useThrottledReplayTime(panel?.replay ? playheadMs : null, replayStartMs)
+  const syncSetTimestamp = sync?.setTimestamp
+  const onSetReplayTime = useMemo(() => isSyncActive && syncSetTimestamp && replayStartMs !== null ? (ms: number) => {
+    syncSetTimestamp(new Date(Math.min(replayStartMs + ms, replayEndMs ?? Infinity)))
+  } : undefined, [isSyncActive, syncSetTimestamp, replayStartMs, replayEndMs])
   const showEditor = editing && filteringSupported && !isSyncActive
   let content
   if (channelQuery.isPending || (hash && packageQuery.isPending)) content = <div className="p-4 text-sm">Loading module...</div>
   else if (channelQuery.error || packageQuery.error || streamError || !hash) content = <div role="alert" className="p-4 text-sm text-destructive">{String(channelQuery.error ?? packageQuery.error ?? streamError ?? "Channel not published")}</div>
+  else if (panel && isSyncActive && !panel.replay) content = <div role="status" className="p-4 text-sm text-muted-foreground" data-lua-replay-disabled>{REPLAY_DISABLED_MESSAGE}</div>
   else if (panel) content = (panel.streams.length > 0 || filteringSupported) && !eventStreams ? <div className="p-4 text-sm">Loading events...</div> :
     <LuaPanelHost key={`${ref?.id}:${hash}`} entrypoint={panel.entrypoint} sources={panel.sources} streams={panel.streams} streamScope={panel.streamScope} maxEvents={panel.maxEvents} capabilities={panel.capabilities}
       filterMode={panel.filterMode} filterContext={filterContext}
       eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics}
-      timeRange={timeRange} onSetTimeRange={onSetTimeRange} />
+      timeRange={timeRange} onSetTimeRange={onSetTimeRange}
+      replay={replay} incremental={panel.replay === "incremental"} replayDebounceMs={panel.replayDebounceMs} onSetReplayTime={onSetReplayTime} />
   return <PanelCard flipped={false} back={null} front={<>
     <div className="flex min-w-0 items-center justify-between gap-2">
       <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />

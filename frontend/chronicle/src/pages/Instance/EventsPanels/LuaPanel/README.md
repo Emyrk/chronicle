@@ -28,4 +28,9 @@ Panel refs are `lua:{uuid}:release|main`; older `stable`/`unstable` refs parse a
 non-executing error placeholder. Backend must validate package manifests and
 capabilities on publication; this client validates independently. Future work:
 URL/layout serialization outside this directory, digest-pinned layout references,
-richer event projections and sync playback policy.
+richer event projections.
+
+Replay mode: a manifest `replay` of `"full"` keeps the whole replay and sends the
+playhead (`replay-time`) for `Chronicle.GetReplayTime` / `OnReplayTime`; `"incremental"`
+sends `streams.untilMs` and resumes with `replay-time.untilMs`, restarting the worker when
+the playhead moves back. Modules without `replay` render a disabled notice during Replay.

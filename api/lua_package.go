@@ -172,6 +172,8 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 		StreamScope     string          `json:"stream_scope"`
 		FilterMode      json.RawMessage `json:"filter_mode"`
 		MaxEvents       *int64          `json:"max_events"`
+		Replay          *string         `json:"replay"`
+		ReplayDebounce  *int64          `json:"replay_debounce_ms"`
 		Assets          []string        `json:"assets"`
 		Icon            string          `json:"icon"`
 	}
@@ -200,6 +202,19 @@ func canonicalLuaZIP(input io.Reader, kind, projectName, slug string) ([]byte, e
 		var mode string
 		if err := json.Unmarshal(manifest.FilterMode, &mode); err != nil || (mode != "none" && mode != "prefilter" && mode != "manual") {
 			return nil, errors.New("filter_mode must be one of: none, prefilter, manual")
+		}
+	}
+	// Omitted means the module did not opt into Replay mode and is disabled during playback.
+	if manifest.Replay != nil && *manifest.Replay != "full" && *manifest.Replay != "incremental" {
+		return nil, errors.New("replay must be one of: full, incremental")
+	}
+	// Only incremental replays restart when the playhead moves back, so only they can debounce it.
+	if manifest.ReplayDebounce != nil {
+		if manifest.Replay == nil || *manifest.Replay != "incremental" {
+			return nil, errors.New(`replay_debounce_ms only applies to "replay": "incremental"`)
+		}
+		if *manifest.ReplayDebounce < 0 || *manifest.ReplayDebounce > 5000 {
+			return nil, errors.New("replay_debounce_ms must be an integer from 0 to 5000")
 		}
 	}
 	// Panels replay every event in scope; max_events is the author's optional bound, never a host cap.

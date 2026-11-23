@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import { createGuideRuntime, type PanelSpellInfo, type PanelTimeRange } from "./runtime"
 import { PANEL_STREAM_SCOPES, PANEL_STREAMS, validatePanelEvent, type PanelStream, type PanelStreamScope } from "./panelEvents"
-import { replayStreams } from "./panelReplay"
+import { createStreamReplay, type ReplayEvent } from "./panelReplay"
 import { PANEL_FILTER_MODES, type PanelFilterMode } from "./panelFilters"
 import { UnitState } from "../../Instance/EventsPanels/processors/unitState"
 import { compileFilters } from "../../Instance/EventsPanels/processors/filters"
@@ -35,8 +35,16 @@ export type PanelReplayMetrics = {
 type Input =
   | { type: "start"; entrypoint: string; sources: Record<string, string>; streams: PanelStream[]; capabilities: GuideCapability[]; streamScope?: PanelStreamScope; maxEvents?: number; units?: PanelUnits; filterMode?: PanelFilterMode; filterContext?: ProcessorContext }
   | { type: "event"; event: unknown }
-  /** Framed event bytes for every stream the panel declared, replayed together in log order. */
-  | { type: "streams"; streams: Partial<Record<PanelStream, Uint8Array>>; encounterIds: string[] }
+  /**
+   * Framed event bytes, replayed together in log order. With untilMs (epoch ms) the replay pauses at the Replay
+   * playhead; replayMs is the playhead Lua sees once these events are delivered.
+   */
+  | { type: "streams"; streams: Partial<Record<PanelStream, Uint8Array>>; encounterIds: string[]; untilMs?: number; replayMs?: number | null }
+  /**
+   * The Replay playhead in ms from encounter start (null when Replay is off), for Chronicle.GetReplayTime and
+   * OnReplayTime. With untilMs (epoch ms), an incremental replay paused by streams.untilMs first resumes up to it.
+   */
+  | { type: "replay-time"; ms: number | null; untilMs?: number }
   | { type: "click"; nodeId: string }
   /** The page's current time range filter; null when none is set. */
   | { type: "time-range"; range: PanelTimeRange | null }
@@ -65,6 +73,8 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   // Reported with errors so the host can explain where the addon stopped.
   let phase: ModulePhase = "startup"
   let delivered = 0
+  // Resumes a replay paused at the Replay playhead; null when there is none or it finished.
+  let advance: ((untilMs: number, replayMs: number | null) => void) | null = null
   const flush = (operations: ReturnType<NonNullable<typeof runtime>["flush"]>) => {
     for (const chunk of splitBatchOperations(operations)) send(parseWorkerMessage({ type: "batch", batchId: String(++batchId), operations: chunk }))
     // Chronicle.GetSpell calls since the last flush; the host fetches them and replies with spell-info.
@@ -73,7 +83,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
   }
   return (input: Input) => {
     try {
-      if (input.type === "stop" || input.type === "start") { runtime?.stop(); runtime = null; phase = "startup"; delivered = 0 }
+      if (input.type === "stop" || input.type === "start") { runtime?.stop(); runtime = null; phase = "startup"; delivered = 0; advance = null }
       if (input.type === "start") {
         if (!Array.isArray(input.streams) || input.streams.some((s) => !PANEL_STREAMS.includes(s))) throw new Error("unsupported streams")
         if (!Array.isArray(input.capabilities) || input.capabilities.some((cap) => cap !== "ui" && cap !== "input")) throw new Error("unsupported capabilities")
@@ -136,7 +146,7 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
           if ((!declared.includes(stream as PanelStream) && !(filterMode !== "none" && stream === "unit_classification")) || !(data instanceof Uint8Array)) throw new Error(`invalid event stream '${stream}'`)
           return { stream: stream as PanelStream, data }
         })
-        const replayStart = performance.now()
+        if (input.untilMs !== undefined && (typeof input.untilMs !== "number" || !Number.isFinite(input.untilMs))) throw new Error("invalid replay timestamp")
         const selected = new Set(input.encounterIds)
         let baseTimestamp: number | null = null
         let visited = 0
@@ -144,9 +154,11 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         let luaMs = 0
         let uiMs = 0
         let uiOperations = 0
+        let totalMs = 0
         const progress = () => { if (visited % 1_000 === 0) send({ type: "progress", events: count }) }
         // Unselected encounters are skipped except ownership updates needed by filters.
-        const encounters = replayStreams(streams, { selected, selectedOnly: streamScope === "selection", unselectedStreams: filterMode !== "none" ? new Set(["unit_classification"]) : undefined }, (stream, event, encounter, startMs) => {
+        const replay = createStreamReplay(streams, { selected, selectedOnly: streamScope === "selection", unselectedStreams: filterMode !== "none" ? new Set(["unit_classification"]) : undefined })
+        const onEvent = (stream: PanelStream, event: ReplayEvent, encounter: string, startMs: number) => {
           visited++
           if (baseTimestamp === null && selected.has(encounter)) baseTimestamp = startMs
           const baseOffset = baseTimestamp !== null ? startMs - baseTimestamp : 0
@@ -180,19 +192,40 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
           }
           // Progress also advances through events excluded before Lua delivery.
           progress()
-        })
-        const completeStart = performance.now()
-        phase = "onComplete"
-        runtime.panelComplete()
-        const completeMs = performance.now() - completeStart
-        const uiStart = performance.now()
-        const last = runtime.flush(); uiOperations += last.length; flush(last)
-        uiMs += performance.now() - uiStart
-        const totalMs = performance.now() - replayStart
+        }
         const bytes = streams.reduce((total, { data }) => total + data.byteLength, 0)
-        const metrics: PanelReplayMetrics = { events: count, encounters: encounters.size, bytes, startupMs, totalMs,
-          decodeMs: Math.max(0, totalMs - luaMs - uiMs - completeMs), luaMs, uiMs, completeMs, uiOperations }
-        send({ type: "replay-complete", metrics })
+        let completeMs = 0
+        // Delivers events up to untilMs (all of them outside incremental Replay), then tells Lua the playhead
+        // so OnReplayTime draws what they built. Pausing reports replay-paused; delivering the last event runs
+        // onComplete and reports replay-complete. Either report means everything Lua drew has been sent.
+        advance = (untilMs: number, replayMs: number | null) => {
+          const advanceStart = performance.now()
+          const finished = replay.run(onEvent, untilMs)
+          if (finished) {
+            const completeStart = performance.now()
+            phase = "onComplete"
+            active.panelComplete()
+            completeMs = performance.now() - completeStart
+            advance = null
+          }
+          phase = "replayTime"
+          active.setReplayTime(replayMs)
+          const uiStart = performance.now()
+          const last = active.flush(); uiOperations += last.length; flush(last)
+          uiMs += performance.now() - uiStart
+          totalMs += performance.now() - advanceStart
+          const metrics: PanelReplayMetrics = { events: count, encounters: replay.encounters.size, bytes, startupMs, totalMs,
+            decodeMs: Math.max(0, totalMs - luaMs - uiMs - completeMs), luaMs, uiMs, completeMs, uiOperations }
+          send({ type: finished ? "replay-complete" : "replay-paused", metrics })
+        }
+        advance(input.untilMs ?? Infinity, parseReplayMs(input.replayMs ?? null))
+      } else if (input.type === "replay-time") {
+        if (!runtime) return
+        const ms = parseReplayMs(input.ms)
+        if (input.untilMs !== undefined && (typeof input.untilMs !== "number" || !Number.isFinite(input.untilMs))) throw new Error("invalid replay timestamp")
+        if (input.untilMs !== undefined && advance) { advance(input.untilMs, ms); return }
+        phase = "replayTime"
+        runtime.setReplayTime(ms); flush(runtime.flush())
       } else if (input.type === "click") {
         if (!runtime) throw new Error("panel not started")
         phase = "click"
@@ -200,6 +233,9 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         // Chronicle.SetTimeRange / ClearTimeRange during the click; the host decides whether to apply it.
         const request = runtime.takeTimeRangeRequest()
         if (request) send({ type: "set-time-range", range: request.range })
+        // Chronicle.SetReplayTime during the click; the host moves the playhead only while Replay is on.
+        const replayRequest = runtime.takeReplayTimeRequest()
+        if (replayRequest) send({ type: "set-replay-time", ms: replayRequest.ms })
       } else if (input.type === "close") {
         if (!runtime) return
         phase = "close"
@@ -214,10 +250,17 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         runtime.setTimeRange(input.range); flush(runtime.flush())
       }
     } catch (error) {
-      runtime?.stop(); runtime = null
+      runtime?.stop(); runtime = null; advance = null
       send({ type: "error", message: error instanceof Error ? error.message : String(error), phase, ...(phase === "onEvent" ? { events: delivered } : {}) })
     }
   }
+}
+
+/** A Replay playhead from the host: whole non-negative ms, or null when Replay is off. */
+function parseReplayMs(value: unknown): number | null {
+  if (value === null) return null
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) throw new Error("invalid replay time")
+  return Math.round(value)
 }
 
 /** Host answers become Lua strings, so keep them to plain, bounded values. */

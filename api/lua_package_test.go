@@ -120,6 +120,46 @@ func TestCanonicalLuaZIP(t *testing.T) {
 	require.Equal(t, archive, same)
 }
 
+func TestCanonicalLuaZIPReplay(t *testing.T) {
+	t.Parallel()
+	for _, mode := range []string{`"full"`, `"incremental"`, `"none"`, `""`, `1`, `[]`} {
+		t.Run(mode, func(t *testing.T) {
+			t.Parallel()
+			manifest := strings.Replace(luaTestManifest, `"assets":[]`, `"assets":[],"replay":`+mode, 1)
+			_, err := canonicalLuaZIP(bytes.NewReader(luaTestTar(t, luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", manifest))), "panel", "Example", "example")
+			if mode != `"full"` && mode != `"incremental"` {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
+}
+
+func TestCanonicalLuaZIPReplayDebounce(t *testing.T) {
+	t.Parallel()
+	for fields, ok := range map[string]bool{
+		`"replay":"incremental","replay_debounce_ms":0`:    true,
+		`"replay":"incremental","replay_debounce_ms":5000`: true,
+		`"replay":"incremental","replay_debounce_ms":5001`: false,
+		`"replay":"incremental","replay_debounce_ms":-1`:   false,
+		`"replay":"incremental","replay_debounce_ms":1.5`:  false,
+		`"replay":"full","replay_debounce_ms":250`:         false,
+		`"replay_debounce_ms":250`:                         false,
+	} {
+		t.Run(fields, func(t *testing.T) {
+			t.Parallel()
+			manifest := strings.Replace(luaTestManifest, `"assets":[]`, `"assets":[],`+fields, 1)
+			_, err := canonicalLuaZIP(bytes.NewReader(luaTestTar(t, luaTestEntry("main.lua", "return {}"), luaTestEntry("project.json", manifest))), "panel", "Example", "example")
+			if ok {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+}
+
 func TestCanonicalLuaZIPFilterMode(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{`"none"`, `"prefilter"`, `"manual"`, `"invalid"`, `""`, `null`, `1`, `false`, `[]`, `{}`} {
