@@ -150,6 +150,19 @@ describe("GuideUiScene", () => {
     expect(markup).toMatch(/<button data-guide-node="off"[^>]*disabled/)
   })
 
+  it("centres a button's label in its box without padding", () => {
+    const scene = applySceneBatch(createInitialScene(), [
+      { op: "create", id: "small", kind: "button", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 24, height: 24, anchor: "top-left", text: "?" } },
+      { op: "create", id: "link", kind: "button", parentId: UI_ROOT_ID, props: { x: 0, y: 0, width: 24, height: 24, anchor: "top-left", text: "?", href: "/modules/api" } },
+    ])
+    const markup = renderToStaticMarkup(<GuideUiScene scene={scene} assets={new Map()} onNodeClick={() => {}} />)
+    for (const tag of [/<button data-guide-node="small"[^>]*>/, /<a href="\/modules\/api" data-guide-node="link"[^>]*>/]) {
+      const element = markup.match(tag)?.[0] ?? ""
+      expect(element).toMatch(/inline-flex items-center justify-center whitespace-nowrap/)
+      expect(element).not.toMatch(/px-3|py-1/)
+    }
+  })
+
   it("highlights the page time range on selectable line charts only", () => {
     const chart = (id: string, timeSelection: string) => ({
       op: "create" as const, id, kind: "line-chart" as const, parentId: UI_ROOT_ID,
