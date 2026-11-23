@@ -158,3 +158,68 @@ export const SearchExactCharacter = paletteStory("ragefire")
 export const SearchGuild = paletteStory("ironclad")
 export const SearchPage = paletteStory("modules")
 export const SearchMobile = paletteStory("rag", { globals: mobile })
+
+export const TabsMobileMenu: Story = {
+  args: { layout: "tabs" },
+  globals: mobile,
+  play: async ({ canvasElement }) => {
+    await userEvent.click(await within(canvasElement).findByRole("button", { name: /open menu/i }))
+  },
+}
+
+// Every layout side by side. Each frame loads its own story, so phone frames get real phone breakpoints.
+const LAYOUTS = [
+  { name: "Mega", id: "mega" },
+  { name: "Tabs", id: "tabs" },
+  { name: "Spotlight", id: "spotlight" },
+]
+
+function StoryFrame({ id, title, width, height }: { id: string; title: string; width?: number; height: number }) {
+  return (
+    <figure className="flex flex-col gap-1.5" style={{ width: width ?? "100%" }}>
+      <figcaption className="text-xs font-medium text-muted-foreground">{title}</figcaption>
+      <iframe
+        title={title}
+        src={`iframe.html?id=components-navbar--${id}&viewMode=story`}
+        className="rounded-lg border bg-background"
+        style={{ width: width ?? "100%", height }}
+      />
+    </figure>
+  )
+}
+
+export const Compare: StoryObj = {
+  decorators: [],
+  render: () => (
+    <div className="flex flex-col gap-10 p-6">
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Desktop</h2>
+        {LAYOUTS.map((layout) => <StoryFrame key={layout.id} id={layout.id} title={layout.name} height={layout.id === "tabs" ? 130 : 100} />)}
+      </section>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Desktop, menu open</h2>
+        <StoryFrame id="mega-open" title="Mega: Explore" height={600} />
+        <StoryFrame id="spotlight-open" title="Spotlight: Features" height={320} />
+      </section>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Phone</h2>
+        <div className="flex flex-wrap gap-6">
+          {LAYOUTS.map((layout) => <StoryFrame key={layout.id} id={`${layout.id}-mobile`} title={layout.name} width={390} height={260} />)}
+        </div>
+      </section>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Phone, menu open</h2>
+        <div className="flex flex-wrap gap-6">
+          {LAYOUTS.map((layout) => <StoryFrame key={layout.id} id={`${layout.id}-mobile-menu`} title={layout.name} width={390} height={760} />)}
+        </div>
+      </section>
+      <section className="flex flex-col gap-4">
+        <h2 className="text-lg font-semibold">Search (shared by every layout)</h2>
+        <div className="flex flex-wrap gap-6">
+          <StoryFrame id="search-boss" title="Boss: “ragnaros”" width={720} height={520} />
+          <StoryFrame id="search-mobile" title="Phone: “rag”" width={390} height={700} />
+        </div>
+      </section>
+    </div>
+  ),
+}
