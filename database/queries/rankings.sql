@@ -192,6 +192,9 @@ ORDER BY (r.encounter_name = 'Trash'), r.encounter_name;
 -- name: DisableJITForTransaction :exec
 SET LOCAL jit = off;
 
+-- name: DisableParallelQueryForTransaction :exec
+SET LOCAL max_parallel_workers_per_gather = 0;
+
 -- name: RankingsLeaderboard :many
 -- Returns paginated DPS rankings showing each player's best single run.
 -- A "run" is one instance_id (deduplicated by duplicate_group_id).

@@ -293,6 +293,7 @@ type sqlcQuerier interface {
 	// tenant/instance filters, nested loops cause repeated random score-table reads.
 	// Applied only inside a read-only transaction for that one query.
 	DisableNestedLoopForTransaction(ctx context.Context) error
+	DisableParallelQueryForTransaction(ctx context.Context) error
 	DisconnectSidekickInstallation(ctx context.Context, arg DisconnectSidekickInstallationParams) (SidekickInstallation, error)
 	DiscoverLeaderboardOperationEvidence(ctx context.Context, arg DiscoverLeaderboardOperationEvidenceParams) ([]uuid.UUID, error)
 	// Event-time scope, not an ingestion snapshot. The existing realm/end index
