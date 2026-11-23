@@ -6,6 +6,7 @@ export const NODE_KINDS = [
   "breakout",
   "player-metric-chart",
   "line-chart",
+  "canvas",
   "unit",
   "icon",
   "map-text",

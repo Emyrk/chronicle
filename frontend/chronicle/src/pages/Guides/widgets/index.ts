@@ -1,4 +1,5 @@
 import type { NodeKind } from "../protocol/types"
+import { canvasSpec } from "./canvas"
 import { lineChartSpec } from "./lineChart"
 import { playerMetricChartSpec } from "./playerMetricChart"
 import type { WidgetArg, WidgetSetter, WidgetSpec } from "./types"
@@ -6,7 +7,7 @@ import type { WidgetArg, WidgetSetter, WidgetSpec } from "./types"
 export type { WidgetSpec } from "./types"
 
 /** Every Chronicle-owned widget. Order is the order of the generated docs. */
-export const WIDGETS = [playerMetricChartSpec, lineChartSpec] as const
+export const WIDGETS = [playerMetricChartSpec, lineChartSpec, canvasSpec] as const
 
 /** Node kinds rendered by a widget. GuideUiScene needs a renderer for each. */
 export type WidgetKind = (typeof WIDGETS)[number]["kind"]

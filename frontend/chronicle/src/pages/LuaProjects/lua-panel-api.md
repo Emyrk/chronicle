@@ -384,6 +384,37 @@ A chart holds at most 12 series and 2,000 points in total, plus up to 64 bands a
 
 The chart also supports `SetSeries`, `SetBands`, `SetMarkers`, `SetFillParent`, `SetTimeSelection`, `SetXFormat`, `SetYFormat`, `SetCurve`, `SetArea`, `SetShowPoints`, `SetStacked`, `SetLegend`, `SetAxisLabels`, `SetXRange` and `SetYRange`. Only these options are exposed: the chart library's own options include JavaScript functions and components, which a sandboxed module cannot send.
 
+### Canvas
+
+A `Canvas` draws shapes that frames cannot: circles, rings, arcs, pie slices, straight or dashed lines, text, and round spell icons. Build the whole picture as a list and pass it to `SetShapes`; each call replaces the last, and later shapes draw on top.
+
+```lua
+local canvas = CreateFrame("Canvas", "radar", UIParent)
+canvas:SetSize(400, 400)
+canvas:SetPoint("TOPLEFT", UIParent, "TOPLEFT", 0, 0)
+
+local cx, cy = 200, 200
+canvas:SetShapes({
+  { kind = "circle", x = cx, y = cy, r = 150, stroke = "#8c94a8", width = 1, alpha = 0.3 },     -- a ring
+  { kind = "circle", x = cx, y = cy, r = 60, fill = "#e03b2c", alpha = 0.15 },                 -- a disc
+  { kind = "arc", x = cx, y = cy, r = 180, from = -0.55, to = 0.55, width = 6,
+    color = "#3b7cff", cap = "round", glow = 6 },                                              -- a glowing bar bent round the side
+  { kind = "line", x1 = cx, y1 = cy, x2 = 300, y2 = 120, width = 2, color = "#4fd38a",
+    dash = 6, gap = 4, offset = 0 },                                                           -- dashes; move offset to make them flow
+  { kind = "pie", x = 300, y = 120, r = 9, value = 0.7, color = "#c79c6e", track = "#c79c6e40" }, -- 70% health
+  { kind = "text", x = 312, y = 120, text = "Thorvald", size = 12, color = "#c79c6e" },
+  { kind = "icon", x = cx, y = cy, r = 36, icon = "spell_nature_healingwavelesser" },
+})
+```
+
+- **Coordinates** are pixels from the canvas's top-left corner, with y growing downward, so `SetSize` decides the drawing area. Shapes past the edges are still drawn, so labels may hang over.
+- **Angles** are radians. 0 points right and angles grow clockwise, so `-math.pi / 2` is the top. An `arc` runs clockwise from `from` to `to` when `to` is larger, counterclockwise when it is smaller, and draws a whole ring at a full turn. A `pie` fills `value` (0 to 1) of the circle clockwise from `start`, which defaults to the top.
+- **Every shape** takes `alpha` (0 to 1) and `glow`, a soft halo in the shape's own color that many pixels wide.
+- A `circle` with `fill` is a disc and with `stroke` a ring; give both for an outlined disc. `cap = "round"` rounds the ends of arcs and lines. `text` is one line; `align` is `"left"` (default), `"center"` or `"right"`, and `y` is its vertical middle. An `icon` takes the same names as `Texture:SetIcon` and is clipped to a circle.
+- **Typos fail loudly.** An unknown `kind` or a field the kind does not have, such as `radius` instead of `r`, is an error.
+
+A canvas holds at most 4,000 shapes. It has no tooltips or clicks of its own: put a `Frame` with `SetTooltip` or a `Button` over the parts that need them.
+
 ### Breakout panels
 
 A `Breakout` is a floating panel for details: a player's spells, a death recap, a pull's timeline. Chronicle draws it outside your module's panel, so it is never cut off by the panel's size, and it looks like Chronicle's own pinned breakouts. The viewer can drag it by its title bar and close it.
@@ -510,11 +541,11 @@ Every global and method below comes from `lua-panel-api.d.lua`, the [EmmyLua/Lua
 
 ### Globals
 
-#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button"|"Breakout"|"PlayerMetricChart"|"LineChart", id?: string, parent?: ChronicleFrame)`
+#### `CreateFrame(frameType: "Frame"|"FontString"|"Texture"|"Button"|"Breakout"|"PlayerMetricChart"|"LineChart"|"Canvas", id?: string, parent?: ChronicleFrame)`
 
 Create a retained UI object. parent defaults to UIParent.
 
-**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChronicleBreakout|ChroniclePlayerMetricChart|ChronicleLineChart` object
+**Returns:** `ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChronicleBreakout|ChroniclePlayerMetricChart|ChronicleLineChart|ChronicleCanvas` object
 
 ### `ChronicleRegion`
 
@@ -781,6 +812,12 @@ Fix the x axis range. nil means fit the data.
 #### `ChronicleLineChart:SetYRange(yMin?: number, yMax?: number)`
 
 Fix the y axis range. nil means fit the data. The minimum defaults to 0.
+
+### `ChronicleCanvas` extends `ChronicleRegion`
+
+#### `ChronicleCanvas:SetShapes(shapes: ChronicleCanvasShape[])`
+
+Replace every shape, drawn in order. At most 4000.
 
 ### `Panel`
 

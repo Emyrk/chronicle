@@ -1,5 +1,6 @@
 import type { ComponentType, CSSProperties } from "react";
 import type { WidgetKind } from "../widgets";
+import { LuaCanvas } from "./LuaCanvas";
 import { LuaLineChart } from "./LuaLineChart";
 import { PlayerMetricChartWidget } from "./PlayerMetricChartWidget";
 import type { SceneNode } from "./types";
@@ -26,6 +27,7 @@ const fillParent = (node: SceneNode, style: CSSProperties): CSSProperties =>
 export const WIDGET_RENDERERS: { readonly [K in WidgetKind]: WidgetRenderer } = {
   "player-metric-chart": { component: PlayerMetricChartWidget, interactive: false },
   "line-chart": { component: LuaLineChart, interactive: true, layout: fillParent },
+  canvas: { component: LuaCanvas, interactive: false },
 };
 
 export function renderWidget(kind: WidgetKind, node: SceneNode, style: CSSProperties) {
