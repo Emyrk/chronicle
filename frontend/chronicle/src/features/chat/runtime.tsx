@@ -12,7 +12,9 @@ import {
 } from "react";
 import type { ClientToolRequestEvent } from "./protocol";
 
-const MAX_RESULT_BYTES = 64 * 1024;
+// Keep aligned with serviceinference.maxToolOutput. The separately released
+// local MCP daemon retains its own 64 KiB result limit.
+const MAX_RESULT_BYTES = 128 * 1024;
 
 export interface InferenceCapabilityScope {
   type: string;

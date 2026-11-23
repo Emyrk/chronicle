@@ -30,7 +30,7 @@ const (
 	maxIterations      = 5
 	maxToolCalls       = 10
 	maxToolArguments   = 16 << 10
-	maxToolOutput      = 64 << 10
+	maxToolOutput      = 128 << 10
 	maxAssistantText   = 256 << 10
 )
 

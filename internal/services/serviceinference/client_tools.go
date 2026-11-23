@@ -25,7 +25,7 @@ const (
 	maxLuaEditorEdits             = 20
 	maxClientCapabilities         = 8
 	maxClientSessionID            = 128
-	maxClientResult               = 64 << 10
+	maxClientResult               = maxToolOutput
 )
 
 var clientLayoutItemIDPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`)

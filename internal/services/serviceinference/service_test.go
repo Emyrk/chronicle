@@ -625,6 +625,15 @@ func TestClientToolArgumentsAndResultsAreBoundedAndNormalized(t *testing.T) {
 	require.ErrorContains(t, err, "too large")
 }
 
+func TestClientToolResultLargePayload(t *testing.T) {
+	t.Parallel()
+	payload, err := json.Marshal(strings.Repeat("x", 70<<10))
+	require.NoError(t, err)
+	content, err := normalizedClientToolResult(chroniclesdk.InferenceClientToolResultRequest{Status: "success", Result: payload})
+	require.NoError(t, err)
+	require.JSONEq(t, `{"status":"success","result":`+string(payload)+`}`, content)
+}
+
 func TestClientToolContinuationRejectsWrongSessionScopeAndRevision(t *testing.T) {
 	t.Parallel()
 	revision := int64(7)

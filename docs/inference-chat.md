@@ -77,7 +77,8 @@ Server-enforced limits include:
 - At most the 50 most recent durable messages, additionally bounded to 256 KiB and trimmed to begin at a user message.
 - Five model iterations and ten Chronicle-executed tool calls per run.
 - OpenRouter web research is off by default and enabled per message from the composer. When enabled, the provider-hosted tool is bounded to three searches, five results per search, and twelve total results per model call.
-- 16 KiB tool arguments, 64 KiB tool output, and 256 KiB assistant text.
+- 16 KiB tool arguments, 128 KiB tool output, and 256 KiB assistant text.
+- The separately released local MCP daemon and its browser bridge retain a 64 KiB result limit. Page guidance reserves 4 KiB within the backend tool-output budget for the browser envelope.
 
 The runtime stores token usage and terminal run status. It does not persist hidden reasoning. Reconnect/replay of interrupted SSE output and managed Chronicle credits are intentionally outside the initial scope.
 

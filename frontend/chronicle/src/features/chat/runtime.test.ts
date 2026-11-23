@@ -193,6 +193,15 @@ describe("InferenceRuntime", () => {
     await expect(pending).resolves.toMatchObject({ status: "capability_unavailable" });
   });
 
+  it.each([70, 128])("bounds serialized results at 128 KiB (%s KiB payload)", async (kib) => {
+    const runtime = new InferenceRuntime({ sessionId: "session-1" });
+    const output = "x".repeat(kib * 1024);
+    register(runtime, vi.fn(() => ({ output })));
+    const result = await runtime.executeClientTool(request(), new AbortController().signal);
+    expect(result.status).toBe(kib === 70 ? "success" : "client_error");
+    if (kib === 70) expect(result.result).toEqual({ output });
+  });
+
   it("converts oversized or non-serializable successful results into bounded client errors", async () => {
     const circular: { self?: unknown } = {};
     circular.self = circular;
