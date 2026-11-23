@@ -122,6 +122,7 @@ When the viewer changes the encounter selection, the module starts again from st
 | `filter_mode` | no | `"none"` (default), `"prefilter"`, or `"manual"`. See [Panel filters](#panel-filters). |
 | `max_events` | no | A positive integer. The module stops with an error after this many events. Omit it to receive everything. |
 | `replay` | no | `"full"` or `"incremental"`. Opts into the instance page's Replay mode; see [Replay mode](#replay-mode). Omit it and the panel is disabled while Replay runs. |
+| `replay_debounce_ms` | no | Only with `"replay": "incremental"`. How long, in ms, the playhead must stay put after moving back before the module restarts. An integer from 0 to 5000; default 250. |
 | `assets` | no | Image files (PNG, JPEG, WebP, up to 2 MiB each) for `SetTexture`. Uploaded packages only; the browser editor is asset-free. |
 | `icon` | no | The icon shown next to the module in the panel selector and on its page. One of the [icon names](#icons) below; omit it for the generic module icon. |
 
@@ -473,6 +474,7 @@ Replay plays a fight back with a playhead. Built-in panels follow it, and a modu
 
 - `"replay": "full"`: Chronicle replays every event once, as usual, then tells the module where the playhead is. Use it for views of the whole fight that mark the current moment, like a death log that dims deaths still to come.
 - `"replay": "incremental"`: Chronicle delivers events only up to the playhead and keeps delivering as playback moves forward, so totals grow with the fight. Lua state cannot rewind, so moving the playhead back restarts the module and replays from the start. `onComplete` runs only once the playhead reaches the end of the data.
+  - So scrubbing back does not restart the module on every step, Chronicle waits until the playhead has stayed put for `replay_debounce_ms` (250 ms by default) before restarting. Until then the panel keeps showing its last drawing. If the viewer scrubs forward past what the module already received, it resumes instead of restarting. Raise the delay for modules that take long to replay; set it to `0` to restart at once.
 
 Either way, redraw in `Chronicle.OnReplayTime`, not just `onComplete`. It runs after the events up to the playhead have been delivered (in full mode, after `onComplete`). The playhead moves at most every 100 ms during playback.
 

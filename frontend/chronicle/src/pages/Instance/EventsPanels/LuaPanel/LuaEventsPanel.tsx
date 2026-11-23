@@ -176,7 +176,7 @@ function LuaEventsPanelContent(props: EventsPanelProps) {
       filterMode={panel.filterMode} filterContext={filterContext}
       eventStreams={eventStreams} encounterIds={selectedIds} assets={assetUrls} units={units} onMetrics={onMetrics}
       timeRange={timeRange} onSetTimeRange={onSetTimeRange}
-      replay={replay} incremental={panel.replay === "incremental"} onSetReplayTime={onSetReplayTime} />
+      replay={replay} incremental={panel.replay === "incremental"} replayDebounceMs={panel.replayDebounceMs} onSetReplayTime={onSetReplayTime} />
   return <PanelCard flipped={false} back={null} front={<>
     <div className="flex min-w-0 items-center justify-between gap-2">
       <PanelSelector value={props.panelType} onChange={props.onPanelTypeChange} />

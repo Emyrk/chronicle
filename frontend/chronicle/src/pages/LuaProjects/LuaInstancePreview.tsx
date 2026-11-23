@@ -162,7 +162,7 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
           {replayOn && !visible.panel.replay ? <div role="status" className="p-4 text-sm text-muted-foreground" data-lua-replay-disabled>{REPLAY_DISABLED_MESSAGE}</div> :
           <LuaPanelHost key={visible.id} entrypoint={visible.panel.entrypoint} sources={visible.panel.sources} streams={visible.panel.streams} streamScope={visible.panel.streamScope} filterMode={visible.panel.filterMode}
             maxEvents={visible.panel.maxEvents} units={units} capabilities={visible.panel.capabilities} eventStreams={visible.streams} encounterIds={visible.encounterIds} assets={assetUrls}
-            replay={replayTime} incremental={visible.panel.replay === "incremental"} onSetReplayTime={onSetReplayTime} />}</div>
+            replay={replayTime} incremental={visible.panel.replay === "incremental"} replayDebounceMs={visible.panel.replayDebounceMs} onSetReplayTime={onSetReplayTime} />}</div>
         return onFrameSizeChange ? <PreviewFrame size={frameSize} onChange={onFrameSizeChange} onMeasure={setMeasured}>{host}</PreviewFrame> : host
       })()}
     </>}

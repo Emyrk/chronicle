@@ -10,7 +10,7 @@ import { PanelTimeRangeContext, type PanelTimeRangeValue } from "../../../Guides
 import { applySceneBatch, createInitialScene } from "../../../Guides/protocol/scene"
 import { parseWorkerMessage } from "../../../Guides/protocol/protocol"
 import type { GuideCapability, RetainedScene } from "../../../Guides/protocol/types"
-import type { EventStreams, PanelEvent, PanelStream, PanelStreamScope } from "../../../Guides/runtime/panelEvents"
+import { DEFAULT_REPLAY_DEBOUNCE_MS, type EventStreams, type PanelEvent, type PanelStream, type PanelStreamScope } from "../../../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../../../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../../../Guides/runtime/panelUnits"
 import type { PanelSpellInfo, PanelTimeRange } from "../../../Guides/runtime/runtime"
@@ -51,6 +51,8 @@ export interface LuaPanelHostProps {
   replay?: PanelReplayTime | null
   /** The manifest's `replay: "incremental"`: deliver events only up to the playhead while Replay is on. */
   incremental?: boolean
+  /** The manifest's `replay_debounce_ms`: how long the playhead must rest after moving back before an incremental replay restarts. */
+  replayDebounceMs?: number
   /** Applies Chronicle.SetReplayTime from a click; omit where there is no Replay playhead. */
   onSetReplayTime?: (ms: number) => void
 }
@@ -87,7 +89,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, timeRange = null, onSetTimeRange, replay = null, incremental = false, onSetReplayTime }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, timeRange = null, onSetTimeRange, replay = null, incremental = false, replayDebounceMs = DEFAULT_REPLAY_DEBOUNCE_MS, onSetReplayTime }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const sceneRef = useRef(scene)
   const [error, setError] = useState<ModuleErrorExplanation | null>(null)
@@ -215,7 +217,13 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   useEffect(() => {
     const sentUntil = sentUntilRef.current
     if (incrementalReplay && replayUntilMs !== null && sentUntil !== null) {
-      if (replayUntilMs < sentUntil) { setRestarts(count => count + 1); return }
+      if (replayUntilMs < sentUntil) {
+        // Scrubbing back would restart on every step, so wait until the playhead rests. Moving forward
+        // past what was delivered before the timer fires resumes instead (this effect's cleanup cancels it).
+        if (replayDebounceMs <= 0) { setRestarts(count => count + 1); return }
+        const timer = setTimeout(() => setRestarts(count => count + 1), replayDebounceMs)
+        return () => clearTimeout(timer)
+      }
       if (replayUntilMs > sentUntil) {
         sentUntilRef.current = replayUntilMs
         awaitingRef.current = true
@@ -224,7 +232,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
       }
     }
     workerRef.current?.postMessage({ type: "replay-time", ms: replayMs })
-  }, [replayMs, replayUntilMs, incrementalReplay])
+  }, [replayMs, replayUntilMs, incrementalReplay, replayDebounceMs])
 
   // Keep Lua's Chronicle.GetTimeRange in step with the page; a new worker gets it right after start.
   const startMs = timeRange?.startMs ?? null

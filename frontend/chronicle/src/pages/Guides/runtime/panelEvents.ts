@@ -16,6 +16,17 @@ export type PanelStreamScope = (typeof PANEL_STREAM_SCOPES)[number]
  */
 export const PANEL_REPLAY_MODES = ["full", "incremental"] as const
 export type PanelReplayMode = (typeof PANEL_REPLAY_MODES)[number]
+/** project.json `replay_debounce_ms` (incremental only): how long the playhead must rest after moving back before a restart. */
+export const DEFAULT_REPLAY_DEBOUNCE_MS = 250
+export const MAX_REPLAY_DEBOUNCE_MS = 5000
+
+/** Why a manifest's replay_debounce_ms is invalid, or null when it is valid (or omitted). */
+export function replayDebounceError(replay: unknown, value: unknown): string | null {
+  if (value === undefined) return null
+  if (replay !== "incremental") return `replay_debounce_ms only applies to "replay": "incremental".`
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0 || value > MAX_REPLAY_DEBOUNCE_MS) return `replay_debounce_ms must be an integer from 0 to ${MAX_REPLAY_DEBOUNCE_MS}.`
+  return null
+}
 
 export function validatePanelEvent(value: unknown, allowed: readonly PanelStream[]): PanelEvent {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid panel event")
