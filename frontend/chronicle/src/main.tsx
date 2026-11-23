@@ -10,6 +10,7 @@ import { BlogApp } from './blog/BlogApp'
 import { InferenceRuntimeProvider } from './features/chat/runtime'
 import { LocalMcpProvider } from './features/chat/mcp/LocalMcpProvider'
 import { reloadAfterRouteLoadFailure } from './lib/routeLoadRecovery'
+import { RouteErrorPage } from './components/RouteError/RouteErrorPage'
 
 window.addEventListener('vite:preloadError', (event) => {
   if (reloadAfterRouteLoadFailure()) {
@@ -44,7 +45,7 @@ async function mount() {
 
   // Keep App/BlogApp's existing descendant routes unchanged. The data-router
   // boundary enables supported navigation blocking for an explicitly connected MCP tab.
-  const router = createBrowserRouter([{ path: "*", element: application }])
+  const router = createBrowserRouter([{ path: "*", element: application, errorElement: <RouteErrorPage /> }])
   const tree = (
     <StrictMode>
       {/* Show Suspense fallbacks immediately instead of keeping the previous route visible. */}
