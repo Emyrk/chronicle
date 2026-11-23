@@ -1,6 +1,7 @@
 package serviceog
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -9,6 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/authz"
+	"github.com/Emyrk/chronicle/internal/testutil"
 )
 
 func TestCensusOGParams(t *testing.T) {
@@ -55,4 +58,38 @@ func TestCensusOG(t *testing.T) {
 	og = api.withBrandOG(api.censusOG)(req)
 	require.Equal(t, "Realm Census", og.Title)
 	require.Contains(t, og.ImageURL, "template=brand")
+}
+
+// The SQL predicate treats an empty realm array as all realms, but NULL
+// matches none. Keep this distinct from tests of faction aggregation.
+type censusOGStore struct {
+	database.Store
+	params chan database.CensusPlayerCountsParams
+}
+
+func (s *censusOGStore) CensusPlayerCounts(_ context.Context, params database.CensusPlayerCountsParams) ([]database.CensusPlayerCountsRow, error) {
+	s.params <- params
+	if params.RealmIds == nil {
+		return nil, nil
+	}
+	return []database.CensusPlayerCountsRow{{Race: database.WowPlayableRaceOrc, Count: 500}}, nil
+}
+
+func TestCensusOGUnfilteredRealms(t *testing.T) {
+	t.Parallel()
+	store := &censusOGStore{params: make(chan database.CensusPlayerCountsParams, 1)}
+	svc := testOGImageAPI(t, "https://og.example.com")
+	svc.store = authz.NewDatabaseOnly(testutil.Logger(t), store)
+	req := httptest.NewRequest(http.MethodGet, "https://chromie.chronicleclassic.com/census", nil).
+		WithContext(testutil.Context(t, testutil.WaitShort))
+	og := svc.censusOG(req)
+	select {
+	case params := <-store.params:
+		require.NotNil(t, params.RealmIds, "nil encodes as SQL NULL and excludes every realm")
+		require.Empty(t, params.RealmIds)
+	default:
+		t.Fatal("census lookup did not run")
+	}
+	require.Contains(t, og.ImageURL, "template=census")
+	require.Contains(t, og.ImageURL, "horde=500")
 }

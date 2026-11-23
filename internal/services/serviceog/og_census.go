@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Emyrk/chronicle/database"
@@ -30,7 +31,9 @@ func (s *Service) censusOG(r *http.Request) *frontend.OGData {
 	rows := loadOGCache(r, s.logger, &s.ogCensus, func(ctx context.Context) ([]database.CensusPlayerCountsRow, error) {
 		return s.store.CensusPlayerCounts(ctx, database.CensusPlayerCountsParams{
 			UpdatedAfter: pgtype.Timestamptz{Time: time.Now().AddDate(0, 0, -censusOGDays), Valid: true},
-			RealmIds:     nil,
+			// An empty array selects all realms; nil encodes as SQL NULL,
+			// which makes the realm predicate exclude every row.
+			RealmIds: []uuid.UUID{},
 		})
 	})
 	if params := censusOGParams(rows, flavor); params != nil {
