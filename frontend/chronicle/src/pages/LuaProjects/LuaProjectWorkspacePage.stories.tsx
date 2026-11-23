@@ -102,6 +102,8 @@ const TOOLS = [
   { name: "save_lua_files", description: "Save the browser working copy to main.", input_schema: schema({ expected_revision: { type: "integer" } }, ["expected_revision"]),
     capability_id: "lua-editor", capability_version: 1, effect: "view_mutation", confirmation: "never" },
   { name: "run_preview", description: "Replay the working copy against the Preview pane's instance.", input_schema: schema({ encounter_ids: { type: "array" } }), capability_id: "lua-editor", capability_version: 1, effect: "read", confirmation: "never" },
+  { name: "control_preview_replay", description: "Drive Replay in the visible Preview pane.", input_schema: schema({ enabled: { type: "boolean" }, playing: { type: "boolean" }, position_ms: { type: "number" }, speed: { type: "number" } }),
+    capability_id: "lua-editor", capability_version: 1, effect: "view_mutation", confirmation: "never" },
   { name: "run_startup_check", description: "Check Lua startup in a sandboxed worker.", input_schema: schema(), capability_id: "lua-editor", capability_version: 1, effect: "read", confirmation: "never" },
 ]
 
@@ -297,6 +299,15 @@ export const ConnectionFailed: Story = { play: connect }
  */
 export const ReplayPreview: Story = {
   parameters: { msw: { handlers: [...api({ draft: REPLAY_ZIP }), ...noDaemon] } },
+}
+
+/** The agent drives Replay: it turns Replay on at 1:30, then plays at 4× from 0:30. */
+export const AgentDrivesReplay: Story = {
+  parameters: { msw: { handlers: [...api({ draft: REPLAY_ZIP }), ...fakeDaemon({ owner: { id: "agent-claude", name: "Claude Code", version: "2.1.0" }, steps: [
+    { toolName: "control_preview_replay", args: () => ({ enabled: true, position_ms: 90_000 }) },
+    { toolName: "control_preview_replay", args: () => ({ position_ms: 30_000, speed: 4, playing: true }) },
+  ], pauseMs: 4000 })] } },
+  play: connect,
 }
 
 /** A new module with nothing saved and no preview instance chosen yet. */

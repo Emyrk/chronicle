@@ -15,6 +15,8 @@ import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } fr
 import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
 import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
 import { parseRunPreviewArgs, runPreview, selectionBounds } from "./previewRun"
+import { usePreviewReplay } from "./PreviewReplayControls"
+import { parseReplayControlArgs, replayStatus } from "./previewReplay"
 import { runStartupCheck } from "./startupCheck"
 import { buildPanelUnits } from "../Guides/runtime/panelUnits"
 import { resolveInstanceUnits } from "../Instance/instanceUnits"
@@ -197,6 +199,10 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
   // run_preview replays against whatever the user has selected in the Preview pane.
   const previewRef = useRef({ instanceId, encounterIds, units: previewUnits, encounters: instance.data?.encounters ?? [] })
   previewRef.current = { instanceId: instance.data ? instanceId : "", encounterIds, units: previewUnits, encounters: instance.data?.encounters ?? [] }
+  // The page owns Replay playback so the agent's control_preview_replay drives the visible preview.
+  const replay = usePreviewReplay(selectionBounds(instance.data?.encounters ?? [], encounterIds))
+  const replayRef = useRef(replay)
+  replayRef.current = replay
   const pendingProposals = useRef(new Map<string, (result: { applied: boolean; revision: number }) => void>())
   const propose = useCallback((files: EditorFiles, expectedRevision: number) => {
     const id = crypto.randomUUID()
@@ -281,6 +287,19 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
         const result = await runPreview({ panel, streams, encounterIds: selected, units, replay }, signal)
         return { ...result, instance_id: previewInstance, encounter_ids: selected, revision: current.revision, encounters,
           ...(replay && bounds && { replay_ms: replay.ms, replay_duration_ms: bounds.endMs - bounds.startMs }) }
+      },
+      control_preview_replay: (args) => {
+        let control
+        try { control = parseReplayControlArgs(args) }
+        catch (error) { return { ok: false, error: errorMessage(error, "Invalid control_preview_replay arguments.") } }
+        const current = replayRef.current
+        const next = current.control(control)
+        if (!next || !current.bounds) return { ok: false, error: "No encounters are selected in the Preview pane. Pick them with run_preview's encounter_ids, or ask the user to choose an instance." }
+        let panelReplay: string | null = null
+        const copy = copyRef.current
+        if (copy) try { panelReplay = panelPackageFromWorkingCopy(projectQuery.data!, { manifest: copy.manifest, lua: copy.source, readme: copy.readme }).replay ?? null } catch { /* reported by run_preview */ }
+        return { ok: true, ...replayStatus(next, current.bounds), panel_replay: panelReplay,
+          ...(next.playheadMs !== null && !panelReplay && { warning: "The panel does not declare replay in project.json, so the preview shows it as disabled." }) }
       },
       run_startup_check: async (_args, { signal }) => {
         const current = requireCopy()
@@ -447,7 +466,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
             {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
             {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
               <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits}
-                replayBounds={selectionBounds(instance.data.encounters ?? [], encounterIds)}
+                replay={replay}
                 frameSize={layout.frame} onFrameSizeChange={frame => setLayout({ frame })} />
             </Suspense>}
           </div>

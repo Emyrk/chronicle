@@ -31,7 +31,7 @@ func TestLuaWorkshopIsDurableAndUsesScopedTools(t *testing.T) {
 		require.True(t, json.Valid(tool.Parameters), tool.Name)
 		names = append(names, tool.Name)
 	}
-	require.Equal(t, []string{"read_skill", "read_lua_files", "edit_lua_file", "save_lua_files", "run_preview", "run_startup_check"}, names)
+	require.Equal(t, []string{"read_skill", "read_lua_files", "edit_lua_file", "save_lua_files", "run_preview", "control_preview_replay", "run_startup_check"}, names)
 	_, ok := clientToolByName("lua-editor", "update_instance_ui")
 	require.False(t, ok, "instance tools must not resolve under the Lua capability")
 
@@ -86,6 +86,14 @@ func TestLuaEditorToolArguments(t *testing.T) {
 	}
 	for _, args := range []string{`{"encounter_ids":[]}`, `{"encounter_ids":["e1","e1"]}`, `{"encounter_ids":[""]}`, `{"encounter_ids":"e1"}`, `{"instance_id":"x"}`, `{"replay_ms":-1}`, `{"replay_ms":"1"}`} {
 		_, err := validateClientToolArguments("run_preview", args)
+		require.Error(t, err, args)
+	}
+	for _, args := range []string{`{}`, `{"enabled":true}`, `{"enabled":true,"position_ms":30000,"playing":true,"speed":2}`, `{"speed":0.5}`} {
+		_, err := validateClientToolArguments("control_preview_replay", args)
+		require.NoError(t, err, args)
+	}
+	for _, args := range []string{`{"position_ms":-1}`, `{"speed":3}`, `{"enabled":"yes"}`, `{"seek":1}`} {
+		_, err := validateClientToolArguments("control_preview_replay", args)
 		require.Error(t, err, args)
 	}
 	_, err := validateClientToolArguments("read_lua_files", `{"file":"main.lua"}`)
