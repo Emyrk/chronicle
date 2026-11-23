@@ -32,7 +32,7 @@ export function SearchTrigger({ onOpen, compact, className }: { onOpen: () => vo
       className={cn("flex h-9 items-center gap-2 rounded-md border bg-muted/40 px-3 text-sm text-muted-foreground transition-colors hover:border-foreground/30 hover:text-foreground", className)}
     >
       <Search className="h-4 w-4 shrink-0" />
-      <span className="truncate">Search players, guilds, raids…</span>
+      <span className="truncate">Search…</span>
       <kbd className="ml-auto hidden whitespace-nowrap rounded border bg-background px-1.5 font-mono text-[10px] lg:inline">{isMac ? "⌘" : "Ctrl "}K</kbd>
     </button>
   )

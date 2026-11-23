@@ -52,6 +52,17 @@ const loggedIn = (admin: boolean) => [
   ...dataHandlers,
 ]
 
+// A community tenant with its own branding: the Chronicle icon takes the left slot.
+const tenant = [
+  http.get("/api/v1/site-config", () => HttpResponse.json({ billing_enabled: true, tenant: { id: "octo", branding: { display_name: "Octo Raiders", square_logo: "/c/chronicle/ChronicleIcon.webp" } } })),
+  ...loggedIn(false),
+]
+
+const noFavorites = [
+  http.get("/api/v1/me/favorites", () => HttpResponse.json({ players: [], guilds: [] })),
+  ...loggedIn(false),
+]
+
 const loggedOut = [http.get("/api/v1/whoami", () => new HttpResponse(null, { status: 204 })), ...dataHandlers]
 
 const meta: Meta<typeof NavBar> = {
@@ -66,65 +77,26 @@ const meta: Meta<typeof NavBar> = {
     ),
   ],
   parameters: { layout: "fullscreen", msw: { handlers: loggedIn(false) } },
-  argTypes: { layout: { control: "inline-radio", options: ["mega", "tabs", "spotlight"] } },
 }
 
 export default meta
 type Story = StoryObj<typeof NavBar>
 
 const mobile = { viewport: { value: "mobile2", isRotated: false } }
-
-// Layout A: search field + a descriptive "Explore" mega menu.
-export const Mega: Story = { args: { layout: "mega" } }
-export const MegaOpen: Story = {
-  args: { layout: "mega" },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole("button", { name: /explore/i }))
-  },
-}
-export const MegaMobile: Story = { args: { layout: "mega" }, globals: mobile }
-export const MegaMobileMenu: Story = {
-  args: { layout: "mega" },
-  globals: mobile,
-  play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole("button", { name: /open menu/i }))
-  },
+const openMenu = (name: RegExp): Story["play"] => async ({ canvasElement }) => {
+  await userEvent.click(await within(canvasElement).findByRole("button", { name }))
 }
 
-// Layout B: a second row of always-visible feature tabs.
-export const Tabs: Story = { args: { layout: "tabs" }, parameters: { route: "/leaderboards" } }
-export const TabsMobile: Story = { args: { layout: "tabs" }, globals: mobile, parameters: { route: "/leaderboards" } }
-
-// Layout C: a near-empty bar; a "Features" panel of cards and search do the work.
-export const Spotlight: Story = { args: { layout: "spotlight" } }
-export const SpotlightOpen: Story = {
-  args: { layout: "spotlight" },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole("button", { name: /features/i }))
-  },
-}
-export const SpotlightMobile: Story = { args: { layout: "spotlight" }, globals: mobile }
-export const SpotlightMobileMenu: Story = {
-  args: { layout: "spotlight" },
-  globals: mobile,
-  play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole("button", { name: /open menu/i }))
-  },
-}
-
-// Account menu with the admin submenu.
-export const AdminAccountMenu: Story = {
-  args: { layout: "mega" },
-  parameters: { msw: { handlers: loggedIn(true) } },
-  play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole("button", { name: /account/i }))
-  },
-}
-
-export const LoggedOut: Story = { args: { layout: "mega" }, parameters: { msw: { handlers: loggedOut } } }
-export const GuildPage: Story = { args: { layout: "mega" }, parameters: { route: "/g/example-guild", msw: { handlers: loggedOut } } }
+export const Default: Story = {}
+export const ExploreOpen: Story = { play: openMenu(/explore/i) }
+export const FavoritesOpen: Story = { play: openMenu(/favorites/i) }
+export const FavoritesEmpty: Story = { parameters: { msw: { handlers: noFavorites } }, play: openMenu(/favorites/i) }
+export const AccountOpen: Story = { play: openMenu(/^account/i) }
+export const AdminOpen: Story = { parameters: { msw: { handlers: loggedIn(true) } }, play: openMenu(/^admin/i) }
+export const Tenant: Story = { parameters: { msw: { handlers: tenant } } }
+export const LoggedOut: Story = { parameters: { msw: { handlers: loggedOut } } }
+export const GuildPage: Story = { parameters: { route: "/g/example-guild", msw: { handlers: loggedOut } } }
 export const Loading: Story = {
-  args: { layout: "mega" },
   parameters: {
     msw: {
       handlers: [
@@ -137,6 +109,10 @@ export const Loading: Story = {
     },
   },
 }
+
+export const Mobile: Story = { globals: mobile }
+export const MobileMenu: Story = { globals: mobile, play: openMenu(/open menu/i) }
+export const MobileMenuAdmin: Story = { globals: mobile, parameters: { msw: { handlers: loggedIn(true) } }, play: openMenu(/open menu/i) }
 
 // The search palette on its own, with queries that show each kind of top result.
 type PaletteStory = StoryObj<{ initialQuery: string }>
@@ -159,21 +135,7 @@ export const SearchGuild = paletteStory("ironclad")
 export const SearchPage = paletteStory("modules")
 export const SearchMobile = paletteStory("rag", { globals: mobile })
 
-export const TabsMobileMenu: Story = {
-  args: { layout: "tabs" },
-  globals: mobile,
-  play: async ({ canvasElement }) => {
-    await userEvent.click(await within(canvasElement).findByRole("button", { name: /open menu/i }))
-  },
-}
-
-// Every layout side by side. Each frame loads its own story, so phone frames get real phone breakpoints.
-const LAYOUTS = [
-  { name: "Mega", id: "mega" },
-  { name: "Tabs", id: "tabs" },
-  { name: "Spotlight", id: "spotlight" },
-]
-
+// Every state on one page. Each frame loads its own story, so phone frames get real phone breakpoints.
 function StoryFrame({ id, title, width, height }: { id: string; title: string; width?: number; height: number }) {
   return (
     <figure className="flex flex-col gap-1.5" style={{ width: width ?? "100%" }}>
@@ -189,33 +151,37 @@ function StoryFrame({ id, title, width, height }: { id: string; title: string; w
 }
 
 export const Compare: StoryObj = {
-  decorators: [],
   render: () => (
     <div className="flex flex-col gap-10 p-6">
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Desktop</h2>
-        {LAYOUTS.map((layout) => <StoryFrame key={layout.id} id={layout.id} title={layout.name} height={layout.id === "tabs" ? 130 : 100} />)}
+        <StoryFrame id="default" title="Signed in" height={100} />
+        <StoryFrame id="tenant" title="Community tenant (Chronicle icon keeps the left slot)" height={100} />
+        <StoryFrame id="tenant" title="Below 1400px (search collapses to an icon)" width={1024} height={100} />
+        <StoryFrame id="logged-out" title="Signed out" height={100} />
       </section>
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Desktop, menu open</h2>
-        <StoryFrame id="mega-open" title="Mega: Explore" height={600} />
-        <StoryFrame id="spotlight-open" title="Spotlight: Features" height={320} />
+        <h2 className="text-lg font-semibold">Menus</h2>
+        <StoryFrame id="explore-open" title="Explore" height={560} />
+        <div className="flex flex-wrap gap-6">
+          <StoryFrame id="favorites-open" title="Favorites" height={360} />
+          <StoryFrame id="favorites-empty" title="Favorites, none yet" height={300} />
+          <StoryFrame id="account-open" title="Account" height={340} />
+          <StoryFrame id="admin-open" title="Admin (admins only)" height={300} />
+        </div>
       </section>
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Phone</h2>
         <div className="flex flex-wrap gap-6">
-          {LAYOUTS.map((layout) => <StoryFrame key={layout.id} id={`${layout.id}-mobile`} title={layout.name} width={390} height={260} />)}
+          <StoryFrame id="mobile" title="Closed" width={390} height={760} />
+          <StoryFrame id="mobile-menu" title="Menu" width={390} height={760} />
+          <StoryFrame id="mobile-menu-admin" title="Menu, admin" width={390} height={760} />
         </div>
       </section>
       <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Phone, menu open</h2>
+        <h2 className="text-lg font-semibold">Search</h2>
         <div className="flex flex-wrap gap-6">
-          {LAYOUTS.map((layout) => <StoryFrame key={layout.id} id={`${layout.id}-mobile-menu`} title={layout.name} width={390} height={760} />)}
-        </div>
-      </section>
-      <section className="flex flex-col gap-4">
-        <h2 className="text-lg font-semibold">Search (shared by every layout)</h2>
-        <div className="flex flex-wrap gap-6">
+          <StoryFrame id="search-empty" title="Empty: favorites + jump to" width={720} height={520} />
           <StoryFrame id="search-boss" title="Boss: “ragnaros”" width={720} height={520} />
           <StoryFrame id="search-mobile" title="Phone: “rag”" width={390} height={700} />
         </div>

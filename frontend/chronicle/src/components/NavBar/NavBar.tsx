@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { Settings, Upload, LogOut, FileText, Shield, Key, Menu, Database, Server, Sparkles, Crown, ChevronDown, Compass, MoreHorizontal } from "lucide-react"
+import { Settings, Upload, LogOut, FileText, Shield, Key, Menu, Database, Server, Sparkles, Crown, ChevronDown, Compass, Star } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { uploadsDisabledForSite, useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries"
@@ -12,19 +12,12 @@ import { WhatsNewDialog } from "../WhatsNew/WhatsNewDialog"
 import { RootCommunityNavButton } from "../RootCommunityContext/RootCommunityContext"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "../ui/sheet"
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "../ui/DropdownMenu/DropdownMenu"
 import { SearchPalette, SearchTrigger } from "./GlobalSearch/GlobalSearch"
 import { useSearchHotkey } from "./GlobalSearch/useGlobalSearch"
-import { allNavLinks, featuredNavLinks, isActiveLink, navGroups, type NavGroup, type NavLink } from "./navItems"
-
-/**
- * Navbar layouts under review:
- * - mega: search field + one "Explore" mega menu that describes every feature.
- * - tabs: a second row of feature tabs, so headline features are always visible.
- * - spotlight: almost empty; search and a full-width menu of feature cards do the work.
- */
-export type NavBarLayout = "mega" | "tabs" | "spotlight"
+import { guildHref, playerHref } from "./GlobalSearch/globalSearch"
+import { allNavLinks, isActiveLink, navGroups, type NavGroup } from "./navItems"
 
 type AccountItem = {
   title: string
@@ -154,7 +147,7 @@ function AccountMenuItem({ item }: { item: AccountItem }) {
   )
 }
 
-/** Desktop account dropdown; admin tools sit in one submenu. */
+/** Desktop account dropdown. Favorites and admin tools have their own menus beside it. */
 function AccountMenu({ state }: { state: NavState }) {
   if (state.isLoading) return null
   if (!state.isAuthenticated) {
@@ -168,19 +161,53 @@ function AccountMenu({ state }: { state: NavState }) {
           {state.hasUnreadWhatsNew && <span className="absolute right-1 top-1.5 h-2 w-2 rounded-full bg-primary" aria-label="New What's New update" />}
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className={state.hasFavorites ? "w-[300px]" : "w-[200px]"}>
-        <FavoritesMenu data={state.favorites} />
+      <DropdownMenuContent align="end" className="w-[200px]">
         {state.accountItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
-        {state.adminItems.length > 0 && (
-          <DropdownMenuSub>
-            <DropdownMenuSubTrigger className="flex items-center gap-2"><Shield className="h-4 w-4" />Admin</DropdownMenuSubTrigger>
-            <DropdownMenuSubContent>
-              {state.adminItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
-            </DropdownMenuSubContent>
-          </DropdownMenuSub>
-        )}
         <DropdownMenuSeparator />
         <AccountMenuItem item={state.signOut} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const iconTrigger = "rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
+
+/** Starred guilds and characters, one click from any page. */
+function FavoritesNavMenu({ state }: { state: NavState }) {
+  if (!state.isAuthenticated) return null
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label="Favorites" className={iconTrigger}>
+          <Star className={cn("h-4 w-4", state.hasFavorites && "fill-amber-400 text-amber-400")} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[300px]">
+        <FavoritesMenu data={state.favorites} />
+        {!state.hasFavorites && (
+          <DropdownMenuLabel className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+            <Star className="size-3.5" />Favorites
+          </DropdownMenuLabel>
+        )}
+        <p className="px-2 py-1.5 text-xs text-muted-foreground">
+          {state.hasFavorites ? "Star any guild or character to add it here." : "Star a guild or character and it shows up here, one click from any page."}
+        </p>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** Admin tools, shown only to accounts with admin permissions. */
+function AdminNavMenu({ state }: { state: NavState }) {
+  if (state.adminItems.length === 0) return null
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label="Admin" className={iconTrigger}><Shield className="h-4 w-4" /></button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[200px]">
+        <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">Admin</DropdownMenuLabel>
+        {state.adminItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
       </DropdownMenuContent>
     </DropdownMenu>
   )
@@ -200,6 +227,30 @@ function MobileAccountItem({ item, close }: { item: AccountItem; close: () => vo
       <item.icon className="h-4 w-4" />{item.title}
       {item.indicator && <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="New" />}
     </button>
+  )
+}
+
+function MobileFavoritesSection({ state, close }: { state: NavState; close: () => void }) {
+  const favorites = state.favorites
+  if (!state.isAuthenticated || !favorites || !state.hasFavorites) return null
+  return (
+    <div className="flex flex-col border-b pb-3">
+      <div className="flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />Favorites
+      </div>
+      {favorites.guilds.map((guild) => (
+        <Link key={guild.id} to={guildHref(guild)} onClick={close} className={mobileRow}>
+          <Shield className="h-4 w-4 text-amber-500" /><span className="font-medium text-amber-500">{guild.name}</span>
+        </Link>
+      ))}
+      {favorites.players.map((player) => (
+        <Link key={`${player.realm_id}:${player.id}`} to={playerHref(player)} onClick={close} className={mobileRow}>
+          <img src={`/c/icons/class_${player.class.toLowerCase()}.png`} alt="" className="h-4 w-4 rounded-sm" />
+          <span className="font-medium" style={{ color: `var(--color-class-${player.class.toLowerCase()})` }}>{player.name}</span>
+          {player.guild_name && <span className="truncate text-xs">&lt;{player.guild_name}&gt;</span>}
+        </Link>
+      ))}
+    </div>
   )
 }
 
@@ -255,7 +306,7 @@ function FeatureDirectory({ onSelect, asMenuItems, mobile }: { onSelect?: () => 
   )
 }
 
-function MobileMenuSheet({ state, side = "left" }: { state: NavState; side?: "left" | "top" }) {
+function MobileMenuSheet({ state }: { state: NavState }) {
   const [open, setOpen] = useState(false)
   const close = () => setOpen(false)
   return (
@@ -263,9 +314,10 @@ function MobileMenuSheet({ state, side = "left" }: { state: NavState; side?: "le
       <SheetTrigger asChild>
         <Button variant="ghost" size="icon"><Menu className="h-5 w-5" /><span className="sr-only">Open menu</span></Button>
       </SheetTrigger>
-      <SheetContent side={side} className={cn("styled-scrollbar overflow-y-auto p-4", side === "left" ? "w-80" : "max-h-dvh")}>
+      <SheetContent side="left" className="styled-scrollbar w-80 overflow-y-auto p-4">
         <SheetTitle className="sr-only">Menu</SheetTitle>
         <SearchTrigger onOpen={() => { close(); state.openSearch() }} className="mt-8 w-full" />
+        <MobileFavoritesSection state={state} close={close} />
         <FeatureDirectory mobile onSelect={close} />
         <div className="border-t pt-3"><MobileAccountSection state={state} close={close} /></div>
         {!!state.siteConfig?.tenant && (
@@ -284,19 +336,36 @@ function navTextLink(active: boolean) {
   return cn("flex items-center gap-1.5 text-sm transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")
 }
 
-/** Layout A: search on the left, one descriptive "Explore" mega menu on the right. */
-function MegaLayout({ state }: { state: NavState }) {
+/** Left slot: the Chronicle icon on branded tenants, otherwise an empty spacer that balances the right side. */
+function ChronicleMark({ state }: { state: NavState }) {
+  return (
+    <div className="hidden w-10 items-center lg:flex">
+      {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10" />}
+    </div>
+  )
+}
+
+/** Desktop search sits with the right-hand links: a field on wide screens, an icon where a field would crowd the logo. */
+function DesktopSearch({ state }: { state: NavState }) {
+  return (
+    <>
+      <SearchTrigger onOpen={state.openSearch} className="hidden w-48 min-[1400px]:flex" />
+      <SearchTrigger compact onOpen={state.openSearch} className="min-[1400px]:hidden" />
+    </>
+  )
+}
+
+/** Search, Recent, one descriptive "Explore" menu, then the signed-in menus. */
+function DesktopNav({ state }: { state: NavState }) {
   const recent = allNavLinks().find((link) => link.id === "recent")!
   return (
     <nav className="relative flex h-16 items-center justify-between border-b px-4">
-      <div className="md:hidden"><MobileMenuSheet state={state} /></div>
-      <div className="hidden w-72 items-center gap-3 md:flex">
-        {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-9 w-9" />}
-        <SearchTrigger onOpen={state.openSearch} className="w-full" />
-      </div>
+      <div className="lg:hidden"><MobileMenuSheet state={state} /></div>
+      <ChronicleMark state={state} />
       <Brand state={state} className="absolute left-1/2 -translate-x-1/2" />
-      <div className="hidden items-center gap-5 md:flex">
+      <div className="hidden items-center gap-5 lg:flex">
         <RootCommunityNavButton />
+        <DesktopSearch state={state} />
         <Link to={recent.href} className={navTextLink(isActiveLink(recent, state.location.pathname))}><recent.icon className="h-4 w-4" />Recent</Link>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
@@ -308,9 +377,13 @@ function MegaLayout({ state }: { state: NavState }) {
             <FeatureDirectory asMenuItems />
           </DropdownMenuContent>
         </DropdownMenu>
-        <AccountMenu state={state} />
+        <div className="flex items-center gap-1">
+          <FavoritesNavMenu state={state} />
+          <AdminNavMenu state={state} />
+          <AccountMenu state={state} />
+        </div>
       </div>
-      <div className="flex items-center md:hidden">
+      <div className="flex items-center lg:hidden">
         <RootCommunityNavButton mobile />
         <SearchTrigger compact onOpen={state.openSearch} />
       </div>
@@ -318,116 +391,11 @@ function MegaLayout({ state }: { state: NavState }) {
   )
 }
 
-/** Layout B: a second row of tabs keeps headline features on screen at all times. */
-function TabsLayout({ state }: { state: NavState }) {
-  const groups = navGroups()
-  const tabs = ["recent", "leaderboards", "armory", "ratings"]
-    .map((id) => allNavLinks(groups).find((link) => link.id === id))
-    .filter((link): link is NavLink => !!link)
-  const rest = allNavLinks(groups).filter((link) => !tabs.includes(link))
-  return (
-    <nav className="border-b">
-      <div className="relative flex h-14 items-center justify-between px-4">
-        <div className="md:hidden"><MobileMenuSheet state={state} /></div>
-        <div className="hidden w-72 md:block"><SearchTrigger onOpen={state.openSearch} className="w-full" /></div>
-        <Brand state={state} className="absolute left-1/2 -translate-x-1/2" />
-        <div className="hidden items-center gap-4 md:flex">
-          <RootCommunityNavButton />
-          <AccountMenu state={state} />
-        </div>
-        <div className="flex items-center md:hidden">
-          <RootCommunityNavButton mobile />
-          <SearchTrigger compact onOpen={state.openSearch} />
-        </div>
-      </div>
-      <div className="styled-scrollbar flex items-center gap-1 overflow-x-auto px-2 md:justify-center">
-        {tabs.map((link) => {
-          const active = isActiveLink(link, state.location.pathname)
-          return (
-            <Link
-              key={link.id}
-              to={link.href}
-              ref={active ? (node) => node?.scrollIntoView({ block: "nearest", inline: "center" }) : undefined}
-              className={cn(
-                "flex shrink-0 items-center gap-1.5 border-b-2 px-3 py-2 text-sm transition-colors",
-                active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
-              )}
-            >
-              <link.icon className="h-4 w-4" />
-              {link.title === "Recent raids" ? "Recent" : link.title}
-            </Link>
-          )
-        })}
-        <DropdownMenu modal={false}>
-          <DropdownMenuTrigger asChild>
-            <button type="button" className="flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-3 py-2 text-sm text-muted-foreground hover:text-foreground">
-              <MoreHorizontal className="h-4 w-4" />More
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[280px] p-2">
-            <GroupColumn group={{ id: "discover", title: "More tools", links: rest }} asMenuItems />
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
-    </nav>
-  )
-}
-
-/** Layout C: nearly empty bar; search and a full-width feature panel carry navigation. */
-function SpotlightLayout({ state }: { state: NavState }) {
-  const [open, setOpen] = useState(false)
-  const featured = featuredNavLinks()
-  return (
-    <nav className="relative border-b">
-      <div className="relative flex h-16 items-center justify-between px-4">
-        <div className="md:hidden"><MobileMenuSheet state={state} side="top" /></div>
-        <div className="hidden w-72 md:block"><SearchTrigger onOpen={state.openSearch} className="w-full" /></div>
-        <Brand state={state} className="absolute left-1/2 -translate-x-1/2" />
-        <div className="hidden items-center gap-3 md:flex">
-          <RootCommunityNavButton />
-          <Button variant="ghost" size="sm" onClick={() => setOpen((value) => !value)} aria-expanded={open} className="gap-1.5">
-            <Menu className="h-4 w-4" />Features<ChevronDown className={cn("h-3 w-3 transition-transform", open && "rotate-180")} />
-          </Button>
-          <AccountMenu state={state} />
-        </div>
-        <div className="flex items-center md:hidden">
-          <RootCommunityNavButton mobile />
-          <SearchTrigger compact onOpen={state.openSearch} />
-        </div>
-      </div>
-      {open && (
-        <div className="absolute inset-x-0 top-full z-40 hidden border-b bg-background shadow-xl md:block" onMouseLeave={() => setOpen(false)}>
-          <div className="mx-auto grid max-w-6xl grid-cols-3 gap-3 px-6 pt-5">
-            {featured.map((link) => (
-              <Link key={link.id} to={link.href} onClick={() => setOpen(false)}
-                className="group rounded-lg border bg-muted/30 p-4 transition-colors hover:border-foreground/30">
-                <div className="flex items-center gap-2">
-                  <link.icon className="h-5 w-5 text-primary" />
-                  <span className="font-semibold">{link.title}</span>
-                </div>
-                <p className="mt-2 text-sm text-muted-foreground">{link.description}</p>
-              </Link>
-            ))}
-          </div>
-          <div className="mx-auto flex max-w-6xl flex-wrap gap-x-6 gap-y-2 px-6 py-4 text-sm">
-            {allNavLinks().filter((link) => !link.featured).map((link) => (
-              <Link key={link.id} to={link.href} onClick={() => setOpen(false)} className="flex items-center gap-1.5 text-muted-foreground hover:text-foreground">
-                <link.icon className="h-4 w-4" />{link.title}
-              </Link>
-            ))}
-          </div>
-        </div>
-      )}
-    </nav>
-  )
-}
-
-export function NavBar({ layout = "mega" }: { layout?: NavBarLayout }) {
+export function NavBar() {
   const state = useNavBarState()
-  const Layout = layout === "tabs" ? TabsLayout : layout === "spotlight" ? SpotlightLayout : MegaLayout
   return (
     <>
-      <Layout state={state} />
+      <DesktopNav state={state} />
       <SearchPalette open={state.searchOpen} onOpenChange={state.setSearchOpen} />
       <WhatsNewDialog open={state.whatsNewOpen} onOpenChange={state.setWhatsNewOpen} />
     </>
