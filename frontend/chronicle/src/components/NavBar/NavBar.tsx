@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { Settings, Upload, LogOut, FileText, Shield, Key, Menu, Database, Server, Sparkles, Crown, ChevronDown, Compass, ArrowRight, MoreHorizontal } from "lucide-react"
+import { Settings, Upload, LogOut, FileText, Shield, Key, Menu, Database, Server, Sparkles, Crown, ChevronDown, Compass, MoreHorizontal } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { uploadsDisabledForSite, useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries"
@@ -133,10 +133,6 @@ function Brand({ state, className }: { state: NavState; className?: string }) {
   )
 }
 
-function NewBadge({ label }: { label: string }) {
-  return <span className="rounded-full bg-[#f0c060]/15 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-[#f0c060]">{label}</span>
-}
-
 function AccountMenuItem({ item }: { item: AccountItem }) {
   if ("href" in item) {
     return (
@@ -227,27 +223,6 @@ function MobileAccountSection({ state, close }: { state: NavState; close: () => 
   )
 }
 
-/** The tall feature card used to spotlight one headline feature (Modules). */
-function SpotlightCard({ link, onSelect, className }: { link: NavLink; onSelect?: () => void; className?: string }) {
-  return (
-    <Link
-      to={link.href}
-      onClick={onSelect}
-      className={cn("group flex flex-col justify-between gap-3 rounded-lg border border-[#f0c060]/30 bg-gradient-to-br from-[#f0c060]/15 via-[#f0c060]/5 to-transparent p-4 transition-colors hover:border-[#f0c060]/60", className)}
-    >
-      <div>
-        <div className="flex items-center gap-2">
-          <link.icon className="h-5 w-5 text-[#f0c060]" />
-          <span className="font-semibold text-foreground">{link.title}</span>
-          {link.badge && <NewBadge label={link.badge} />}
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">{link.description}</p>
-      </div>
-      <span className="flex items-center gap-1 text-xs font-medium text-[#f0c060]">Browse modules <ArrowRight className="h-3 w-3 transition-transform group-hover:translate-x-0.5" /></span>
-    </Link>
-  )
-}
-
 function GroupColumn({ group, onSelect, asMenuItems, compact }: { group: NavGroup; onSelect?: () => void; asMenuItems?: boolean; compact?: boolean }) {
   return (
     <div className="flex flex-col gap-0.5">
@@ -257,7 +232,7 @@ function GroupColumn({ group, onSelect, asMenuItems, compact }: { group: NavGrou
           <Link to={link.href} onClick={onSelect} className="flex items-start gap-3 rounded-md px-2 py-2 hover:bg-muted focus:bg-muted">
             <link.icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="flex flex-col">
-              <span className="flex items-center gap-2 text-sm font-medium text-foreground">{link.title}{link.badge && <NewBadge label={link.badge} />}</span>
+              <span className="flex items-center gap-2 text-sm font-medium text-foreground">{link.title}</span>
               {!compact && <span className="text-xs leading-snug text-muted-foreground">{link.description}</span>}
             </span>
           </Link>
@@ -268,19 +243,14 @@ function GroupColumn({ group, onSelect, asMenuItems, compact }: { group: NavGrou
   )
 }
 
-/** Every feature, grouped, with Modules spotlighted. Used as the desktop mega menu and the mobile menu. */
+/** Every feature, grouped. Used as the desktop mega menu and the mobile menu. */
 function FeatureDirectory({ onSelect, asMenuItems, mobile }: { onSelect?: () => void; asMenuItems?: boolean; mobile?: boolean }) {
   const groups = navGroups()
-  const modules = allNavLinks(groups).find((link) => link.id === "modules")
   return (
-    <div className={cn("grid gap-4", mobile ? "grid-cols-1" : "grid-cols-[1fr_1fr_220px]")}>
-      {mobile && modules && <SpotlightCard link={modules} onSelect={onSelect} />}
+    <div className={cn("grid gap-4", mobile ? "grid-cols-1" : "grid-cols-3")}>
       <GroupColumn group={groups[0]} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
-      <div className="flex flex-col gap-4">
-        <GroupColumn group={groups[1]} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
-        <GroupColumn group={{ ...groups[2], links: groups[2].links.filter((link) => link.id !== "modules") }} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
-      </div>
-      {!mobile && modules && <SpotlightCard link={modules} onSelect={onSelect} />}
+      <GroupColumn group={groups[1]} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
+      <GroupColumn group={groups[2]} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
     </div>
   )
 }
@@ -334,7 +304,7 @@ function MegaLayout({ state }: { state: NavState }) {
               <Compass className="h-4 w-4" />Explore<ChevronDown className="h-3 w-3" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[760px] p-4">
+          <DropdownMenuContent align="end" className="w-[720px] p-4">
             <FeatureDirectory asMenuItems />
           </DropdownMenuContent>
         </DropdownMenu>
@@ -351,7 +321,7 @@ function MegaLayout({ state }: { state: NavState }) {
 /** Layout B: a second row of tabs keeps headline features on screen at all times. */
 function TabsLayout({ state }: { state: NavState }) {
   const groups = navGroups()
-  const tabs = ["recent", "leaderboards", "armory", "ratings", "modules"]
+  const tabs = ["recent", "leaderboards", "armory", "ratings"]
     .map((id) => allNavLinks(groups).find((link) => link.id === id))
     .filter((link): link is NavLink => !!link)
   const rest = allNavLinks(groups).filter((link) => !tabs.includes(link))
@@ -383,9 +353,8 @@ function TabsLayout({ state }: { state: NavState }) {
                 active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
               )}
             >
-              <link.icon className={cn("h-4 w-4", link.badge && "text-[#f0c060]")} />
+              <link.icon className="h-4 w-4" />
               {link.title === "Recent raids" ? "Recent" : link.title}
-              {link.badge && <NewBadge label={link.badge} />}
             </Link>
           )
         })}
@@ -428,15 +397,13 @@ function SpotlightLayout({ state }: { state: NavState }) {
       </div>
       {open && (
         <div className="absolute inset-x-0 top-full z-40 hidden border-b bg-background shadow-xl md:block" onMouseLeave={() => setOpen(false)}>
-          <div className="mx-auto grid max-w-6xl grid-cols-4 gap-3 px-6 pt-5">
+          <div className="mx-auto grid max-w-6xl grid-cols-3 gap-3 px-6 pt-5">
             {featured.map((link) => (
               <Link key={link.id} to={link.href} onClick={() => setOpen(false)}
-                className={cn("group rounded-lg border p-4 transition-colors hover:border-foreground/30",
-                  link.badge ? "border-[#f0c060]/30 bg-gradient-to-br from-[#f0c060]/15 to-transparent" : "bg-muted/30")}>
+                className="group rounded-lg border bg-muted/30 p-4 transition-colors hover:border-foreground/30">
                 <div className="flex items-center gap-2">
-                  <link.icon className={cn("h-5 w-5", link.badge ? "text-[#f0c060]" : "text-primary")} />
+                  <link.icon className="h-5 w-5 text-primary" />
                   <span className="font-semibold">{link.title}</span>
-                  {link.badge && <NewBadge label={link.badge} />}
                 </div>
                 <p className="mt-2 text-sm text-muted-foreground">{link.description}</p>
               </Link>

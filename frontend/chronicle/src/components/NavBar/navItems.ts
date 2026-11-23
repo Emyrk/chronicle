@@ -13,8 +13,6 @@ export interface NavLink {
   keywords?: string[]
   /** Shown as a headline feature in layouts that spotlight features. */
   featured?: boolean
-  /** Short badge, e.g. "New". */
-  badge?: string
 }
 
 export interface NavGroup {
@@ -51,7 +49,7 @@ export function navGroups(): NavGroup[] {
       id: "build",
       title: "Build",
       links: [
-        { id: "modules", title: "Modules", href: "/modules", icon: Puzzle, featured: true, badge: "New", description: "Custom Lua panels for your raid logs. Use one or build your own.", keywords: ["lua", "addons", "panels", "custom", "workshop"] },
+        { id: "modules", title: "Modules", href: "/modules", icon: Puzzle, description: "Custom Lua panels for your raid logs. Use one or build your own.", keywords: ["lua", "addons", "panels", "custom", "workshop"] },
         { id: "talents", title: "Talent Builder", href: "/talents", icon: Sparkles, description: "Plan and share talent builds.", keywords: ["talents", "build", "spec"] },
         { id: "gear", title: "Gear Builder", href: "/gear/progression", icon: Shirt, description: "Plan gear upgrades raid by raid.", keywords: ["gear", "bis", "items", "loot"] },
         { id: "raidplanner", title: "Raid Planner", href: "/raidplanner", icon: Users, description: "Arrange groups and assignments for raid night.", keywords: ["groups", "assignments", "comp", "roster"] },

@@ -92,8 +92,8 @@ export const MegaMobileMenu: Story = {
 }
 
 // Layout B: a second row of always-visible feature tabs.
-export const Tabs: Story = { args: { layout: "tabs" }, parameters: { route: "/modules" } }
-export const TabsMobile: Story = { args: { layout: "tabs" }, globals: mobile, parameters: { route: "/modules" } }
+export const Tabs: Story = { args: { layout: "tabs" }, parameters: { route: "/leaderboards" } }
+export const TabsMobile: Story = { args: { layout: "tabs" }, globals: mobile, parameters: { route: "/leaderboards" } }
 
 // Layout C: a near-empty bar; a "Features" panel of cards and search do the work.
 export const Spotlight: Story = { args: { layout: "spotlight" } }
