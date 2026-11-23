@@ -27,7 +27,7 @@ const STEPS = [
   { icon: Tag, label: "Release", color: "#6ee7b7" },
 ];
 
-// Styled as an epic item tooltip: a big feature, short of a legendary launch.
+// Styled as a legendary item tooltip: a major launch.
 export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
   const close = () => onOpenChange(false);
 
@@ -40,13 +40,13 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
             alt=""
             width={56}
             height={56}
-            className="h-14 w-14 rounded border-2 border-quality-epic bg-[#08101c]"
+            className="h-14 w-14 rounded border-2 border-quality-legendary bg-[#08101c]"
           />
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-quality-epic">
-              Epic feature
+            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-quality-legendary">
+              Legendary feature
             </span>
-            <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-epic">
+            <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-legendary">
               Community modules
             </DialogTitle>
           </div>
@@ -55,7 +55,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
         <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
           <p className="text-foreground">Use: Add panels built by other raiders to your raids</p>
 
-          <div aria-hidden className="mt-3 flex items-center gap-3 rounded border border-quality-epic/30 bg-black/35 p-3 shadow-inner">
+          <div aria-hidden className="mt-3 flex items-center gap-3 rounded border border-quality-legendary/30 bg-black/35 p-3 shadow-inner">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 bg-white/5">
               <Radar className="h-5 w-5 text-sky-300" />
             </span>
@@ -79,7 +79,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
             <ul>
               {HIGHLIGHTS.map((text) => (
                 <li key={text} className="grid grid-cols-[14px_minmax(0,1fr)] gap-2.5">
-                  <span aria-hidden className="text-[10px] leading-6 text-quality-epic">◆</span>
+                  <span aria-hidden className="text-[10px] leading-6 text-quality-legendary">◆</span>
                   <span>{text}</span>
                 </li>
               ))}
@@ -93,7 +93,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
             <a
               href={whatsNewLink("/blog/modules", "whats_new_primary", "modules")}
               onClick={close}
-              className="inline-flex items-center gap-2 rounded border border-quality-epic/80 bg-[linear-gradient(180deg,#8a3fd0,#5a2290)] px-[18px] py-2.5 text-sm font-semibold text-white transition-[filter] hover:brightness-110"
+              className="inline-flex items-center gap-2 rounded border border-quality-legendary/80 bg-[linear-gradient(180deg,#d9700a,#8f4300)] px-[18px] py-2.5 text-sm font-semibold text-white transition-[filter] hover:brightness-110"
             >
               Watch how modules work
               <ArrowRight className="h-4 w-4" />
