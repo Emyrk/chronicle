@@ -958,6 +958,7 @@ func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {
 	require.True(t, first.Boss)
 	require.Equal(t, encounter.KillTypeWipe, first.KillType)
 	require.Len(t, first.Combat.Hostiles, 3)
+	require.Empty(t, first.Variant, "wiped council must remain unclassified")
 	require.Equal(t, []guid.GUID{oldAssembly[2]}, first.Remaining)
 
 	second := result.Encounters[1]
@@ -965,6 +966,7 @@ func TestUlduarAssemblyRespawnStartsNewEncounter(t *testing.T) {
 	require.True(t, second.Boss)
 	require.Equal(t, encounter.KillTypeClean, second.KillType)
 	require.Len(t, second.Combat.Hostiles, 3)
+	require.Equal(t, "medium", second.Variant, "only the respawned council death order determines the variant")
 	require.Empty(t, second.Remaining)
 }
 

@@ -20,6 +20,7 @@ func TestEncounterVariantMembershipsKeepCombinedAndIsolateMetrics(t *testing.T) 
 		variants []string
 	}{
 		{"Hodir", []string{"normal", "hard"}},
+		{"Assembly of Iron", []string{"normal", "medium", "hard"}},
 		{"Yogg-Saron", []string{"lights_0", "lights_1", "lights_2", "lights_3", "lights_4"}},
 	} {
 		t.Run(tc.boss, func(t *testing.T) { t.Parallel(); testVariantMemberships(t, tc.boss, tc.variants) })

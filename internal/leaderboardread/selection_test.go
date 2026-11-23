@@ -204,7 +204,28 @@ func TestYoggVariantKeys(t *testing.T) {
 		require.False(t, supportedEncounterVariant("Ulduar", "Hodir", key))
 		require.False(t, supportedEncounterVariant("Other", "Yogg-Saron", key))
 	}
-	for _, key := range []string{"", "normal", "hard", "lights_-1", "lights_5"} {
+	for _, key := range []string{"", "normal", "medium", "hard", "lights_-1", "lights_5"} {
 		require.False(t, supportedEncounterVariant("Ulduar", "Yogg-Saron", key))
+	}
+}
+
+func TestAssemblyVariantSelection(t *testing.T) {
+	t.Parallel()
+	rows := []database.ResolveLeaderboardConfigurationRow{{Kind: "instance", InstanceName: "Ulduar"}, {Kind: "boss", InstanceName: "Ulduar", EncounterName: "Assembly of Iron"}}
+	tenant := uuid.New()
+	fingerprints := make(map[string]bool)
+	for _, key := range []string{"", "normal", "medium", "hard"} {
+		r := Request{Instance: "Ulduar", Subject: "player", Kind: "boss", Score: "peak", Metric: "dps", Boss: "Assembly of Iron", EncounterVariant: key}
+		selection, err := Select(rows, r)
+		require.NoError(t, err)
+		fingerprint := Fingerprint(tenant, r, selection)
+		require.False(t, fingerprints[fingerprint], "each tier has a separate cursor cohort")
+		fingerprints[fingerprint] = true
+		r.EncounterVariant = ""
+		r.EncounterVariants = map[string]string{"Assembly of Iron": key}
+		if key != "" {
+			_, err = Select(rows, r)
+			require.NoError(t, err)
+		}
 	}
 }

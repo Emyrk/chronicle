@@ -2,7 +2,7 @@ import { StatisticsTab } from "@/pages/Leaderboards/Hub/StatisticsTab";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { EncounterVariantChips, EncounterVariantMark, EncounterVariantTooltipContent } from "./EncounterVariant";
-import { activeEncounterVariants, encounterVariantsEnabled, supportsEncounterVariant, withHighestEncounterVariants } from "./encounterVariant";
+import { activeEncounterVariants, encounterVariantLabel, encounterVariantOptions, encounterVariantsEnabled, highestEncounterVariant, isEncounterVariant, isHardEncounterVariant, supportsEncounterVariant, withHighestEncounterVariants } from "./encounterVariant";
 
 describe("encounter variant presentation", () => {
   it("only exposes proven Ulduar support", () => {
@@ -126,4 +126,42 @@ it("supports empty rich tooltips and preserves fallback for unknown formats", ()
   const rich = renderToStaticMarkup(<EncounterVariantMark variant="lights_1" tooltip="Thorim: Fury of the Storm" tooltipData={{ type: "yogg-light", auras: [62702] }} />);
   expect(rich).toContain('tabindex="0"');
   expect(rich).toContain('aria-label="Encounter variant: 1 Light');
+});
+
+
+it("exposes all three Assembly of Iron tiers with distinct labels and badges", () => {
+  expect(supportsEncounterVariant("Ulduar", "Assembly of Iron")).toBe(true);
+  expect(supportsEncounterVariant("Other", "Assembly of Iron")).toBe(false);
+  expect(encounterVariantOptions("Assembly of Iron")).toEqual(["normal", "medium", "hard"]);
+  for (const [variant, label, badge, chip] of [
+    ["normal", "Normal", "N", "N"],
+    ["medium", "Medium mode", "MM", "Medium"],
+    ["hard", "Hard mode", "HM", "Hard"],
+  ] as const) {
+    expect(isEncounterVariant(variant)).toBe(true);
+    expect(encounterVariantLabel(variant)).toBe(label);
+    const html = renderToStaticMarkup(<EncounterVariantChips boss="Assembly of Iron" active={variant} onSelect={() => {}} />);
+    expect(html.match(/<button /g)).toHaveLength(4);
+    expect(html.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(html).toContain(`aria-pressed="true" aria-label="Assembly of Iron ${label}"`);
+    expect(html).toContain(`>${chip}</button>`);
+    const mark = renderToStaticMarkup(<EncounterVariantMark variant={variant} />);
+    expect(mark).toContain(`>${badge}<`);
+    expect(mark).toContain(`Encounter variant: ${label}`);
+    expect(mark).toContain(variant === "normal" ? "bg-slate-500/15" : "bg-amber-500/15");
+  }
+});
+
+it("keeps council tiers independent and the Hard mode shortcut above Medium mode", () => {
+  const variants = { "Assembly of Iron": "medium" as const, Hodir: "normal" as const };
+  expect(activeEncounterVariants("Ulduar", ["Assembly of Iron", "Hodir"], variants)).toEqual(variants);
+  expect(activeEncounterVariants("Ulduar", ["Assembly of Iron"], variants)).toEqual({ "Assembly of Iron": "medium" });
+  expect(activeEncounterVariants("Ulduar", ["Hodir"], { Hodir: "medium" })).toBeUndefined();
+  expect(encounterVariantOptions("Hodir")).toEqual(["normal", "hard"]);
+  expect(highestEncounterVariant("Ulduar", "Assembly of Iron")).toBe("hard");
+  expect(isHardEncounterVariant("medium")).toBe(false);
+  expect(withHighestEncounterVariants("Ulduar", ["Assembly of Iron"], variants)).toEqual({ "Assembly of Iron": "hard", Hodir: "normal" });
+  expect(withHighestEncounterVariants("Ulduar", ["Hodir"], variants)).toEqual({ "Assembly of Iron": "medium", Hodir: "hard" });
+  expect(withHighestEncounterVariants("Ulduar", ["Assembly of Iron"], variants, true)).toEqual({ Hodir: "normal" });
+  expect(variants).toEqual({ "Assembly of Iron": "medium", Hodir: "normal" });
 });

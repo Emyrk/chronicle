@@ -20,6 +20,15 @@ func TestRankingEncounterVariants(t *testing.T) {
 		invalid           bool
 	}{
 		{name: "combined omitted"},
+		{name: "Assembly normal", raw: `{"Assembly of Iron":"normal"}`, want: `{"Assembly of Iron":"normal"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}},
+		{name: "Assembly medium", raw: `{"Assembly of Iron":"medium"}`, want: `{"Assembly of Iron":"medium"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}},
+		{name: "Assembly hard", raw: `{"Assembly of Iron":"hard"}`, want: `{"Assembly of Iron":"hard"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}},
+		{name: "Yogg-Saron rejects medium", raw: `{"Yogg-Saron":"medium"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}, invalid: true},
+		{name: "Hodir rejects medium", raw: `{"Hodir":"medium"}`, instances: []string{"Ulduar"}, bosses: []string{"Hodir"}, invalid: true},
+		{name: "XT-002 Deconstructor rejects medium", raw: `{"XT-002 Deconstructor":"medium"}`, instances: []string{"Ulduar"}, bosses: []string{"XT-002 Deconstructor"}, invalid: true},
+		{name: "General Vezax rejects medium", raw: `{"General Vezax":"medium"}`, instances: []string{"Ulduar"}, bosses: []string{"General Vezax"}, invalid: true},
+		{name: "Assembly of Iron rejects lights_0", raw: `{"Assembly of Iron":"lights_0"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}, invalid: true},
+		{name: "Assembly of Iron rejects combined", raw: `{"Assembly of Iron":"combined"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}, invalid: true},
 		{name: "Yogg 0 Light", raw: `{"Yogg-Saron":"lights_0"}`, want: `{"Yogg-Saron":"lights_0"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},
 		{name: "Yogg 1 Light", raw: `{"Yogg-Saron":"lights_1"}`, want: `{"Yogg-Saron":"lights_1"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},
 		{name: "Yogg 2 Light", raw: `{"Yogg-Saron":"lights_2"}`, want: `{"Yogg-Saron":"lights_2"}`, instances: []string{"Ulduar"}, bosses: []string{"Yogg-Saron"}},

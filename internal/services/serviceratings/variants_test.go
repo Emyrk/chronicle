@@ -16,7 +16,7 @@ import (
 // Unknown/legacy variant rows must remain Combined, never become Normal.
 func TestEncounterVariantPublicationAndInvalidation(t *testing.T) {
 	t.Parallel()
-	for _, pair := range [][2]string{{"normal", "hard"}, {"lights_1", "lights_0"}, {"lights_2", "lights_3"}, {"lights_4", "lights_0"}} {
+	for _, pair := range [][2]string{{"normal", "hard"}, {"normal", "medium"}, {"medium", "hard"}, {"lights_1", "lights_0"}, {"lights_2", "lights_3"}, {"lights_4", "lights_0"}} {
 		t.Run(pair[0]+"-"+pair[1], func(t *testing.T) {
 			t.Parallel()
 			testVariantPublicationAndInvalidation(t, pair[0], pair[1])

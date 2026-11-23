@@ -4,7 +4,7 @@ package encountervariant
 
 func Valid(key string) bool {
 	switch key {
-	case "normal", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4":
+	case "normal", "medium", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4":
 		return true
 	default:
 		return false
@@ -17,7 +17,14 @@ func Supported(instance, boss, key string) bool {
 	}
 	switch boss {
 	case "Yogg-Saron":
-		return key != "normal" && key != "hard"
+		switch key {
+		case "lights_0", "lights_1", "lights_2", "lights_3", "lights_4":
+			return true
+		default:
+			return false
+		}
+	case "Assembly of Iron":
+		return key == "normal" || key == "medium" || key == "hard"
 	case "Hodir", "XT-002 Deconstructor", "General Vezax":
 		return key == "normal" || key == "hard"
 	default:

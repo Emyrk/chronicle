@@ -37,9 +37,9 @@ export function EncounterVariantMark({ variant, tooltip, tooltipData }: {
   if (!isEncounterVariant(variant)) return null;
   const description = tooltip ? `Encounter variant: ${encounterVariantLabel(variant)}\n${tooltip}` : `Encounter variant: ${encounterVariantLabel(variant)}`;
   const rich = supportsRichTooltip(tooltipData);
-  const badge = <span className={difficultyChipClassName(isHardEncounterVariant(variant) ? "hard" : "")}
+  const badge = <span className={difficultyChipClassName(isHardEncounterVariant(variant) || variant === "medium" ? "hard" : "")}
     title={rich ? undefined : description} aria-label={description} tabIndex={rich ? 0 : undefined}>
-    {variant === "hard" ? "HM" : variant === "normal" ? "N" : encounterVariantLabel(variant)}
+    {variant === "hard" ? "HM" : variant === "medium" ? "MM" : variant === "normal" ? "N" : encounterVariantLabel(variant)}
   </span>;
   if (!rich) return badge;
   return <HintTooltip>
@@ -63,9 +63,9 @@ export function EncounterVariantChips({ boss, active, onSelect, disabledReason }
       disabled={!!disabledReason}
       title={disabledReason ?? (variant ? encounterVariantLabel(variant) : "Combined, including unclassified history")}
       onClick={() => onSelect(variant)}
-      className={cn(variant ? difficultyChipClassName(isHardEncounterVariant(variant) ? "hard" : "") : cn(CHIP, "bg-sky-500/15 text-sky-200 ring-sky-400/40"),
+      className={cn(variant ? difficultyChipClassName(isHardEncounterVariant(variant) || variant === "medium" ? "hard" : "") : cn(CHIP, "bg-sky-500/15 text-sky-200 ring-sky-400/40"),
         "cursor-pointer transition-opacity disabled:cursor-not-allowed disabled:opacity-25 disabled:grayscale", active === variant ? "ring-2" : "opacity-35 hover:opacity-80")}
-    >{variant === "normal" ? "N" : variant === "hard" ? "Hard" : variant ? encounterVariantLabel(variant) : "All"}</button>)}
+    >{variant === "normal" ? "N" : variant === "hard" ? "Hard" : variant === "medium" ? "Medium" : variant ? encounterVariantLabel(variant) : "All"}</button>)}
     {disabledReason && <HintTooltip>
       <TooltipTrigger asChild>
         <span role="note" tabIndex={0} aria-label={LOCKED_NOTE} className="inline-flex cursor-help items-center text-muted-foreground hover:text-foreground">
