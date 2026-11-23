@@ -40,6 +40,37 @@ describe("GuideUiScene", () => {
     expect(markup).toContain("class_mage.png")
   })
 
+  it("renders canvas shapes as SVG in the canvas's own pixel space", () => {
+    const scene = applySceneBatch(createInitialScene(), [{
+      op: "create",
+      id: "radar",
+      kind: "canvas",
+      parentId: UI_ROOT_ID,
+      props: {
+        x: 0, y: 0, width: 400, height: 300, anchor: "top-left",
+        shapes: [
+          { kind: "circle", x: 200, y: 150, r: 100, stroke: "#8c94a8", width: 1, alpha: 0.3 },
+          { kind: "arc", x: 200, y: 150, r: 120, from: -0.5, to: 0.5, width: 6, color: "#3b7cff", cap: "round", glow: 4 },
+          { kind: "pie", x: 250, y: 100, r: 8, value: 0.6, color: "#c79c6e", track: "#c79c6e40" },
+          { kind: "line", x1: 200, y1: 150, x2: 250, y2: 100, width: 2, color: "#4fd38a", dash: 6, gap: 4, offset: 2 },
+          { kind: "text", x: 260, y: 100, text: "Thorvald", align: "left" },
+          { kind: "icon", x: 200, y: 150, r: 30, icon: "spell_nature_healingwavelesser" },
+        ],
+      },
+    }])
+
+    const markup = renderToStaticMarkup(<GuideUiScene scene={scene} assets={new Map()} onNodeClick={() => {}} />)
+
+    expect(markup).toContain('viewBox="0 0 400 300"')
+    expect(markup).toContain('<circle cx="200" cy="150" r="100" fill="none" stroke="#8c94a8"')
+    expect(markup).toContain('stroke-linecap="round"')
+    expect(markup).toContain("drop-shadow")
+    expect(markup).toContain('stroke-dasharray="6 4"')
+    expect(markup).toContain(">Thorvald</text>")
+    expect(markup).toContain("spell_nature_healingwavelesser.webp")
+    expect(markup).toMatch(/<clipPath id="lua-canvas-[^"]+-5">/)
+  })
+
   it("renders line charts with series, legend and markers", () => {
     const scene = applySceneBatch(createInitialScene(), [{
       op: "create",

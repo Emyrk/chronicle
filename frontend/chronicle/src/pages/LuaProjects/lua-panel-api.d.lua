@@ -218,6 +218,39 @@ function ChronicleBreakout:SetScript(script, callback) end
 
 ---@alias ChronicleLineChartTimeSelection "off"|"seconds"|"milliseconds"
 
+---@alias ChronicleCanvasShapeKind "circle"|"arc"|"pie"|"line"|"text"|"icon"
+
+---One shape. `kind` picks which fields apply; colors are "#rrggbb[aa]" or {r, g, b, a} with components from 0 through 1.
+---Coordinates are pixels from the canvas's top-left corner, y growing downward.
+---@class ChronicleCanvasShape
+---@field kind ChronicleCanvasShapeKind
+---@field x? number (circle, arc, pie, text, icon) Center x; for text, the anchor x.
+---@field y? number (circle, arc, pie, text, icon) Center y; for text, its vertical middle.
+---@field r? number (circle, arc, pie, icon) Radius in pixels.
+---@field fill? string|number[] (circle) Fill color. Omit for a ring.
+---@field stroke? string|number[] (circle) Outline color. Omit for a disc.
+---@field width? number (circle, arc, line) Stroke width in pixels, centered on the radius for circles and arcs. Defaults to 1 for a circle's outline.
+---@field alpha? number Opacity from 0 through 1. Defaults to 1.
+---@field glow? number Soft glow in the shape's color, this many pixels wide.
+---@field from? number (arc) Start angle in radians. 0 points right; angles grow clockwise, so -math.pi/2 is the top.
+---@field to? number (arc) End angle in radians. Drawn clockwise when greater than from, counterclockwise when smaller; a full turn or more draws a ring.
+---@field color? string|number[] (arc, pie, line, text) Stroke color for arcs and lines, fill for pies, text color (default white) for text.
+---@field cap? "butt"|"round" (arc, line) Line ends. Defaults to "butt".
+---@field value? number (pie) Filled share from 0 through 1, like a clock hand sweeping clockwise.
+---@field track? string|number[] (pie) Color of the empty share. Omit to leave it empty.
+---@field start? number (pie) Angle where the fill starts, in radians. Defaults to -math.pi/2 (the top).
+---@field x1? number (line) Start x.
+---@field y1? number (line) Start y.
+---@field x2? number (line) End x.
+---@field y2? number (line) End y.
+---@field dash? number (line) Dash length in pixels. Omit for a solid line.
+---@field gap? number (line) Gap between dashes in pixels. Defaults to the dash length.
+---@field offset? number (line) Shifts the dash pattern along the line; change it over time to make dashes flow.
+---@field text? string (text) The text. Up to 4 KiB; no newlines.
+---@field size? number (text) Font size in pixels. Defaults to 14.
+---@field align? "left"|"center"|"right" (text) Which end of the text sits on x. Defaults to "left".
+---@field icon? string (icon) Icon name from Chronicle's dataset CDN, as for Texture:SetIcon, such as "spell_nature_healingwavelesser".
+
 ---Chronicle's standard player meter, with class colors and icons.
 ---@class ChroniclePlayerMetricChart: ChronicleRegion
 local ChroniclePlayerMetricChart = {}
@@ -325,11 +358,19 @@ function ChronicleLineChart:SetXRange(xMin, xMax) end
 ---@param yMax? number
 function ChronicleLineChart:SetYRange(yMin, yMax) end
 
+---A drawing surface for circles, rings, arcs, pies, lines, text and round icons. Replace the whole picture with SetShapes whenever it changes; later shapes draw on top of earlier ones.
+---@class ChronicleCanvas: ChronicleRegion
+local ChronicleCanvas = {}
+
+---Replace every shape, drawn in order. At most 4000.
+---@param shapes ChronicleCanvasShape[]
+function ChronicleCanvas:SetShapes(shapes) end
+
 ---Create a retained UI object. parent defaults to UIParent.
----@param frameType "Frame"|"FontString"|"Texture"|"Button"|"Breakout"|"PlayerMetricChart"|"LineChart"
+---@param frameType "Frame"|"FontString"|"Texture"|"Button"|"Breakout"|"PlayerMetricChart"|"LineChart"|"Canvas"
 ---@param id? string
 ---@param parent? ChronicleFrame
----@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChronicleBreakout|ChroniclePlayerMetricChart|ChronicleLineChart object
+---@return ChronicleFrame|ChronicleFontString|ChronicleTexture|ChronicleButton|ChronicleBreakout|ChroniclePlayerMetricChart|ChronicleLineChart|ChronicleCanvas object
 function CreateFrame(frameType, id, parent) end
 
 -- END GENERATED WIDGET DEFINITIONS
