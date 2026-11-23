@@ -77,6 +77,31 @@ func CareerFlavors(dataset, tenant database.WoWFlavor) database.WoWFlavor {
 	return flavors
 }
 
+// ResolveCareerInRealm uses the same eligible-kill activation rule as tenant-wide
+// careers, but limits evidence to one realm. Only Armory opts into this policy.
+func ResolveCareerInRealm(ctx context.Context, db interface {
+	CareerStore
+	LeaderboardCareerVariantActiveInRealm(context.Context, database.LeaderboardCareerVariantActiveInRealmParams) (bool, error)
+}, tenantID, realmID uuid.UUID, dataset, tenant database.WoWFlavor) (CareerPool, error) {
+	if realmID == uuid.Nil {
+		return CareerPool{}, fmt.Errorf("career activation requires realm identity")
+	}
+	return ResolveCareer(ctx, realmCareerStore{CareerStore: db, active: db.LeaderboardCareerVariantActiveInRealm, realm: realmID}, tenantID, dataset, tenant)
+}
+
+type realmCareerStore struct {
+	CareerStore
+	active func(context.Context, database.LeaderboardCareerVariantActiveInRealmParams) (bool, error)
+	realm  uuid.UUID
+}
+
+func (s realmCareerStore) LeaderboardCareerVariantActive(ctx context.Context, p database.LeaderboardCareerVariantActiveParams) (bool, error) {
+	return s.active(ctx, database.LeaderboardCareerVariantActiveInRealmParams{
+		TenantID: p.TenantID, RealmID: s.realm, InstanceName: p.InstanceName,
+		DifficultyName: p.DifficultyName, MaxPlayers: p.MaxPlayers, Bosses: p.Bosses,
+	})
+}
+
 func ResolveCareer(ctx context.Context, db CareerStore, tenantID uuid.UUID, dataset, tenant database.WoWFlavor) (CareerPool, error) {
 	if tenantID == uuid.Nil {
 		return CareerPool{}, fmt.Errorf("career requires tenant identity")

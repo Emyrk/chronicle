@@ -47,7 +47,7 @@ func (api *API) GetArmoryPlayerCareer(w http.ResponseWriter, r *http.Request) {
 		writeCareerError(w, r, err)
 		return
 	}
-	result, err := serviceratings.ReadPlayerCareer(r.Context(), db, tenant.ID, realm, player.ID.String())
+	result, err := serviceratings.ReadArmoryPlayerCareer(r.Context(), db, tenant.ID, realm, player.ID.String())
 	if err != nil {
 		writeCareerError(w, r, err)
 		return

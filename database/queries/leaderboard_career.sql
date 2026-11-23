@@ -26,3 +26,21 @@ SELECT (EXISTS (
       AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint
       AND encounter_name = ANY(@bosses::text[])
 ))::boolean AS active;
+
+-- name: LeaderboardCareerVariantActiveInRealm :one
+-- Input bosses are the CURRENT enabled exact boss identities from configuration,
+-- including optional bosses and zero-award bosses. Armory-only realm activation.
+-- Fact retraction by D1 makes activation retractable without a sticky active row.
+SELECT (EXISTS (
+    SELECT 1 FROM leaderboard_player_renown_facts
+    WHERE tenant_id = @tenant_id::uuid AND realm_id = @realm_id::uuid
+      AND instance_name = @instance_name::text
+      AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint
+      AND encounter_name = ANY(@bosses::text[])
+) OR EXISTS (
+    SELECT 1 FROM leaderboard_guild_renown_facts
+    WHERE tenant_id = @tenant_id::uuid AND realm_id = @realm_id::uuid
+      AND instance_name = @instance_name::text
+      AND difficulty_name = @difficulty_name::text AND max_players = @max_players::smallint
+      AND encounter_name = ANY(@bosses::text[])
+))::boolean AS active;

@@ -15224,6 +15224,48 @@ func (q *sqlQuerier) LeaderboardCareerVariantActive(ctx context.Context, arg Lea
 	return active, err
 }
 
+const leaderboardCareerVariantActiveInRealm = `-- name: LeaderboardCareerVariantActiveInRealm :one
+SELECT (EXISTS (
+    SELECT 1 FROM leaderboard_player_renown_facts
+    WHERE tenant_id = $1::uuid AND realm_id = $2::uuid
+      AND instance_name = $3::text
+      AND difficulty_name = $4::text AND max_players = $5::smallint
+      AND encounter_name = ANY($6::text[])
+) OR EXISTS (
+    SELECT 1 FROM leaderboard_guild_renown_facts
+    WHERE tenant_id = $1::uuid AND realm_id = $2::uuid
+      AND instance_name = $3::text
+      AND difficulty_name = $4::text AND max_players = $5::smallint
+      AND encounter_name = ANY($6::text[])
+))::boolean AS active
+`
+
+type LeaderboardCareerVariantActiveInRealmParams struct {
+	TenantID       uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	RealmID        uuid.UUID `db:"realm_id" json:"realm_id"`
+	InstanceName   string    `db:"instance_name" json:"instance_name"`
+	DifficultyName string    `db:"difficulty_name" json:"difficulty_name"`
+	MaxPlayers     int16     `db:"max_players" json:"max_players"`
+	Bosses         []string  `db:"bosses" json:"bosses"`
+}
+
+// Input bosses are the CURRENT enabled exact boss identities from configuration,
+// including optional bosses and zero-award bosses. Armory-only realm activation.
+// Fact retraction by D1 makes activation retractable without a sticky active row.
+func (q *sqlQuerier) LeaderboardCareerVariantActiveInRealm(ctx context.Context, arg LeaderboardCareerVariantActiveInRealmParams) (bool, error) {
+	row := q.db.QueryRow(ctx, leaderboardCareerVariantActiveInRealm,
+		arg.TenantID,
+		arg.RealmID,
+		arg.InstanceName,
+		arg.DifficultyName,
+		arg.MaxPlayers,
+		arg.Bosses,
+	)
+	var active bool
+	err := row.Scan(&active)
+	return active, err
+}
+
 const listLeaderboardCareerVariants = `-- name: ListLeaderboardCareerVariants :many
 SELECT instance_name, difficulty_name, max_players, required_flavors, include_average, include_renown, weight FROM leaderboard_career_variants
 WHERE required_flavors <@ $1::text[]

@@ -65,6 +65,20 @@ func requirePlayerCareerMode(ctx context.Context, tx database.Store, tenant uuid
 // ReadPlayerCareer reads persisted exact-cohort candidates, never live source
 // observations. It resolves policy once in the same snapshot as stored results.
 func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string) (PlayerCareerResult, error) {
+	return readPlayerCareer(ctx, store, tenant, realm, guid, false)
+}
+
+// ReadArmoryPlayerCareer applies realm-local raid activation only to the two
+// phased Capy realms. Stored scores, leaderboard reads, and OG cards stay global.
+func ReadArmoryPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string) (PlayerCareerResult, error) {
+	return readPlayerCareer(ctx, store, tenant, realm, guid, true)
+}
+
+func armoryUsesRealmActivation(tenantSlug, realmName string) bool {
+	return tenantSlug == "capy" && (realmName == "Eversong Wilds" || realmName == "Basin of Stars")
+}
+
+func readPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string, armory bool) (PlayerCareerResult, error) {
 	ctx, err := careerReadContext(ctx, tenant)
 	if err != nil {
 		return PlayerCareerResult{}, err
@@ -80,6 +94,25 @@ func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 		pool, err := CareerConfiguration(ctx, tx, tenant)
 		if err != nil {
 			return err
+		}
+		// Freshness is compared against the worker's tenant-wide policy, not the
+		// intentionally different Armory display pool. A realm unlock needs no backfill.
+		storedFingerprint := pool.Fingerprint
+		if armory {
+			t, err := tx.GetTenantByID(ctx, tenant)
+			if err != nil {
+				return err
+			}
+			r, err := tx.GetWoWServerRealm(ctx, realm)
+			if err != nil {
+				return err
+			}
+			if t.Slug.Valid && armoryUsesRealmActivation(t.Slug.String, r.Name) {
+				pool, err = careerConfiguration(ctx, tx, tenant, realm)
+				if err != nil {
+					return err
+				}
+			}
 		}
 		out.PoolFingerprint = pool.Fingerprint
 		out.Issues = pool.Issues
@@ -97,7 +130,7 @@ func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 			if err != nil {
 				return err
 			}
-			summary.RefreshPending = summary.RefreshPending || pending
+			summary.RefreshPending = row.PoolFingerprint != storedFingerprint || !row.ComputedAt.Valid || pending
 			out.Cohorts = append(out.Cohorts, PlayerCareer{row.PlayerClass, row.PlayerSpec, row.PlayerSubSpec, summary})
 		}
 		missing, err := tx.ListUnmaterializedLeaderboardPlayerCareers(ctx, database.ListUnmaterializedLeaderboardPlayerCareersParams{TenantID: tenant, RealmID: realm, PlayerGuid: guid})

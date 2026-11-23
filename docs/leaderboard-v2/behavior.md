@@ -180,6 +180,14 @@ and implementation details.
 - A variant is active iff the tenant has at least one currently eligible canonical
   boss kill in it. Losing the last eligible kill deactivates it. Neither a full
   clear nor a kill by the displayed subject is required.
+- Armory-only exception: on Capy's Eversong Wilds and Basin of Stars realms,
+  activation requires eligible boss-kill evidence in the displayed realm. Both
+  player and guild evidence count, without requiring a full clear. Raids with no
+  realm-local evidence are omitted from the Armory career denominator and raid
+  breakdown. Released raids remain zero-filled for characters without results.
+  This read-time adjustment preserves the stored metric choice and does not change
+  persisted career inputs, leaderboards, guild pages, or Open Graph cards. Realm
+  activation differences alone do not mark stored inputs as awaiting refresh.
 - Career Mastery and Peak average raid-wide values using an explicit career weight
   per exact variant, independent of Renown awards or earned counts. Weights resolve
   at reads. Migration 358 supplies the approved exact weights listed in
