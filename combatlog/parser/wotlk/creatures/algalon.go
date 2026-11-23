@@ -133,10 +133,12 @@ func (c *algalonCharacter) surrenderConfirmed() bool {
 		return c.incomingDamage*100 >= info.MaxHealth*algalonSurrenderHealthPercent
 	}
 
-	// Older logs may lack maximum-health metadata. Require a surviving majority
-	// so one missing death event cannot turn a wipe cleanup into a kill.
+	// Older logs may lack maximum-health metadata. A surrender can follow
+	// lingering damage with only a minority of the raid alive, so do not require
+	// a surviving majority. The aura-cleanup detector also checks the instance's
+	// known participants to reject full-raid wipes.
 	livingPlayers := len(c.seenPlayers) - len(c.deadPlayers)
-	return livingPlayers*2 > len(c.seenPlayers)
+	return livingPlayers > 0
 }
 
 func (c *algalonCharacter) keepAddsLinked(m messages.Message) {
