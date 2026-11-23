@@ -18,6 +18,7 @@ import { explainModuleError, type ModuleErrorContext, type ModuleErrorExplanatio
 import type { PanelFilterMode } from "../../../Guides/runtime/panelFilters"
 import type { ProcessorContext } from "../processorTypes"
 import { ModuleErrorCard } from "./ModuleErrorCard"
+import { incrementalReplayStep } from "./replayTime"
 
 /** Worker phases plus host-side wall time (includes copying the stream to the worker) and page drawing time. */
 export type LuaPanelRunMetrics = PanelReplayMetrics & { wallMs: number; drawMs: number }
@@ -107,6 +108,9 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   const [restarts, setRestarts] = useState(0)
   // The playhead an incremental replay has been delivered up to; null when not replaying incrementally.
   const sentUntilRef = useRef<number | null>(null)
+  // The debounced restart after the playhead moved back, and the playhead it last saw.
+  const restartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastUntilRef = useRef<number | null>(null)
   // True while the worker owes a replay-paused or replay-complete; only then does the watchdog run.
   const awaitingRef = useRef(false)
   // Chronicle.GetSpell answers come from the same cached spell query as spell icons and tooltips.
@@ -209,28 +213,39 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     const replayMs = replayRef.current?.ms ?? null
     if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "streams", streams: eventStreams, encounterIds: [...encounterIds], untilMs, replayMs }) }
     else runtime.postMessage({ type: "replay-time", ms: replayMs })
-    return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
+    return () => {
+      clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null
+      // The next worker replays to the current playhead, so a pending restart is moot.
+      if (restartTimerRef.current !== null) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null }
+    }
   }, [entrypoint, sources, streams, streamScope, maxEvents, filterMode, filterContext, capabilities, eventStreams, encounterIds, units, incrementalReplay, restarts])
 
   // Keep Lua's Chronicle.GetReplayTime in step with the playhead. An incremental replay first resumes up to it,
   // or restarts when the playhead moved back past what it already delivered.
   useEffect(() => {
     const sentUntil = sentUntilRef.current
+    const previousUntil = lastUntilRef.current
+    lastUntilRef.current = replayUntilMs
+    const cancelRestart = () => { if (restartTimerRef.current !== null) { clearTimeout(restartTimerRef.current); restartTimerRef.current = null } }
     if (incrementalReplay && replayUntilMs !== null && sentUntil !== null) {
-      if (replayUntilMs < sentUntil) {
-        // Scrubbing back would restart on every step, so wait until the playhead rests. Moving forward
-        // past what was delivered before the timer fires resumes instead (this effect's cleanup cancels it).
+      // Scrubbing back would restart on every step, so wait until the playhead stops moving back. Playing
+      // forward meanwhile does not postpone the restart; moving past what was delivered resumes instead.
+      const step = incrementalReplayStep(replayUntilMs, previousUntil, sentUntil, restartTimerRef.current !== null)
+      if (step === "wait") return
+      if (step === "arm") {
+        cancelRestart()
         if (replayDebounceMs <= 0) { setRestarts(count => count + 1); return }
-        const timer = setTimeout(() => setRestarts(count => count + 1), replayDebounceMs)
-        return () => clearTimeout(timer)
+        restartTimerRef.current = setTimeout(() => { restartTimerRef.current = null; setRestarts(count => count + 1) }, replayDebounceMs)
+        return
       }
-      if (replayUntilMs > sentUntil) {
+      cancelRestart()
+      if (step === "resume") {
         sentUntilRef.current = replayUntilMs
         awaitingRef.current = true
         workerRef.current?.postMessage({ type: "replay-time", ms: replayMs, untilMs: replayUntilMs })
         return
       }
-    }
+    } else cancelRestart()
     workerRef.current?.postMessage({ type: "replay-time", ms: replayMs })
   }, [replayMs, replayUntilMs, incrementalReplay, replayDebounceMs])
 

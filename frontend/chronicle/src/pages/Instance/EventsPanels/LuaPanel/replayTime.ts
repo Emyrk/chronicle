@@ -28,3 +28,14 @@ export function useThrottledReplayTime(timestampMs: number | null, startMs: numb
   }, [targetMs, targetUntil])
   return shown
 }
+
+/**
+ * What an incremental replay does when the playhead moves to `untilMs`: resume past what it has delivered, arm the
+ * restart timer, keep a pending restart waiting, or only update the replay time. Only moving further back re-arms
+ * the timer, so pressing play after scrubbing back still restarts once the debounce ends.
+ */
+export function incrementalReplayStep(untilMs: number, previousUntilMs: number | null, sentUntilMs: number, restartPending: boolean): "resume" | "arm" | "wait" | "time" {
+  if (untilMs > sentUntilMs) return "resume"
+  if (untilMs === sentUntilMs) return "time"
+  return !restartPending || (previousUntilMs !== null && untilMs < previousUntilMs) ? "arm" : "wait"
+}

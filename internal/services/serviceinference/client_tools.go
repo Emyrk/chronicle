@@ -110,6 +110,10 @@ var luaEditorClientTools = []clientToolDefinition{
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
 	{
+		ToolDefinition: ToolDefinition{Name: "control_preview_replay", Description: "Drive Replay in the user's visible Preview pane. enabled turns it on (playhead at the selection start) or off; position_ms seeks, in ms after the selection start; playing plays or pauses; speed sets the rate. Applied in that order; no arguments reads the state. Returns enabled, playing, position_ms, duration_ms, speed and the panel's replay mode. run_preview with replay_ms shows what the panel draws.", Parameters: json.RawMessage(`{"type":"object","properties":{"enabled":{"type":"boolean"},"playing":{"type":"boolean"},"position_ms":{"type":"number","minimum":0},"speed":{"type":"number","enum":[0.5,1,2,4,8]}},"additionalProperties":false}`)},
+		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "never",
+	},
+	{
 		ToolDefinition: ToolDefinition{Name: "run_startup_check", Description: "Start the current unsaved working copy in a fresh sandboxed browser worker and report whether Lua startup succeeded or the Lua error. No events are processed.", Parameters: json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
@@ -386,6 +390,22 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 				}
 				seen[id] = true
 			}
+		}
+	case "control_preview_replay":
+		var input struct {
+			Enabled    *bool    `json:"enabled"`
+			Playing    *bool    `json:"playing"`
+			PositionMS *float64 `json:"position_ms"`
+			Speed      *float64 `json:"speed"`
+		}
+		if err := decodeStrict(raw, &input); err != nil {
+			return nil, errors.New("invalid control_preview_replay arguments")
+		}
+		if input.PositionMS != nil && *input.PositionMS < 0 {
+			return nil, errors.New("control_preview_replay position_ms must be a non-negative number")
+		}
+		if input.Speed != nil && !slices.Contains([]float64{0.5, 1, 2, 4, 8}, *input.Speed) {
+			return nil, errors.New("control_preview_replay speed must be 0.5, 1, 2, 4 or 8")
 		}
 	case "read_lua_files", "run_startup_check":
 		var input struct{}

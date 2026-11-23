@@ -1,18 +1,8 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Pause, Play, SkipBack, SkipForward } from "lucide-react"
+import { applyReplayControl, REPLAY_SPEEDS, type PreviewReplayState, type ReplayBounds, type ReplayControl } from "./previewReplay"
 
-/** Start and end of the selected encounters in log epoch ms. */
-export type ReplayBounds = { startMs: number; endMs: number }
-
-const SPEEDS = [0.5, 1, 2, 4, 8] as const
 const STEP_MS = 5_000
-
-export interface PreviewReplayState {
-  /** The playhead in log epoch ms; null while Replay is off. */
-  playheadMs: number | null
-  playing: boolean
-  speed: number
-}
 
 function formatClock(ms: number) {
   const seconds = Math.max(0, Math.floor(ms / 1000))
@@ -34,6 +24,9 @@ export function usePreviewReplay(bounds: ReplayBounds | null) {
     setState(current => ({ ...current, playing: false, playheadMs: current.playheadMs === null || startMs === null ? null : startMs }))
   }
   const enabled = state.playheadMs !== null && startMs !== null && endMs !== null
+  // The agent's control_preview_replay reads the state it just set, before React re-renders.
+  const stateRef = useRef(state)
+  useEffect(() => { stateRef.current = state })
 
   useEffect(() => {
     if (!enabled || !state.playing || endMs === null) return
@@ -67,10 +60,18 @@ export function usePreviewReplay(bounds: ReplayBounds | null) {
     seek: (ms: number) => setState(current => current.playheadMs === null ? current : { ...current, playheadMs: clamp(ms) }),
     step: (deltaMs: number) => setState(current => current.playheadMs === null ? current : { ...current, playheadMs: clamp(current.playheadMs + deltaMs) }),
     setSpeed: (speed: number) => setState(current => ({ ...current, speed })),
+    /** Applies an agent's control_preview_replay call and returns the new state; null without a selection. */
+    control: (changes: ReplayControl): PreviewReplayState | null => {
+      if (startMs === null || endMs === null) return null
+      const next = applyReplayControl(stateRef.current, { startMs, endMs }, changes)
+      stateRef.current = next
+      setState(next)
+      return next
+    },
   }
 }
 
-type PreviewReplay = ReturnType<typeof usePreviewReplay>
+export type PreviewReplay = ReturnType<typeof usePreviewReplay>
 
 const iconButton = "rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
 
@@ -90,7 +91,7 @@ export function PreviewReplayControls({ replay }: { replay: PreviewReplay }) {
       value={Math.round(elapsedMs)} onChange={event => replay.seek(bounds.startMs + Number(event.target.value))} />
     <span className="font-mono tabular-nums text-muted-foreground" aria-label="Replay time">{formatClock(elapsedMs)} / {formatClock(durationMs)}</span>
     <select aria-label="Playback speed" className="rounded border border-border bg-background px-1 py-0.5" value={state.speed} onChange={event => replay.setSpeed(Number(event.target.value))}>
-      {SPEEDS.map(speed => <option key={speed} value={speed}>{speed}×</option>)}
+      {REPLAY_SPEEDS.map(speed => <option key={speed} value={speed}>{speed}×</option>)}
     </select>
   </div>
 }

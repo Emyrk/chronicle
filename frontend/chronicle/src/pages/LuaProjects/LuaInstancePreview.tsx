@@ -6,7 +6,7 @@ import type { PanelUnits } from "../Guides/runtime/panelUnits"
 import { PANEL_STREAMS, type EventStreams } from "../Guides/runtime/panelEvents"
 import { loadPreviewStreams, type PreviewStreamProvider } from "./previewStream"
 import { FrameSizeControls, PreviewFrame, type FrameSize } from "./PreviewFrame"
-import { PreviewReplayControls, usePreviewReplay, type ReplayBounds } from "./PreviewReplayControls"
+import { PreviewReplayControls, type PreviewReplay } from "./PreviewReplayControls"
 import { REPLAY_DISABLED_MESSAGE, useThrottledReplayTime } from "../Instance/EventsPanels/LuaPanel/replayTime"
 
 /** The caller must authorize instance access; the preview passes on every event in scope. */
@@ -25,8 +25,8 @@ export interface LuaInstancePreviewProps {
   /** Fixed preview size for checking layouts; null fills the canvas. Omit to hide the size controls. */
   frameSize?: FrameSize
   onFrameSizeChange?: (size: FrameSize) => void
-  /** Start and end of the selected encounters, for Replay playback; null hides Replay. */
-  replayBounds?: ReplayBounds | null
+  /** Replay playback from usePreviewReplay, which the page owns so its agent can drive it; null hides Replay. */
+  replay?: PreviewReplay | null
 }
 
 interface Run { id: number; instanceId: string; panel: PanelPackage; selection: string; encounterIds: readonly string[]; streams: EventStreams }
@@ -44,7 +44,7 @@ function readAutoPreview(): boolean {
  * Ephemeral browser-only preview. No package lookup, upload or server execution. Runs on click, or
  * with Auto on, after every edit (including AI diffs) and encounter selection change.
  */
-export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, autoRun = false, frameSize = null, onFrameSizeChange, replayBounds = null }: LuaInstancePreviewProps) {
+export function LuaInstancePreview({ panel, instanceId, encounterIds, events, units, autoRun = false, frameSize = null, onFrameSizeChange, replay = null }: LuaInstancePreviewProps) {
   const [measured, setMeasured] = useState<{ width: number; height: number } | null>(null)
   const [run, setRun] = useState<Run | null>(null)
   const [busy, setBusy] = useState(false)
@@ -53,12 +53,11 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
   const controller = useRef<AbortController | null>(null)
   const generation = useRef(0)
   const selection = JSON.stringify(encounterIds)
-  const replay = usePreviewReplay(replayBounds)
-  const replayOn = replay.state.playheadMs !== null
-  const replayTime = useThrottledReplayTime(run?.panel.replay ? replay.state.playheadMs : null, replay.bounds?.startMs ?? null)
-  const replayStartMs = replay.bounds?.startMs
-  const seekReplay = replay.seek
-  const onSetReplayTime = useMemo(() => replayOn && replayStartMs !== undefined ? (ms: number) => seekReplay(replayStartMs + ms) : undefined, [replayOn, replayStartMs, seekReplay])
+  const replayOn = !!replay && replay.state.playheadMs !== null
+  const replayTime = useThrottledReplayTime(run?.panel.replay && replay ? replay.state.playheadMs : null, replay?.bounds?.startMs ?? null)
+  const replayStartMs = replay?.bounds?.startMs
+  const seekReplay = replay?.seek
+  const onSetReplayTime = useMemo(() => replayOn && replayStartMs !== undefined && seekReplay ? (ms: number) => seekReplay(replayStartMs + ms) : undefined, [replayOn, replayStartMs, seekReplay])
   const safeMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("safe") === "1"
 
   // With Auto off an input change clears the result; with Auto on the old result stays visible until
@@ -147,14 +146,14 @@ export function LuaInstancePreview({ panel, instanceId, encounterIds, events, un
         <label className="flex items-center gap-1.5 text-xs" title="Re-run the preview automatically after edits, AI changes and encounter selection changes">
           <Switch size="sm" checked={auto} onCheckedChange={toggleAuto} aria-label="Auto preview" /> Auto
         </label>
-        {replay.bounds && <label className="flex items-center gap-1.5 text-xs" title="Preview the panel in Replay mode, with a playhead like the instance page's Replay controls">
+        {replay?.bounds && <label className="flex items-center gap-1.5 text-xs" title="Preview the panel in Replay mode, with a playhead like the instance page's Replay controls">
           <Switch size="sm" checked={replayOn} onCheckedChange={replay.setEnabled} aria-label="Replay mode" /> Replay
         </label>}
         {visible && !current && <span role="status" className="text-[11px] text-muted-foreground">{busy ? "Updating…" : "Waiting for changes to settle…"}</span>}
         {onFrameSizeChange && <div className="ml-auto"><FrameSizeControls size={frameSize} measured={visible ? measured : null} onChange={onFrameSizeChange} /></div>}
         <span className={`${onFrameSizeChange ? "" : "ml-auto "}whitespace-nowrap text-[11px] text-muted-foreground`} title={`Streams: ${panel.streams.join(", ") || "none"}. Nothing is uploaded or published.`}>{panel.streams.length === 1 ? `${panel.streams[0]} events` : `${panel.streams.length} streams`} · runs locally</span>
       </div>
-      <PreviewReplayControls replay={replay} />
+      {replay && <PreviewReplayControls replay={replay} />}
       {replayOn && !panel.replay && <p role="status" className="text-[11px] text-muted-foreground">Add <code>"replay": "full"</code> or <code>"replay": "incremental"</code> to project.json to opt into Replay mode.</p>}
       {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
       {visible && (() => {
