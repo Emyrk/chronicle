@@ -6,6 +6,8 @@ import type { EventStreams } from "../Guides/runtime/panelEvents"
 import type { PanelReplayMetrics } from "../Guides/runtime/panelWorker"
 import type { PanelUnits } from "../Guides/runtime/panelUnits"
 import { explainModuleError, formatModuleError, type ModulePhase } from "../Guides/runtime/moduleErrors"
+import type { PanelReplayTime } from "../Instance/EventsPanels/LuaPanel/LuaPanelHost"
+import { REPLAY_DISABLED_MESSAGE } from "../Instance/EventsPanels/LuaPanel/replayTime"
 
 /** The parts of a Worker the runner uses, so tests can drive the worker handler directly. */
 export interface PreviewWorker {
@@ -21,6 +23,8 @@ export interface PreviewRunInput {
   streams?: EventStreams
   encounterIds: readonly string[]
   units?: PanelUnits
+  /** Preview in Replay mode at this playhead; the panel must declare `replay`. */
+  replay?: PanelReplayTime
 }
 
 export interface PreviewRunResult {
@@ -87,7 +91,8 @@ const defaultWorker = (): PreviewWorker => new Worker(new URL("../Guides/runtime
  * the result as text so the workshop assistant can read errors and output without the user pasting them.
  */
 export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createWorker: () => PreviewWorker = defaultWorker): Promise<PreviewRunResult> {
-  const { panel, streams, encounterIds, units } = input
+  const { panel, streams, encounterIds, units, replay } = input
+  if (replay && !panel.replay) return Promise.resolve({ ok: false, error: REPLAY_DISABLED_MESSAGE, explanation: `Add "replay": "full" or "replay": "incremental" to project.json to preview Replay mode.`, nodes: 0, output: "", truncated: false })
   return new Promise((resolve, reject) => {
     let worker: PreviewWorker
     try { worker = createWorker() } catch { resolve({ ok: false, error: "This browser cannot start a Lua worker.", nodes: 0, output: "", truncated: false }); return }
@@ -118,7 +123,7 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
       if (message?.type === "progress") { armWatchdog(); return }
       // The preview reports one snapshot; it never answers Chronicle.GetSpell, so names stay placeholders.
       if (message?.type === "spell-request") return
-      if (message?.type === "replay-complete") {
+      if (message?.type === "replay-complete" || message?.type === "replay-paused") {
         const m = message.metrics
         finish({ ok: true, metrics: m && { events: m.events, encounters: m.encounters, totalMs: round(m.totalMs), luaMs: round(m.luaMs), completeMs: round(m.completeMs), uiOperations: m.uiOperations } })
         return
@@ -127,7 +132,8 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
         const parsed = parseWorkerMessage(data)
         if (parsed.type === "batch") scene = applySceneBatch(scene, parsed.operations)
         if (parsed.type === "ready") {
-          if (replaying) { armWatchdog(); worker.postMessage({ type: "streams", streams, encounterIds: [...encounterIds] }) }
+          const untilMs = replay && panel.replay === "incremental" ? replay.untilMs : undefined
+          if (replaying) { armWatchdog(); worker.postMessage({ type: "streams", streams, encounterIds: [...encounterIds], untilMs, replayMs: replay?.ms ?? null }) }
           // Ready follows all startup batches, including when the panel draws nothing.
           else finish({ ok: true })
         }
@@ -147,14 +153,26 @@ export function runPreview(input: PreviewRunInput, signal?: AbortSignal, createW
 }
 
 /** Mirrors the server's run_preview schema; the browser never trusts model arguments. */
-export function parseRunPreviewArgs(value: unknown): { encounterIds?: string[] } {
+export function parseRunPreviewArgs(value: unknown): { encounterIds?: string[]; replayMs?: number } {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Invalid run_preview arguments.")
   const input = value as Record<string, unknown>
-  if (Object.keys(input).some(key => key !== "encounter_ids")) throw new Error("run_preview only accepts encounter_ids.")
-  if (input.encounter_ids === undefined) return {}
+  if (Object.keys(input).some(key => key !== "encounter_ids" && key !== "replay_ms")) throw new Error("run_preview only accepts encounter_ids and replay_ms.")
+  const replayMs = input.replay_ms
+  if (replayMs !== undefined && (typeof replayMs !== "number" || !Number.isFinite(replayMs) || replayMs < 0)) throw new Error("replay_ms must be a non-negative number of milliseconds.")
+  const result: { encounterIds?: string[]; replayMs?: number } = replayMs === undefined ? {} : { replayMs }
+  if (input.encounter_ids === undefined) return result
   const ids = input.encounter_ids
   if (!Array.isArray(ids) || !ids.length || ids.length > 100 || ids.some(id => typeof id !== "string" || !id || id.length > 200) || new Set(ids).size !== ids.length) {
     throw new Error("encounter_ids must be 1 to 100 distinct encounter ids.")
   }
-  return { encounterIds: ids as string[] }
+  return { ...result, encounterIds: ids as string[] }
+}
+
+/** Start and end (epoch ms) of the selected encounters, like the instance page's Replay bounds. */
+export function selectionBounds(encounters: readonly { id: string; start_time: string; end_time: string }[], ids: readonly string[]): { startMs: number; endMs: number } | null {
+  const selected = encounters.filter(encounter => ids.includes(encounter.id))
+  if (!selected.length) return null
+  const startMs = Math.min(...selected.map(encounter => new Date(encounter.start_time).getTime()))
+  const endMs = Math.max(...selected.map(encounter => new Date(encounter.end_time).getTime()))
+  return Number.isFinite(startMs) && Number.isFinite(endMs) && endMs >= startMs ? { startMs, endMs } : null
 }

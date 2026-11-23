@@ -1,7 +1,7 @@
 import { unzip, type Unzipped } from "fflate"
 import { inspectArchive, normalizeExtractedFiles } from "../Guides/package/archive"
 import type { PanelPackage } from "../Guides/package/panelLoader"
-import { PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelStream, type PanelStreamScope } from "../Guides/runtime/panelEvents"
+import { PANEL_REPLAY_MODES, PANEL_STREAM_SCOPES, PANEL_STREAMS, type PanelReplayMode, type PanelStream, type PanelStreamScope } from "../Guides/runtime/panelEvents"
 import { PANEL_FILTER_MODES, type PanelFilterMode } from "../Guides/runtime/panelFilters"
 import { MODULE_ICON_NAMES } from "./moduleIcons"
 import type { LuaProject } from "./api"
@@ -93,7 +93,7 @@ export function validateEditorFiles(project: Pick<LuaProject, "kind" | "name" | 
   try { parsed = JSON.parse(files.manifest) } catch { throw new Error("project.json must contain valid JSON.") }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("project.json must be an object.")
   const manifest = parsed as Record<string, unknown>
-  const fields = ["manifest_version", "kind", "name", "slug", "entrypoint", "capabilities", "streams", "stream_scope", "filter_mode", "max_events", "assets", "icon"]
+  const fields = ["manifest_version", "kind", "name", "slug", "entrypoint", "capabilities", "streams", "stream_scope", "filter_mode", "max_events", "replay", "assets", "icon"]
   if (Object.keys(manifest).some(key => !fields.includes(key)) || manifest.manifest_version !== 1 ||
     manifest.kind !== project.kind || manifest.name !== project.name || manifest.slug !== project.slug ||
     manifest.entrypoint !== "main.lua") {
@@ -112,6 +112,9 @@ export function validateEditorFiles(project: Pick<LuaProject, "kind" | "name" | 
   }
   if (manifest.max_events !== undefined && (typeof manifest.max_events !== "number" || !Number.isSafeInteger(manifest.max_events) || manifest.max_events < 1)) {
     throw new Error("max_events in project.json must be a positive integer.")
+  }
+  if (manifest.replay !== undefined && !PANEL_REPLAY_MODES.includes(manifest.replay as PanelReplayMode)) {
+    throw new Error(`replay in project.json must be one of: ${PANEL_REPLAY_MODES.join(", ")}. Omit it to disable the panel during Replay.`)
   }
   assertStringList(manifest.assets, [], "assets")
 }
@@ -143,13 +146,14 @@ function entry(name: string, data: Uint8Array): Uint8Array {
 
 export function panelPackageFromWorkingCopy(project: Pick<LuaProject, "kind" | "name" | "slug">, files: EditorFiles): PanelPackage {
   validateEditorFiles(project, files)
-  const manifest = JSON.parse(files.manifest) as { capabilities: ("ui" | "input")[]; streams: PanelStream[]; stream_scope?: PanelStreamScope; filter_mode?: PanelFilterMode; max_events?: number }
+  const manifest = JSON.parse(files.manifest) as { capabilities: ("ui" | "input")[]; streams: PanelStream[]; stream_scope?: PanelStreamScope; filter_mode?: PanelFilterMode; max_events?: number; replay?: PanelReplayMode }
   // Validation above guarantees this is a two-file, asset-free panel package.
   return {
     name: project.name, entrypoint: "main.lua", sources: { "main.lua": files.lua },
     capabilities: manifest.capabilities, streams: manifest.streams, streamScope: manifest.stream_scope ?? "selection",
     filterMode: manifest.filter_mode ?? "none",
     ...(manifest.max_events !== undefined && { maxEvents: manifest.max_events }),
+    ...(manifest.replay !== undefined && { replay: manifest.replay }),
     assets: new Map<string, Uint8Array>(),
   }
 }

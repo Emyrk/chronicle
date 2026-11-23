@@ -44,7 +44,7 @@ describe("LuaPanelHost startup", () => {
     }
     vi.stubGlobal("Worker", TestWorker)
     LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": 'CreateFrame("Frame", "startup", UIParent)' }, streams: [], capabilities: ["ui"] })
-    const effect = hooks.effects[1]
+    const effect = hooks.effects[2]
     const cleanup = effect()
     const scene = () => hooks.states[0] as RetainedScene
     try {
@@ -78,7 +78,7 @@ describe("LuaPanelHost watchdog", () => {
     vi.stubGlobal("Worker", ManualWorker)
     const eventStreams = { damage: new Uint8Array() } as unknown as EventStreams
     LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": "" }, streams: ["damage"], eventStreams, capabilities: ["ui", "input"] })
-    const cleanup = hooks.effects[1]()
+    const cleanup = hooks.effects[2]()
     const error = () => hooks.states[1]
     try {
       const worker = workers[0]
@@ -105,7 +105,7 @@ describe("LuaPanelHost watchdog", () => {
     })
     const eventStreams = { damage: new Uint8Array() } as unknown as EventStreams
     LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": "" }, streams: ["damage"], eventStreams, capabilities: ["ui"] })
-    const cleanup = hooks.effects[1]()
+    const cleanup = hooks.effects[2]()
     try {
       workers[0].onmessage?.({ data: { type: "ready", protocolVersion: 1 } })
       vi.advanceTimersByTime(10_001)
@@ -126,7 +126,7 @@ describe("LuaPanelHost time range", () => {
       constructor() { workers.push(this) }
     })
     LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": "" }, streams: [], capabilities: ["ui", "input"], ...props })
-    const cleanup = hooks.effects[1]()
+    const cleanup = hooks.effects[2]()
     return { worker: workers[0], cleanup }
   }
 
@@ -135,7 +135,7 @@ describe("LuaPanelHost time range", () => {
     const { worker, cleanup } = host({ timeRange: { startMs: 1000, endMs: null }, onSetTimeRange })
     try {
       // The range effect runs after the worker effect and records the current range for new workers.
-      hooks.effects[2]()
+      hooks.effects[4]()
       const sent = worker.postMessage.mock.calls.map(([message]) => message)
       expect(sent[0]).toMatchObject({ type: "start" })
       expect(sent).toContainEqual({ type: "time-range", range: { startMs: 1000, endMs: null } })
@@ -180,7 +180,7 @@ describe("LuaPanelHost spell lookups", () => {
       return { name: { "0": "Frostbolt" }, subtext: { "0": "Rank 4" }, spell_icon: { TextureFilename: "Spell_Frost_FrostBolt02" } }
     })
     LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": "" }, streams: [], capabilities: ["ui"] })
-    const cleanup = hooks.effects[1]()
+    const cleanup = hooks.effects[2]()
     try {
       const worker = workers[0]
       worker.onmessage?.({ data: { type: "spell-request", ids: [116, 404] } })
@@ -192,6 +192,47 @@ describe("LuaPanelHost spell lookups", () => {
       expect(hooks.states[1]).toBeNull()
 
       worker.onmessage?.({ data: { type: "spell-request", ids: [0] } })
+      expect(hooks.states[1]).not.toBeNull()
+    } finally { cleanup?.() }
+  })
+})
+
+describe("LuaPanelHost Replay", () => {
+  const start = (incremental: boolean, onSetReplayTime?: (ms: number) => void) => {
+    const workers: Array<{ onmessage: ((event: { data: unknown }) => void) | null; postMessage: ReturnType<typeof vi.fn> }> = []
+    vi.stubGlobal("Worker", class {
+      onmessage = null
+      onerror = null
+      terminate = vi.fn()
+      postMessage = vi.fn()
+      constructor() { workers.push(this) }
+    })
+    const eventStreams = { damage: new Uint8Array() } as unknown as EventStreams
+    LuaPanelHost({ entrypoint: "main.lua", sources: { "main.lua": "" }, streams: ["damage"], eventStreams, encounterIds: ["e1"], capabilities: ["ui", "input"],
+      replay: { ms: 5000, untilMs: 1_005_000 }, incremental, onSetReplayTime })
+    // The playhead ref effect runs before the worker effect, so the first replay already knows where to stop.
+    hooks.effects[1]()
+    const cleanup = hooks.effects[2]()
+    return { worker: workers[0], cleanup }
+  }
+  const streamsMessage = (worker: { postMessage: ReturnType<typeof vi.fn> }) => worker.postMessage.mock.calls.map(([message]) => message).find(message => message.type === "streams")
+
+  it("stops an incremental replay at the playhead and tells Lua the replay time", () => {
+    const { worker, cleanup } = start(true)
+    try {
+      expect(streamsMessage(worker)).toMatchObject({ untilMs: 1_005_000, replayMs: 5000 })
+    } finally { cleanup?.() }
+  })
+
+  it("replays everything in full mode and forwards valid SetReplayTime requests", () => {
+    const onSetReplayTime = vi.fn()
+    const { worker, cleanup } = start(false, onSetReplayTime)
+    try {
+      expect(streamsMessage(worker)).toMatchObject({ untilMs: undefined, replayMs: 5000 })
+      worker.onmessage?.({ data: { type: "set-replay-time", ms: 1234 } })
+      expect(onSetReplayTime).toHaveBeenCalledWith(1234)
+      worker.onmessage?.({ data: { type: "set-replay-time", ms: -1 } })
+      expect(onSetReplayTime).toHaveBeenCalledOnce()
       expect(hooks.states[1]).not.toBeNull()
     } finally { cleanup?.() }
   })

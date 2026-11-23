@@ -9,8 +9,8 @@ import LuaEventsPanel from "./LuaEventsPanel"
 // A synchronous hook harness keeps these state/transport tests independent of DOM,
 // networking, stream decoding, and worker startup.
 const mock = vi.hoisted(() => ({
-  states: [] as unknown[], cursor: 0, sync: false,
-  panel: { name: "Test", filterMode: "prefilter" as string | undefined, streams: [], assets: [] },
+  states: [] as unknown[], cursor: 0, sync: false, setTimestamp: (() => {}) as (value: Date) => void,
+  panel: { name: "Test", filterMode: "prefilter" as string | undefined, replay: undefined as string | undefined, streams: [], assets: [] },
 }))
 vi.mock("react", async original => ({
   ...await original<typeof import("react")>(),
@@ -35,7 +35,9 @@ vi.mock("@/hooks/instanceEvents", () => ({ useInstanceEventsContext: () => ({ fe
 vi.mock("../../../LuaProjects/api", () => ({ channelSha: () => "sha" }))
 vi.mock("./luaPanelRegistry", () => ({ parseLuaPanelRef: () => ({ id: "test", channel: "stable" }) }))
 vi.mock("../PanelTimingContext", () => ({ usePanelTiming: () => {}, usePanelTimingContext: () => null }))
-vi.mock("../../SyncModeContext", () => ({ useSyncModeContextOptional: () => ({ enabled: mock.sync }) }))
+vi.mock("../../SyncModeContext", () => ({ useSyncModeContextOptional: () => ({
+  enabled: mock.sync, currentTimestamp: new Date(61_000), encounterBounds: { start: new Date(1_000), end: new Date(301_000) }, setTimestamp: mock.setTimestamp,
+}) }))
 vi.mock("../../TimeRangeContext", () => ({ useTimeRangeContextOptional: () => null }))
 vi.mock("../PanelFilterEditor", () => ({ PanelFilterEditor: () => null }))
 vi.mock("../PanelSelector", () => ({ PanelSelector: () => null }))
@@ -72,7 +74,7 @@ function open() {
   ;(button.props.onClick as () => void)()
 }
 beforeEach(() => {
-  mock.states = []; mock.cursor = 0; mock.sync = false; mock.panel.filterMode = "prefilter"
+  mock.states = []; mock.cursor = 0; mock.sync = false; mock.panel.filterMode = "prefilter"; mock.panel.replay = undefined
   props = { panelType: "lua:test:stable", context: { instance: { players: {}, units: {} }, selectedEncounterIds: [], entitySelection: { playerIds: new Set(), enemyIds: new Set() } }, seedFilters: seed, seedFiltersVersion: 1, onFiltersChange: vi.fn() } as unknown as EventsPanelProps
 })
 
@@ -113,6 +115,7 @@ describe("LuaEventsPanel filters", () => {
   })
 
   it("hides opt-out editing and keeps applied filters during Sync", () => {
+    mock.panel.replay = "full"
     open()
     mock.sync = true
     expect(editor()).toBeUndefined()
@@ -121,6 +124,26 @@ describe("LuaEventsPanel filters", () => {
     mock.panel.filterMode = "none"
     expect(render().find(element => element.props["aria-label"] === "Edit panel filters")).toBeUndefined()
     expect(host().props.filterContext).toBeUndefined()
+  })
+
+  it("disables modules that did not opt into Replay while it runs", () => {
+    mock.sync = true
+    expect(host()).toBeUndefined()
+    expect(render().find(element => element.props["data-lua-replay-disabled"])?.props.children).toBe("This panel did not opt into replay mode, and is disabled.")
+  })
+
+  it("passes the Replay playhead and seeks for modules that opted in", () => {
+    mock.sync = true
+    mock.panel.replay = "incremental"
+    mock.setTimestamp = vi.fn()
+    render()
+    const panel = host()
+    expect(panel.props.replay).toEqual({ ms: 60_000, untilMs: 61_000 })
+    expect(panel.props.incremental).toBe(true)
+    ;(panel.props.onSetReplayTime as (ms: number) => void)(10_000)
+    expect(mock.setTimestamp).toHaveBeenCalledWith(new Date(11_000))
+    ;(panel.props.onSetReplayTime as (ms: number) => void)(900_000)
+    expect(mock.setTimestamp).toHaveBeenLastCalledWith(new Date(301_000))
   })
 
   it("defaults to no filter editor when filterMode is omitted", () => {

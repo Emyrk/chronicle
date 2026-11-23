@@ -14,7 +14,7 @@ import { useOptionalLocalMcp } from "@/features/chat/mcp/LocalMcpProvider"
 import { panelPackageFromWorkingCopy, validateEditorFiles, type EditorFiles } from "./editorFiles"
 import { applyLuaFileEdit, editorFileKey, LUA_EDITOR_CAPABILITY, parseLuaFileEdit, workingCopyFiles, type LuaToolFile } from "./luaEditorTools"
 import { createCachedStreamProvider, loadPreviewStreams } from "./previewStream"
-import { parseRunPreviewArgs, runPreview } from "./previewRun"
+import { parseRunPreviewArgs, runPreview, selectionBounds } from "./previewRun"
 import { runStartupCheck } from "./startupCheck"
 import { buildPanelUnits } from "../Guides/runtime/panelUnits"
 import { resolveInstanceUnits } from "../Instance/instanceUnits"
@@ -259,7 +259,8 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
       run_preview: async (args, { signal }) => {
         const current = requireCopy()
         let requested: string[] | undefined
-        try { requested = parseRunPreviewArgs(args).encounterIds }
+        let replayMs: number | undefined
+        try { ({ encounterIds: requested, replayMs } = parseRunPreviewArgs(args)) }
         catch (error) { return { ok: false, error: errorMessage(error, "Invalid run_preview arguments.") } }
         const { instanceId: previewInstance, units, encounters: available } = previewRef.current
         if (!previewInstance) return { ok: false, error: "An instance must be selected first. Ask the user to pick an instance in the Preview pane." }
@@ -275,8 +276,11 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
         try { panel = panelPackageFromWorkingCopy(projectQuery.data!, { manifest: current.manifest, lua: current.source, readme: current.readme }) }
         catch (error) { return { ok: false, error: `The working copy is invalid: ${errorMessage(error, "unknown error")}` } }
         const streams = await loadPreviewStreams(events, previewInstance, panel, selected, signal)
-        const result = await runPreview({ panel, streams, encounterIds: selected, units }, signal)
-        return { ...result, instance_id: previewInstance, encounter_ids: selected, revision: current.revision, encounters }
+        const bounds = selectionBounds(available, selected)
+        const replay = replayMs !== undefined && bounds ? { ms: Math.round(replayMs), untilMs: bounds.startMs + Math.round(replayMs) } : undefined
+        const result = await runPreview({ panel, streams, encounterIds: selected, units, replay }, signal)
+        return { ...result, instance_id: previewInstance, encounter_ids: selected, revision: current.revision, encounters,
+          ...(replay && bounds && { replay_ms: replay.ms, replay_duration_ms: bounds.endMs - bounds.startMs }) }
       },
       run_startup_check: async (_args, { signal }) => {
         const current = requireCopy()
@@ -443,6 +447,7 @@ export default function LuaProjectWorkspacePage({ projectId: resolvedId }: { pro
             {instance.data && encounterIds.length === 0 && <p className="text-xs text-muted-foreground">Select an encounter to preview. Ctrl/⌘-click selects several.</p>}
             {instance.data && localPanel?.value && encounterIds.length > 0 && <Suspense fallback={<p role="status" className="text-xs">Loading local preview…</p>}>
               <LuaInstancePreview panel={localPanel.value} instanceId={instanceId} encounterIds={encounterIds} events={events} units={previewUnits}
+                replayBounds={selectionBounds(instance.data.encounters ?? [], encounterIds)}
                 frameSize={layout.frame} onFrameSizeChange={frame => setLayout({ frame })} />
             </Suspense>}
           </div>

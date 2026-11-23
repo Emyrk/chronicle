@@ -32,7 +32,7 @@ export async function readPackageFiles(bytes: Uint8Array): Promise<PackageFile[]
   return files.sort((a, b) => Number(b.path === "README.md") - Number(a.path === "README.md") || a.path.localeCompare(b.path))
 }
 
-export type ManifestSummary = { streams: string[]; capabilities: string[]; streamScope: string; filterMode: string; maxEvents?: number }
+export type ManifestSummary = { streams: string[]; capabilities: string[]; streamScope: string; filterMode: string; maxEvents?: number; replay?: string }
 
 /** Reads the fields the About box shows; tolerant, because older or invalid drafts still deserve a file listing. */
 export function manifestSummary(files: readonly PackageFile[]): ManifestSummary | null {
@@ -46,6 +46,7 @@ export function manifestSummary(files: readonly PackageFile[]): ManifestSummary 
       streamScope: typeof data.stream_scope === "string" ? data.stream_scope : "selection",
       filterMode: typeof data.filter_mode === "string" ? data.filter_mode : "none",
       ...(typeof data.max_events === "number" && { maxEvents: data.max_events }),
+      ...(typeof data.replay === "string" && { replay: data.replay }),
     }
   } catch { return null }
 }

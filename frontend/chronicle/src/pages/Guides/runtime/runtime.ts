@@ -137,6 +137,10 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   let timeRangeRequest: { range: PanelTimeRange | null } | undefined
   let handlingClick = false
   let timeRangeCallback: number | undefined // Chronicle.OnTimeRangeChanged
+  // The Replay playhead in ms from encounter start; null when Replay is off.
+  let replayTime: number | null = null
+  let replayTimeRequest: { ms: number } | undefined
+  let replayTimeCallback: number | undefined // Chronicle.OnReplayTime
   // Chronicle.GetSpell: answers the host sent (null when unknown), callbacks waiting per spell, and IDs to request.
   const spells = new Map<number, PanelSpellInfo | null>()
   const spellWaiters = new Map<number, number[]>()
@@ -590,6 +594,28 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         for (const bound of [timeRange.startMs, timeRange.endMs]) if (bound === null) lua.lua_pushnil(state); else pushNumber(state, bound)
         return 2
       })
+      // The Replay playhead. Moving it moves every panel, so only a viewer's click may do it.
+      registerFunction(L, "SetReplayTime", (state) => {
+        const offset = lua.lua_istable(state, 1) ? 1 : 0
+        if (!capabilities.has("input")) luaError(state, "Chronicle.SetReplayTime needs the input capability")
+        if (!handlingClick) luaError(state, "Chronicle.SetReplayTime can only be called from an OnClick handler")
+        const ms = boundAt(state, 1 + offset, "ms")
+        if (ms === null) luaError(state, "Chronicle.SetReplayTime expects a number of milliseconds")
+        replayTimeRequest = { ms: ms! }
+        return 0
+      })
+      registerFunction(L, "OnReplayTime", (state) => {
+        const index = lua.lua_istable(state, 1) ? 2 : 1
+        lauxlib.luaL_checktype(state, index, lua.LUA_TFUNCTION)
+        if (replayTimeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, replayTimeCallback)
+        lua.lua_pushvalue(state, index)
+        replayTimeCallback = lauxlib.luaL_ref(state, lua.LUA_REGISTRYINDEX)
+        return 0
+      })
+      registerFunction(L, "GetReplayTime", (state) => {
+        if (replayTime === null) lua.lua_pushnil(state); else pushNumber(state, replayTime)
+        return 1
+      })
       // Spell data is fetched by the host, so answers arrive later as callbacks. A spell this
       // module already looked up calls back immediately, like WoW's ContinueOnSpellLoad.
       registerFunction(L, "GetSpell", (state) => {
@@ -711,6 +737,18 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       timeRange = next
       if (timeRangeCallback !== undefined) callRef(timeRangeCallback, null, [next?.startMs ?? null, next?.endMs ?? null])
     },
+    /** The Replay time Lua asked for during the last click, if any. Taking it resets it. */
+    takeReplayTimeRequest(): { ms: number } | undefined { const request = replayTimeRequest; replayTimeRequest = undefined; return request },
+    /**
+     * Tells Lua the Replay playhead (ms from encounter start, or null when Replay is off), read with
+     * Chronicle.GetReplayTime. When it differs from what Lua last saw, calls Chronicle.OnReplayTime(ms).
+     */
+    setReplayTime(ms: number | null) {
+      ensureActive()
+      if (ms === replayTime) return
+      replayTime = ms
+      if (replayTimeCallback !== undefined) callRef(replayTimeCallback, null, [ms])
+    },
     /** The viewer closed a Breakout: Lua sees it hidden, then OnClose runs. */
     close(nodeId: string) {
       ensureActive()
@@ -779,7 +817,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       if (completeCallback !== undefined) callRef(completeCallback, null, [])
     },
     flush,
-    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback); anyEventCallback = undefined; if (timeRangeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, timeRangeCallback); timeRangeCallback = undefined; for (const refs of spellWaiters.values()) for (const ref of refs) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); spellWaiters.clear(); spellRequests.clear(); callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
+    stop() { if (stopped) return; for (const ref of callbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of timers.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of modules.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); for (const ref of panelCallbacks.values()) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); if (completeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, completeCallback); completeCallback = undefined; if (anyEventCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, anyEventCallback); anyEventCallback = undefined; if (timeRangeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, timeRangeCallback); timeRangeCallback = undefined; if (replayTimeCallback !== undefined) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, replayTimeCallback); replayTimeCallback = undefined; for (const refs of spellWaiters.values()) for (const ref of refs) lauxlib.luaL_unref(L, lua.LUA_REGISTRYINDEX, ref); spellWaiters.clear(); spellRequests.clear(); callbacks.clear(); timers.clear(); modules.clear(); panelCallbacks.clear(); objects.clear(); operations.length = 0; lua.lua_close(L); stopped = true },
     stats() { return { callbacks: callbacks.size, objects: Math.max(0, objects.size - 1), operations: operations.length, timers: timers.size, stopped } },
   }
 }

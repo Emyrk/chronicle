@@ -260,3 +260,66 @@ describe("Lua panel worker time range", () => {
     expect(messages).toContainEqual(expect.objectContaining({ type: "error", phase: "timeRange", message: expect.stringMatching(/boom/) }))
   })
 })
+
+describe("Lua panel worker Replay mode", () => {
+  // Encounter e1 starts at epoch 1ms: damage at 1ms and 301ms, heal at 101ms.
+  const damage = frame("e1", [0, 3].map(index => toBinary(DamageSchema, create(DamageSchema, { meta: meta(index), caster: "0xA", target: "0xB", amount: 10 + index }))))
+  const heal = frame("e1", [toBinary(HealSchema, create(HealSchema, { meta: meta(1), caster: "0xC", target: "0xA", amount: 50, spellData: { id: 2050, name: "Lesser Heal" } }))])
+  const lua = `
+    local label = CreateFrame("FontString", "out", UIParent)
+    local count, done = 0, false
+    Panel:OnEvent(function() count = count + 1 end)
+    Panel:OnComplete(function() done = true end)
+    Chronicle.OnReplayTime(function(ms) label:SetText(tostring(ms) .. ":" .. count .. (done and ":done" or "")) end)
+    local button = CreateFrame("Button", "seek", UIParent)
+    button:SetScript("OnClick", function() Chronicle.SetReplayTime(1234.4) end)
+  `
+  const begin = (capabilities: Array<"ui" | "input"> = ["ui", "input"]) => {
+    const messages: unknown[] = []
+    const handle = createPanelWorkerHandler((message) => messages.push(message))
+    handle({ type: "start", entrypoint: "main.lua", sources: { "main.lua": lua }, streams: ["damage", "heal"], capabilities })
+    return { messages, handle, streams: { damage: new Uint8Array(damage), heal: new Uint8Array(heal) } }
+  }
+  const text = (messages: unknown[]) => messages.flatMap(message => (message as { operations?: Array<{ op: string; props?: { text?: string } }> }).operations ?? [])
+    .filter(op => op.op === "set").map(op => op.props?.text).at(-1)
+
+  it("delivers incremental events up to the playhead, resumes forward, and completes at the end", () => {
+    const { messages, handle, streams } = begin()
+    handle({ type: "streams", streams, encounterIds: ["e1"], untilMs: 150, replayMs: 149 })
+    expect(text(messages)).toBe("149:2")
+    expect(messages.at(-1)).toMatchObject({ type: "replay-paused", metrics: { events: 2 } })
+    messages.length = 0
+    handle({ type: "replay-time", ms: 299, untilMs: 300 })
+    expect(text(messages)).toBe("299:2")
+    expect(messages.at(-1)).toMatchObject({ type: "replay-paused" })
+    messages.length = 0
+    handle({ type: "replay-time", ms: 400, untilMs: 401 })
+    expect(text(messages)).toBe("400:3:done")
+    expect(messages.at(-1)).toMatchObject({ type: "replay-complete", metrics: { events: 3 } })
+  })
+
+  it("gives full replays the playhead after onComplete and nil when Replay turns off", () => {
+    const { messages, handle, streams } = begin()
+    handle({ type: "streams", streams, encounterIds: ["e1"], replayMs: 50 })
+    expect(text(messages)).toBe("50:3:done")
+    expect(messages.at(-1)).toMatchObject({ type: "replay-complete" })
+    messages.length = 0
+    handle({ type: "replay-time", ms: null })
+    expect(text(messages)).toBe("nil:3:done")
+    messages.length = 0
+    handle({ type: "replay-time", ms: null })
+    expect(messages).toEqual([])
+  })
+
+  it("forwards SetReplayTime from a click and needs the input capability", () => {
+    const { messages, handle } = begin()
+    handle({ type: "click", nodeId: "seek" })
+    expect(messages).toContainEqual({ type: "set-replay-time", ms: 1234 })
+  })
+
+  it("rejects invalid playheads", () => {
+    const { messages, handle } = begin()
+    handle({ type: "replay-time", ms: -1 })
+    expect(messages.at(-1)).toMatchObject({ type: "error", message: "invalid replay time" })
+  })
+})

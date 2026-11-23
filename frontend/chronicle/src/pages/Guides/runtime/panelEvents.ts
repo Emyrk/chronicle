@@ -10,6 +10,12 @@ export type PanelEvent = Readonly<{ stream: PanelStream; source: string; target:
 /** Which encounters a panel receives: the user's selection (default) or every encounter tagged with `selected`. */
 export const PANEL_STREAM_SCOPES = ["selection", "instance"] as const
 export type PanelStreamScope = (typeof PANEL_STREAM_SCOPES)[number]
+/**
+ * How a panel behaves in the instance page's Replay mode. "full" keeps every event and reads the playhead;
+ * "incremental" receives events only up to the playhead. Panels that omit it are disabled during Replay.
+ */
+export const PANEL_REPLAY_MODES = ["full", "incremental"] as const
+export type PanelReplayMode = (typeof PANEL_REPLAY_MODES)[number]
 
 export function validatePanelEvent(value: unknown, allowed: readonly PanelStream[]): PanelEvent {
   if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("invalid panel event")

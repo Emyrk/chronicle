@@ -399,3 +399,15 @@ function Chronicle.GetSpell(spellId, callback) end
 ---@return number? startMs
 ---@return number? endMs
 function Chronicle.GetTimeRange() end
+
+---Return the Replay playhead in milliseconds from the start of the selected encounters, like event.offsetMs, or nil when Replay is off. Only modules whose project.json declares `replay` run during Replay.
+---@return number? ms
+function Chronicle.GetReplayTime() end
+
+---Call `callback(ms)` whenever the Replay playhead moves, after the events up to it have been delivered, so the callback can redraw. `ms` is nil when Replay turns off. With `"replay": "incremental"` it runs after every playhead step; with `"replay": "full"` it runs after onComplete. Registering again replaces the previous callback.
+---@param callback fun(ms: number?)
+function Chronicle.OnReplayTime(callback) end
+
+---Move the Replay playhead to `ms` from the start of the selected encounters; values past the end are clamped. Needs the input capability and works only inside an OnClick handler. Does nothing while Replay is off. OnReplayTime runs once the page has moved.
+---@param ms number
+function Chronicle.SetReplayTime(ms) end

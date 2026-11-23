@@ -106,7 +106,7 @@ var luaEditorClientTools = []clientToolDefinition{
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "view_mutation", Confirmation: "never",
 	},
 	{
-		ToolDefinition: ToolDefinition{Name: "run_preview", Description: "Replay the current unsaved working copy in a fresh sandboxed browser worker against the instance the user picked in the Preview pane, exactly like the preview. Pass encounter_ids to choose encounters (this also selects them in the user's Preview pane); omit it to use the user's current selection. Every result lists the instance's encounters (id, name, boss, kill_type, selected) so you can choose. Returns ok, the panel's error message if it stopped, event and timing metrics, and an indented text outline of every UI object it drew (kind, id, text, size, position, colors, hidden). If it reports that an instance must be selected first, ask the user to pick one in the Preview pane.", Parameters: json.RawMessage(`{"type":"object","properties":{"encounter_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":200}}},"additionalProperties":false}`)},
+		ToolDefinition: ToolDefinition{Name: "run_preview", Description: "Replay the current unsaved working copy in a fresh sandboxed browser worker against the instance the user picked in the Preview pane, exactly like the preview. Pass encounter_ids to choose encounters (this also selects them in the user's Preview pane); omit it to use the user's current selection. Pass replay_ms to preview the panel in Replay mode with the playhead that many milliseconds after the selection starts; the panel must declare replay in project.json. Every result lists the instance's encounters (id, name, boss, kill_type, selected) so you can choose. Returns ok, the panel's error message if it stopped, event and timing metrics, and an indented text outline of every UI object it drew (kind, id, text, size, position, colors, hidden). If it reports that an instance must be selected first, ask the user to pick one in the Preview pane.", Parameters: json.RawMessage(`{"type":"object","properties":{"encounter_ids":{"type":"array","minItems":1,"maxItems":100,"uniqueItems":true,"items":{"type":"string","minLength":1,"maxLength":200}},"replay_ms":{"type":"number","minimum":0}},"additionalProperties":false}`)},
 		CapabilityID:   luaEditorCapabilityID, CapabilityVersion: luaEditorCapabilityVersion, Effect: "read", Confirmation: "never",
 	},
 	{
@@ -366,9 +366,13 @@ func validateClientToolArguments(name, raw string) (json.RawMessage, error) {
 	case "run_preview":
 		var input struct {
 			EncounterIDs *[]string `json:"encounter_ids"`
+			ReplayMS     *float64  `json:"replay_ms"`
 		}
 		if err := decodeStrict(raw, &input); err != nil {
 			return nil, errors.New("invalid run_preview arguments")
+		}
+		if input.ReplayMS != nil && *input.ReplayMS < 0 {
+			return nil, errors.New("run_preview replay_ms must be a non-negative number")
 		}
 		if input.EncounterIDs != nil {
 			ids := *input.EncounterIDs

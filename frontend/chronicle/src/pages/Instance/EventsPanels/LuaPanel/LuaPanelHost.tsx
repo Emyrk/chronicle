@@ -44,7 +44,18 @@ export interface LuaPanelHostProps {
   timeRange?: PanelTimeRange | null
   /** Applies Chronicle.SetTimeRange / ClearTimeRange from a click; omit where there is no page time range. */
   onSetTimeRange?: (range: PanelTimeRange | null) => void
+  /**
+   * The Replay playhead while Replay is on: `ms` from encounter start for Lua, `untilMs` as the log's epoch ms.
+   * Null when Replay is off.
+   */
+  replay?: PanelReplayTime | null
+  /** The manifest's `replay: "incremental"`: deliver events only up to the playhead while Replay is on. */
+  incremental?: boolean
+  /** Applies Chronicle.SetReplayTime from a click; omit where there is no Replay playhead. */
+  onSetReplayTime?: (ms: number) => void
 }
+
+export type PanelReplayTime = { ms: number; untilMs: number }
 
 const bound = (value: unknown): value is number | null => value === null || (typeof value === "number" && Number.isFinite(value) && value >= 0)
 
@@ -76,7 +87,7 @@ const EMPTY_IDS: readonly string[] = []
 const EMPTY_ASSETS: ReadonlyMap<string, string> = new Map()
 
 // Shared by the author preview and embedded EventsPanels. No Lua executes on the main thread.
-export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, timeRange = null, onSetTimeRange }: LuaPanelHostProps) {
+export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "selection", maxEvents, filterMode = "none", filterContext, capabilities, events = EMPTY_EVENTS, eventStreams, encounterIds = EMPTY_IDS, assets = EMPTY_ASSETS, units, onMetrics, timeRange = null, onSetTimeRange, replay = null, incremental = false, onSetReplayTime }: LuaPanelHostProps) {
   const [scene, setScene] = useState<RetainedScene>(createInitialScene)
   const sceneRef = useRef(scene)
   const [error, setError] = useState<ModuleErrorExplanation | null>(null)
@@ -87,11 +98,26 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
   const onMetricsRef = useRef(onMetrics)
   const timeRangeRef = useRef(timeRange)
   const onSetTimeRangeRef = useRef(onSetTimeRange)
+  const onSetReplayTimeRef = useRef(onSetReplayTime)
+  const replayRef = useRef(replay)
+  const incrementalReplay = incremental && replay !== null
+  // Lua state cannot rewind, so an incremental replay restarts the module when the playhead moves back.
+  const [restarts, setRestarts] = useState(0)
+  // The playhead an incremental replay has been delivered up to; null when not replaying incrementally.
+  const sentUntilRef = useRef<number | null>(null)
+  // True while the worker owes a replay-paused or replay-complete; only then does the watchdog run.
+  const awaitingRef = useRef(false)
   // Chronicle.GetSpell answers come from the same cached spell query as spell icons and tooltips.
   const queryClient = useQueryClient()
   const datasetId = useDatasetId()
   const spellSourceRef = useRef({ queryClient, datasetId })
-  useEffect(() => { onMetricsRef.current = onMetrics; onSetTimeRangeRef.current = onSetTimeRange; spellSourceRef.current = { queryClient, datasetId } }, [onMetrics, onSetTimeRange, queryClient, datasetId])
+  useEffect(() => { onMetricsRef.current = onMetrics; onSetTimeRangeRef.current = onSetTimeRange; onSetReplayTimeRef.current = onSetReplayTime; spellSourceRef.current = { queryClient, datasetId } }, [onMetrics, onSetTimeRange, onSetReplayTime, queryClient, datasetId])
+  // Declared before the worker effect so a worker started in the same commit sees the current playhead.
+  const replayMs = replay?.ms ?? null
+  const replayUntilMs = replay?.untilMs ?? null
+  useEffect(() => {
+    replayRef.current = replayMs === null || replayUntilMs === null ? null : { ms: replayMs, untilMs: replayUntilMs }
+  }, [replayMs, replayUntilMs])
   useEffect(() => {
     const replaying = streams.length > 0 && !!eventStreams && streams.every(stream => eventStreams[stream])
     let postedAt = 0
@@ -103,7 +129,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     setScene(sceneRef.current); setError(null); setMetrics(null); setProgress(replaying ? 0 : null)
     let watchdog: ReturnType<typeof setTimeout> | undefined
     // Only the replay is watched. Batches from later clicks must not re-arm it, or an idle panel stops 10s after a click.
-    let replayDone = false
+    awaitingRef.current = replaying
     const stop = (reason: string, context?: ModuleErrorContext) => {
       clearTimeout(watchdog)
       runtime.terminate()
@@ -119,8 +145,8 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
           const context = data as { phase?: ModulePhase; events?: number }
           stop(String("message" in data ? data.message : "Panel failed"), { phase: context.phase, events: context.events }); return
         }
-        if (data && typeof data === "object" && "type" in data && data.type === "replay-complete") {
-          replayDone = true
+        if (data && typeof data === "object" && "type" in data && (data.type === "replay-complete" || data.type === "replay-paused")) {
+          awaitingRef.current = false
           clearTimeout(watchdog)
           if ("metrics" in data && data.metrics && typeof data.metrics === "object") {
             const run = { ...(data.metrics as PanelReplayMetrics), wallMs: performance.now() - postedAt, drawMs: drawMs.current }
@@ -142,6 +168,12 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
           onSetTimeRangeRef.current?.(range)
           return
         }
+        if (data && typeof data === "object" && "type" in data && data.type === "set-replay-time") {
+          const ms = "ms" in data ? data.ms : undefined
+          if (typeof ms !== "number" || !Number.isFinite(ms) || ms < 0) throw new Error("Invalid replay time from panel")
+          onSetReplayTimeRef.current?.(ms)
+          return
+        }
         // The watchdog measures inactivity, not total time: large replays keep it alive with progress.
         if (data && typeof data === "object" && "type" in data && data.type === "progress") {
           armWatchdog()
@@ -150,7 +182,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
         }
         const message = parseWorkerMessage(data)
         if (message.type === "ready") {
-          if (replaying && !replayDone) armWatchdog()
+          if (awaitingRef.current) armWatchdog()
           else clearTimeout(watchdog)
         }
         if (message.type === "batch") {
@@ -159,7 +191,7 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
           sceneRef.current = applySceneBatch(sceneRef.current, message.operations)
           drawMs.current += performance.now() - drawStart
           setScene(sceneRef.current)
-          if (replaying && !replayDone) armWatchdog()
+          if (awaitingRef.current) armWatchdog()
         }
       } catch (caught) {
         stop(caught instanceof Error ? caught.message : "Invalid panel output")
@@ -169,9 +201,30 @@ export function LuaPanelHost({ entrypoint, sources, streams, streamScope = "sele
     armWatchdog()
     runtime.postMessage({ type: "start", entrypoint, sources, streams, capabilities, streamScope, maxEvents, units, filterMode, filterContext })
     runtime.postMessage({ type: "time-range", range: timeRangeRef.current })
-    if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "streams", streams: eventStreams, encounterIds: [...encounterIds] }) }
+    const untilMs = incrementalReplay ? replayRef.current?.untilMs : undefined
+    sentUntilRef.current = untilMs ?? null
+    // The worker applies replayMs after the events, so OnReplayTime can draw what they built.
+    const replayMs = replayRef.current?.ms ?? null
+    if (replaying) { postedAt = performance.now(); runtime.postMessage({ type: "streams", streams: eventStreams, encounterIds: [...encounterIds], untilMs, replayMs }) }
+    else runtime.postMessage({ type: "replay-time", ms: replayMs })
     return () => { clearTimeout(watchdog); runtime.terminate(); if (workerRef.current === runtime) workerRef.current = null }
-  }, [entrypoint, sources, streams, streamScope, maxEvents, filterMode, filterContext, capabilities, eventStreams, encounterIds, units])
+  }, [entrypoint, sources, streams, streamScope, maxEvents, filterMode, filterContext, capabilities, eventStreams, encounterIds, units, incrementalReplay, restarts])
+
+  // Keep Lua's Chronicle.GetReplayTime in step with the playhead. An incremental replay first resumes up to it,
+  // or restarts when the playhead moved back past what it already delivered.
+  useEffect(() => {
+    const sentUntil = sentUntilRef.current
+    if (incrementalReplay && replayUntilMs !== null && sentUntil !== null) {
+      if (replayUntilMs < sentUntil) { setRestarts(count => count + 1); return }
+      if (replayUntilMs > sentUntil) {
+        sentUntilRef.current = replayUntilMs
+        awaitingRef.current = true
+        workerRef.current?.postMessage({ type: "replay-time", ms: replayMs, untilMs: replayUntilMs })
+        return
+      }
+    }
+    workerRef.current?.postMessage({ type: "replay-time", ms: replayMs })
+  }, [replayMs, replayUntilMs, incrementalReplay])
 
   // Keep Lua's Chronicle.GetTimeRange in step with the page; a new worker gets it right after start.
   const startMs = timeRange?.startMs ?? null

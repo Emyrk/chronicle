@@ -257,6 +257,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
                 <span key={stream} className="rounded bg-muted px-1.5 py-0.5 font-mono">{stream}</span>) : <span className="text-muted-foreground">None</span>}</dd></div>
               <div><dt className="text-muted-foreground">Capabilities</dt><dd className="mt-1 font-mono">{about.capabilities.join(", ") || "None"}</dd></div>
               <div><dt className="text-muted-foreground">Replays</dt><dd className="mt-1">{about.streamScope === "instance" ? "Whole instance" : "Selected encounters"}{about.maxEvents !== undefined && `, up to ${about.maxEvents.toLocaleString()} events`}</dd></div>
+              <div><dt className="text-muted-foreground">Replay mode</dt><dd className="mt-1">{about.replay === "incremental" ? "Follows the playhead" : about.replay === "full" ? "Whole fight, marks the playhead" : "Not supported"}</dd></div>
             </dl> : <p className="text-xs text-muted-foreground">{ref ? "Details appear once the files load." : "Details appear once a build exists."}</p>}
             {/* Where it shows up: publishing puts it in the gallery, flavor tags choose which sites. */}
             <ModulePublishing key={`publishing-${project.id}`} project={project} canEdit={can.edit} onSaved={() => void pageQuery.refetch()} />

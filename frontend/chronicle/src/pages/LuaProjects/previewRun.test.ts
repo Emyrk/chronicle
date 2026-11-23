@@ -89,6 +89,16 @@ describe("runPreview", () => {
     expect(await pending).toMatchObject({ ok: true, nodes: source ? 1 : 0 })
   })
 
+  it("previews incremental Replay at the playhead and refuses panels that did not opt in", async () => {
+    // Each framed encounter starts at epoch 1ms and these events have no offset, so a playhead at 0ms precedes them all.
+    const lua = `${totals}
+      Chronicle.OnReplayTime(function(ms) label:SetText(ms .. " " .. total) end)`
+    const replayed = await runPreview({ panel: { ...panel(lua), replay: "incremental" }, streams, encounterIds: ["e1"], replay: { ms: 0, untilMs: 0 } }, undefined, fakeWorker)
+    expect(replayed).toMatchObject({ ok: true, metrics: { events: 0 }, output: expect.stringContaining('"0 0"') })
+    const refused = await runPreview({ panel: panel(lua), streams, encounterIds: ["e1"], replay: { ms: 0, untilMs: 0 } }, undefined, fakeWorker)
+    expect(refused).toMatchObject({ ok: false, error: "This panel did not opt into replay mode, and is disabled." })
+  })
+
   it("stops when the caller aborts", async () => {
     const controller = new AbortController()
     const pending = runPreview({ panel: panel(totals), streams, encounterIds: ["e1"] }, controller.signal, fakeWorker)
@@ -99,7 +109,8 @@ describe("runPreview", () => {
   it("validates run_preview arguments like the server", () => {
     expect(parseRunPreviewArgs({})).toEqual({})
     expect(parseRunPreviewArgs({ encounter_ids: ["e1", "e2"] })).toEqual({ encounterIds: ["e1", "e2"] })
-    for (const bad of [null, [], { encounter_ids: [] }, { encounter_ids: ["e1", "e1"] }, { encounter_ids: [""] }, { instance_id: "x" }]) {
+    expect(parseRunPreviewArgs({ encounter_ids: ["e1"], replay_ms: 61500 })).toEqual({ encounterIds: ["e1"], replayMs: 61500 })
+    for (const bad of [null, [], { encounter_ids: [] }, { encounter_ids: ["e1", "e1"] }, { encounter_ids: [""] }, { instance_id: "x" }, { replay_ms: -1 }, { replay_ms: "1" }]) {
       expect(() => parseRunPreviewArgs(bad)).toThrow()
     }
   })
