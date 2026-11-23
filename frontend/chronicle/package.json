@@ -16,7 +16,7 @@
     "chromatic": "chromatic --exit-zero-on-changes",
     "generate:favicon": "node scripts/generate-favicon.mjs",
     "generate:lua-api": "vitest run --project unit src/pages/Guides/widgets/widgets.test.ts -t \"generated LuaLS\" -u && node scripts/generate-lua-api-docs.mjs",
-    "check:lua-api": "node scripts/generate-lua-api-docs.mjs --check"
+    "check:lua-api": "node scripts/generate-lua-api-docs.mjs --check && node --test scripts/generate-lua-api-docs.test.mjs"
   },
   "dependencies": {
     "@bufbuild/protobuf": "^2.11.0",

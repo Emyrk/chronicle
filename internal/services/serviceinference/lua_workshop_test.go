@@ -11,12 +11,12 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-func TestLuaWorkshopIsDurableAndUsesOnlyLuaEditorTools(t *testing.T) {
+func TestLuaWorkshopIsDurableAndUsesScopedTools(t *testing.T) {
 	t.Parallel()
 	a := assistants[addonWorkshopPanelAssistantID]
 	require.True(t, a.Durable)
 	require.Equal(t, "lua_project", a.ContextType)
-	require.Empty(t, a.Tools)
+	require.Equal(t, []ToolDefinition{luaReferenceReadTool}, a.Tools)
 	require.Equal(t, webResearchTools, a.ServerTools)
 
 	capability, err := advertisedClient(&chroniclesdk.InferenceClient{SessionID: "session-1", Capabilities: []chroniclesdk.InferenceClientCapability{
@@ -31,7 +31,7 @@ func TestLuaWorkshopIsDurableAndUsesOnlyLuaEditorTools(t *testing.T) {
 		require.True(t, json.Valid(tool.Parameters), tool.Name)
 		names = append(names, tool.Name)
 	}
-	require.Equal(t, []string{"read_lua_files", "edit_lua_file", "save_lua_files", "run_preview", "run_startup_check"}, names)
+	require.Equal(t, []string{"read_skill", "read_lua_files", "edit_lua_file", "save_lua_files", "run_preview", "run_startup_check"}, names)
 	_, ok := clientToolByName("lua-editor", "update_instance_ui")
 	require.False(t, ok, "instance tools must not resolve under the Lua capability")
 
@@ -101,10 +101,10 @@ func TestLuaEditorContinuationIsBoundToProjectScope(t *testing.T) {
 	require.ErrorIs(t, validateClientToolContinuation(pending, request, "project-2"), errClientToolMismatch)
 }
 
-func TestLuaWorkshopPromptIncludesAPIReference(t *testing.T) {
+func TestLuaWorkshopPromptIncludesCollapsedAPIReference(t *testing.T) {
 	t.Parallel()
 	system := assistants[addonWorkshopPanelAssistantID].System
-	for _, want := range []string{"# Module API reference", "## Events", "Chronicle.GetUnit", "## Limits", "chronicle.v1.ui"} {
+	for _, want := range []string{"# Module API reference", "## Events", "read_skill", "## Limits", "lua-module-api-units"} {
 		require.Contains(t, system, want)
 	}
 }
