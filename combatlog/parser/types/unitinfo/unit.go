@@ -38,6 +38,10 @@ type Info struct {
 	Owner        *guid.GUID
 	Buffs        []Buff
 	Level        int32
+	// LevelObservedAt preserves supplemental metadata freshness independently of the unit event.
+	LevelObservedAt *time.Time
+	// ScoutingName distinguishes supplemental display labels from raw combat identity.
+	ScoutingName bool
 	Challenges   []string
 	Charm        *guid.GUID
 	MaxHealth    int64

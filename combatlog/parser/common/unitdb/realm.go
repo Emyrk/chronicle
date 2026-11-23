@@ -19,10 +19,11 @@ func (us *Units) SetPlayerRealmLookup(lookup PlayerRealmLookup) {
 }
 
 // PlayerRawRealm enriches metadata for this exact name, retaining a known value
-// when no evidence is available. Callers must not pass another name's fallback.
+// when no evidence is available. A known empty result explicitly revokes a
+// tentative inferred realm. Callers must not pass another name's fallback.
 func (us *Units) PlayerRawRealm(id guid.GUID, name, known string) string {
 	if us.playerRealmLookup != nil && id.IsPlayer() && name != "" {
-		if raw, ok := us.playerRealmLookup.LookupPlayerRealm(id, name); ok && raw != "" {
+		if raw, ok := us.playerRealmLookup.LookupPlayerRealm(id, name); ok {
 			return raw
 		}
 	}

@@ -18,6 +18,8 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounters"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/parsectx"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/registry"
+	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/messagesource"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/realm"
@@ -27,6 +29,7 @@ import (
 	"github.com/Emyrk/chronicle/database/gamedb"
 	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 	"github.com/Emyrk/chronicle/internal/gamedataoverrides"
+	"github.com/google/uuid"
 )
 
 type overrideGameDB struct {
@@ -62,11 +65,14 @@ func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chron
 // parseResult holds everything produced by the parse phase that the
 // finalization phase needs.
 type parseResult struct {
-	encountersState *encounters.State
-	creaturesState  *creatures.Creatures
-	consumers       *consumers.Consumers
-	logCapabilities []string
-	report          parseTimingReport
+	scoutingReference time.Time
+	scoutingRealms    map[guid.GUID]uuid.UUID
+	scouting          *scouting.Scouting
+	encountersState   *encounters.State
+	creaturesState    *creatures.Creatures
+	consumers         *consumers.Consumers
+	logCapabilities   []string
+	report            parseTimingReport
 }
 
 // parseTimingReport captures timing + metrics from the parse phase.
@@ -95,6 +101,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	identityMode bool,
 	preloadedFirst []byte,
 	preRealmName string,
+	uploadRealmID, tenantID uuid.UUID,
 ) (*parseResult, error) {
 	logLogger := w.parent.logger
 	if !w.parent.EmitParsingLogs() {
@@ -102,6 +109,18 @@ func (w *WorkerLogParse) parseCombatLog(
 	}
 
 	logCapabilities := initialLogCapabilities(logFormat)
+	var scoutPlayers *scouting.Scouting
+	var scoutRealms map[guid.GUID]uuid.UUID
+	var identity *foreverIdentity
+	var scoutCatalog *participantRealmCatalog
+	var scoutAdvancer *scoutingAdvancer
+	if logFormat == database.LogFormatV22Cleu {
+		var err error
+		scoutPlayers, err = w.loadForeverScouting(ctx, artifacts)
+		if err != nil {
+			return nil, err
+		}
+	}
 
 	// Server-side logs still use the flavor registry for known instances so
 	// rankings and speedrun rules are attached. The AzerothCore resolver adds
@@ -267,6 +286,15 @@ func (w *WorkerLogParse) parseCombatLog(
 		}
 		loadFileDuration = time.Since(loadStart)
 
+		if logFormat == database.LogFormatV22Cleu && scoutPlayers.Len() > 0 {
+			var err error
+			scoutCatalog, err = loadForeverIdentityCatalog(ctx, w.parent.Zed, tenantID)
+			if err != nil {
+				return nil, err
+			}
+			_, scoutRealms, identity = reconcileForeverScouting(scoutPlayers, &combatIdentity{}, scoutCatalog)
+		}
+
 		var p *blizzardmodern.Parser
 		var err error
 		if logFormat == database.LogFormatHermesproxy1142Cc {
@@ -284,7 +312,15 @@ func (w *WorkerLogParse) parseCombatLog(
 		var parseAdvancer consumers.Advancer = p
 		if logFormat == database.LogFormatV22Cleu {
 			encountersState.Units.SetPlayerRealmLookup(p)
+			if identity != nil {
+				identity.combat.(*combatIdentity).live = p
+				encountersState.Units.SetPlayerRealmLookup(identity)
+			}
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
+			if scoutPlayers.Len() > 0 {
+				scoutAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, identity: identity, catalog: scoutCatalog}
+				parseAdvancer = scoutAdvancer
+			}
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
 		if consumeErr != nil && !errors.Is(consumeErr, io.EOF) {
@@ -357,14 +393,27 @@ func (w *WorkerLogParse) parseCombatLog(
 		return nil, consumeErr
 	}
 
+	if identity != nil {
+		// Reconcile the original independent sources against COMPLETE raw evidence
+		// before either direct scouting or encounter armory transactions can run.
+		scoutPlayers, scoutRealms = finalizeForeverScouting(scoutPlayers, identity, scoutCatalog)
+	}
 	encountersState.Units.RefreshPlayerRealms()
+	finalizeScoutingRealms(encountersState.Units, scoutRealms)
 
+	var scoutingReference time.Time
+	if scoutAdvancer != nil {
+		scoutingReference = scoutAdvancer.end
+	}
 	return &parseResult{
-		encountersState: encountersState,
-		creaturesState:  creaturesState,
-		consumers:       c,
-		logCapabilities: logCapabilities,
-		report:          timing,
+		scoutingReference: scoutingReference,
+		scoutingRealms:    scoutRealms,
+		scouting:          scoutPlayers,
+		encountersState:   encountersState,
+		creaturesState:    creaturesState,
+		consumers:         c,
+		logCapabilities:   logCapabilities,
+		report:            timing,
 	}, nil
 }
 

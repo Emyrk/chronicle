@@ -255,7 +255,9 @@ func (us *Units) GetPlayerByName(name string) (combatant.Combatant, bool) {
 }
 
 func (us *Units) Update(u unitinfo.Info) {
-	us.ObservePlayerName(u.Guid, u.Name)
+	if !u.ScoutingName {
+		us.ObservePlayerName(u.Guid, u.Name)
+	}
 	us.ensureDirectOwners()
 	existing, exists := us.Info[u.Guid]
 	if u.Name == "" && exists {
