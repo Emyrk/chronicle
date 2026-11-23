@@ -68,14 +68,10 @@ func ReadPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 	return readPlayerCareer(ctx, store, tenant, realm, guid, false)
 }
 
-// ReadArmoryPlayerCareer applies realm-local raid activation only to the two
-// phased Capy realms. Stored scores, leaderboard reads, and OG cards stay global.
+// ReadArmoryPlayerCareer uses realm-local eligible-kill activation for every realm.
+// Server-wide reads continue through ReadPlayerCareer; neither path mutates inputs.
 func ReadArmoryPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string) (PlayerCareerResult, error) {
 	return readPlayerCareer(ctx, store, tenant, realm, guid, true)
-}
-
-func armoryUsesRealmActivation(tenantSlug, realmName string) bool {
-	return tenantSlug == "capy" && (realmName == "Eversong Wilds" || realmName == "Basin of Stars")
 }
 
 func readPlayerCareer(ctx context.Context, store database.Store, tenant, realm uuid.UUID, guid string, armory bool) (PlayerCareerResult, error) {
@@ -99,19 +95,9 @@ func readPlayerCareer(ctx context.Context, store database.Store, tenant, realm u
 		// intentionally different Armory display pool. A realm unlock needs no backfill.
 		storedFingerprint := pool.Fingerprint
 		if armory {
-			t, err := tx.GetTenantByID(ctx, tenant)
+			pool, err = careerConfiguration(ctx, tx, tenant, realm)
 			if err != nil {
 				return err
-			}
-			r, err := tx.GetWoWServerRealm(ctx, realm)
-			if err != nil {
-				return err
-			}
-			if t.Slug.Valid && armoryUsesRealmActivation(t.Slug.String, r.Name) {
-				pool, err = careerConfiguration(ctx, tx, tenant, realm)
-				if err != nil {
-					return err
-				}
 			}
 		}
 		out.PoolFingerprint = pool.Fingerprint

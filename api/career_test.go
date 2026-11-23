@@ -129,3 +129,35 @@ func TestCareerSummaryTransportPreparing(t *testing.T) {
 	require.Empty(t, out.Contributions)
 	require.NotNil(t, careerIssues(nil))
 }
+
+func TestArmoryCareerScope(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		query, want string
+		valid       bool
+	}{
+		{"", "realm", true}, {"?scope=realm", "realm", true}, {"?scope=server", "server", true},
+		{"?scope=", "", false}, {"?scope=tenant", "", false},
+		{"?scope=realm&scope=server", "", false}, {"?scope=realm&scope=realm", "", false},
+	} {
+		t.Run(tc.query, func(t *testing.T) {
+			t.Parallel()
+			scope, err := armoryCareerScope(httptest.NewRequest(http.MethodGet, "/career"+tc.query, nil))
+			if tc.valid {
+				require.NoError(t, err)
+				require.Equal(t, tc.want, scope)
+			} else {
+				require.Error(t, err)
+			}
+		})
+	}
+	tenant := database.Tenant{ID: uuid.New()}
+	request := func(query string) *http.Request {
+		req := httptest.NewRequest(http.MethodGet, "/career"+query, nil)
+		return req.WithContext(servicetenant.WithTenant(req.Context(), tenant))
+	}
+	require.NotNil(t, careerTenant(httptest.NewRecorder(), request("?scope=server"), "scope"))
+	require.Nil(t, careerTenant(httptest.NewRecorder(), request("?scope=server")), "guilds must not accept Armory scope")
+	require.Nil(t, careerTenant(httptest.NewRecorder(), request("?scope=realm&tenant_id=other"), "scope"))
+	require.Nil(t, careerTenant(httptest.NewRecorder(), request("?scope=realm&metric=hps"), "scope"))
+}

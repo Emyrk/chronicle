@@ -10,12 +10,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestArmoryRealmCareerActivation(t *testing.T) {
+func TestArmoryRealmAndServerCareerActivation(t *testing.T) {
 	t.Parallel()
 	s := newSourceFixture(t)
 	ctx := s.tenantctx()
-	s.exec(`UPDATE tenants SET slug='capy',additional_flavor=ARRAY['vanilla'] WHERE id=$1`, s.tenant)
-	s.exec(`UPDATE wow_server_realms SET name='Eversong Wilds' WHERE id=$1`, s.realm)
+	s.exec(`UPDATE tenants SET additional_flavor=ARRAY['vanilla'] WHERE id=$1`, s.tenant)
 	mc := leaderboardconfig.CareerKey{Instance: "Molten Core"}
 	local := database.ReplaceLeaderboardPlayerRenownFactParams{TenantID: s.tenant, RealmID: s.realm, InstanceName: mc.Instance, EncounterName: "Lucifron", RunID: uuid.New(), SourceInstanceID: uuid.New(), SourceEncounterID: uuid.New(), PlayerGuid: "SomeoneElse"}
 	insert := func(f database.ReplaceLeaderboardPlayerRenownFactParams) {
@@ -39,7 +38,7 @@ func TestArmoryRealmCareerActivation(t *testing.T) {
 	require.InDelta(t, 80.0*3/7, *global.Cohorts[0].Mastery, 0.00001)
 	require.Len(t, global.Cohorts[0].Contributions, 2)
 	require.False(t, global.Cohorts[0].RefreshPending)
-	for _, realmName := range []string{"Eversong Wilds", "Basin of Stars"} {
+	for _, realmName := range []string{"First phased realm", "Second phased realm"} {
 		s.exec(`UPDATE wow_server_realms SET name=$2 WHERE id=$1`, s.realm, realmName)
 		armory, err := ReadArmoryPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
 		require.NoError(t, err)
@@ -52,17 +51,14 @@ func TestArmoryRealmCareerActivation(t *testing.T) {
 		require.NotEqual(t, global.PoolFingerprint, armory.PoolFingerprint)
 		require.False(t, armory.Cohorts[0].RefreshPending, "display-only policy must not imply a stale worker")
 	}
-	// Neither another Capy realm nor the same realm name on another tenant opts in.
-	s.exec(`UPDATE wow_server_realms SET name='Other realm' WHERE id=$1`, s.realm)
-	ordinary, err := ReadArmoryPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
-	require.NoError(t, err)
-	require.Equal(t, global, ordinary)
-	s.exec(`UPDATE wow_server_realms SET name='Eversong Wilds' WHERE id=$1`, s.realm)
+	// The same automatic policy applies on every tenant, without name checks.
 	s.exec(`UPDATE tenants SET slug='other' WHERE id=$1`, s.tenant)
-	ordinary, err = ReadArmoryPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
+	arbitrary, err := ReadArmoryPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
 	require.NoError(t, err)
-	require.Equal(t, global, ordinary)
-	s.exec(`UPDATE tenants SET slug='capy' WHERE id=$1`, s.tenant)
+	require.Equal(t, 80.0, *arbitrary.Cohorts[0].Mastery)
+	server, err := ReadPlayerCareer(ctx, s.db, s.tenant, s.realm, "Player")
+	require.NoError(t, err)
+	require.Equal(t, global, server, "the Server view keeps the full active set")
 	// Any realm-local eligible boss kill unlocks the raid for EVERY character,
 	// including characters without that raid. No full clear or worker pass required.
 	localBWL := remote

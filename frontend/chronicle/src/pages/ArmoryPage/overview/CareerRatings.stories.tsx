@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import type { CareerRatingScope } from "@/api/career";
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { expect, userEvent, within } from "storybook/test";
 import { MemoryRouter } from "react-router-dom";
@@ -28,6 +29,7 @@ interface CareerRatingsProps {
 
 /** The two cards as the Armory performance overview arranges them. */
 function CareerRatings({ career, history, isLoading = false, error }: CareerRatingsProps) {
+  const [scope, setScope] = useState<CareerRatingScope>("realm");
   const [selected, setSelected] = useState<string>();
   const cohort =
     career?.cohorts.find((c) => cohortKey(c) === selected) ?? defaultCohort(career?.cohorts ?? []);
@@ -39,6 +41,8 @@ function CareerRatings({ career, history, isLoading = false, error }: CareerRati
     <div className="space-y-6">
       <div className="w-full lg:w-[480px]">
         <CareerRatingCard
+          scope={scope}
+          onScopeChange={setScope}
           data={career}
           cohort={cohort}
           onCohortChange={setSelected}
@@ -82,6 +86,10 @@ export const Warrior: Story = {
     history: historyWarrior as LeaderboardV2PlayerHistory,
   },
   play: async ({ canvas }) => {
+    await expect(canvas.getByRole("button", { name: "Realm", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(canvas.getByRole("button", { name: "Server", exact: true }));
+    await expect(canvas.getByRole("button", { name: "Server", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(canvas.getByText("All raids unlocked across this server’s realms.")).toBeInTheDocument();
     await expect(canvas.getByText("15.1")).toBeInTheDocument();
     await expect(canvas.getByText(/Updating/)).toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Show Fury · Fury Prot ratings" }));

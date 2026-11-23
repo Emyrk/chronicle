@@ -1,3 +1,4 @@
+import type { CareerRatingScope } from "@/api/career";
 import { entityAttributes, specEntity } from "@/components/EntityMenu/entity";
 import { CLASS_DISPLAY } from "@/pages/Rankings/classDisplay";
 import type { ReactNode } from "react";
@@ -16,6 +17,8 @@ import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes";
 import { careerStatusText, cohortKey, cohortLabel } from "./careerRatingsModel";
 
 interface CareerRatingCardProps {
+  scope: CareerRatingScope;
+  onScopeChange: (scope: CareerRatingScope) => void;
   data?: CareerPlayerResponse;
   cohort?: CareerPlayerCohort;
   onCohortChange: (key: string) => void;
@@ -27,7 +30,7 @@ interface CareerRatingCardProps {
 const formatScore = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 
 /** Mastery, Peak, and Renown for one of the character's specs, beside the identity header. */
-export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, error }: CareerRatingCardProps) {
+export function CareerRatingCard({ scope, onScopeChange, data, cohort, onCohortChange, isLoading, error }: CareerRatingCardProps) {
   const summary = cohort?.summary;
   // A spec's own status wins: one spec still preparing must not hide another's ratings.
   const message = error
@@ -57,6 +60,26 @@ export function CareerRatingCard({ data, cohort, onCohortChange, isLoading, erro
             <ArrowUpRight className="size-3" />
           </Link>
         </CardAction>
+        <div className="col-span-full space-y-1.5 pt-2">
+          <div role="group" aria-label="Career rating scope" className="inline-flex rounded-md border border-border bg-background p-0.5">
+            {(["realm", "server"] as const).map((value) => (
+              <button
+                key={value}
+                type="button"
+                aria-pressed={scope === value}
+                onClick={() => onScopeChange(value)}
+                className={`rounded px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  scope === value ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {value === "realm" ? "Realm" : "Server"}
+              </button>
+            ))}
+          </div>
+          <p className="text-xs font-normal tracking-normal text-muted-foreground">
+            {scope === "realm" ? "Raids unlocked on this realm." : "All raids unlocked across this server’s realms."}
+          </p>
+        </div>
         {data && data.cohorts.length > 1 && (
           <CohortSelector cohorts={data.cohorts} selected={cohort} onSelect={onCohortChange} />
         )}
