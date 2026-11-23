@@ -27,6 +27,18 @@ interface CareerRatingCardProps {
   error?: string;
 }
 
+const SCOPE_LABEL: Record<CareerRatingScope, string> = { realm: "Realm rating", server: "Server rating" };
+const SCOPE_DESCRIPTION: Record<CareerRatingScope, string> = {
+  realm: "Raids unlocked on this realm.",
+  server: "All raids unlocked across this server’s realms.",
+};
+
+/** DPS reads red and HPS green, matching the damage/healing colours elsewhere. */
+const METRIC_BADGE: Record<string, string> = {
+  dps: "border-red-500/40 bg-red-500/10 text-red-300",
+  hps: "border-green-500/40 bg-green-500/10 text-green-300",
+};
+
 const formatScore = (v: number | null) => (v === null ? "—" : v.toFixed(1));
 
 /** Mastery, Peak, and Renown for one of the character's specs, beside the identity header. */
@@ -41,12 +53,40 @@ export function CareerRatingCard({ scope, onScopeChange, data, cohort, onCohortC
 
   return (
     // min-h matches JourneyStatsCard so toggling modes doesn't shift the layout.
-    <Card className="h-full min-h-[172px] gap-0 py-4">
+    // The server scope tints the card so the wider pool is recognizable without reading the label.
+    <Card
+      data-scope={scope}
+      className={`h-full min-h-[172px] gap-0 py-4 transition-colors ${
+        scope === "server" ? "border-indigo-400/30 bg-linear-to-br from-indigo-500/10 via-indigo-500/[0.03] to-transparent" : ""
+      }`}
+    >
       <CardHeader className="pb-3">
         <CardTitle className="flex items-center gap-2 text-xs font-normal tracking-widest text-muted-foreground uppercase">
-          Career rating
+          <div role="group" aria-label="Career rating scope" className="flex items-center gap-3">
+            {(["realm", "server"] as const).map((value) => (
+              <Tooltip key={value}>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-pressed={scope === value}
+                    onClick={() => onScopeChange(value)}
+                    className={`-mb-1 border-b-2 pb-1 uppercase transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none ${
+                      scope === value
+                        ? value === "server"
+                          ? "border-indigo-400 text-foreground"
+                          : "border-foreground/70 text-foreground"
+                        : "border-transparent text-muted-foreground/70 hover:text-foreground"
+                    }`}
+                  >
+                    {SCOPE_LABEL[value]}
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="top">{SCOPE_DESCRIPTION[value]}</TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
           {summary?.chosen_metric && (
-            <span className="rounded border border-border px-1.5 py-0.5 font-mono text-[10px] tracking-normal text-foreground">
+            <span className={`rounded border px-1.5 py-0.5 font-mono text-[10px] tracking-normal ${METRIC_BADGE[summary.chosen_metric] ?? "border-border text-foreground"}`}>
               {summary.chosen_metric.toUpperCase()}
             </span>
           )}
@@ -60,26 +100,6 @@ export function CareerRatingCard({ scope, onScopeChange, data, cohort, onCohortC
             <ArrowUpRight className="size-3" />
           </Link>
         </CardAction>
-        <div className="col-span-full space-y-1.5 pt-2">
-          <div role="group" aria-label="Career rating scope" className="inline-flex rounded-md border border-border bg-background p-0.5">
-            {(["realm", "server"] as const).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={scope === value}
-                onClick={() => onScopeChange(value)}
-                className={`rounded px-3 py-1 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                  scope === value ? "bg-primary/15 text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                }`}
-              >
-                {value === "realm" ? "Realm" : "Server"}
-              </button>
-            ))}
-          </div>
-          <p className="text-xs font-normal tracking-normal text-muted-foreground">
-            {scope === "realm" ? "Raids unlocked on this realm." : "All raids unlocked across this server’s realms."}
-          </p>
-        </div>
         {data && data.cohorts.length > 1 && (
           <CohortSelector cohorts={data.cohorts} selected={cohort} onSelect={onCohortChange} />
         )}

@@ -86,10 +86,9 @@ export const Warrior: Story = {
     history: historyWarrior as LeaderboardV2PlayerHistory,
   },
   play: async ({ canvas }) => {
-    await expect(canvas.getByRole("button", { name: "Realm", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await userEvent.click(canvas.getByRole("button", { name: "Server", exact: true }));
-    await expect(canvas.getByRole("button", { name: "Server", exact: true })).toHaveAttribute("aria-pressed", "true");
-    await expect(canvas.getByText("All raids unlocked across this server’s realms.")).toBeInTheDocument();
+    await expect(canvas.getByRole("button", { name: "Realm rating", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await userEvent.click(canvas.getByRole("button", { name: "Server rating", exact: true }));
+    await expect(canvas.getByRole("button", { name: "Server rating", exact: true })).toHaveAttribute("aria-pressed", "true");
     await expect(canvas.getByText("15.1")).toBeInTheDocument();
     await expect(canvas.getByText(/Updating/)).toBeInTheDocument();
     await userEvent.click(canvas.getByRole("button", { name: "Show Fury · Fury Prot ratings" }));

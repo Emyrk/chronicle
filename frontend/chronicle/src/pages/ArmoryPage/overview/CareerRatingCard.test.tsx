@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it } from "vitest";
+import { TooltipProvider } from "@/components/ui/Tooltip/tooltip";
 import { CareerRatingCard } from "./CareerRatingCard";
 
 describe("CareerRatingCard scope", () => {
@@ -8,12 +9,14 @@ describe("CareerRatingCard scope", () => {
     it(`labels the ${scope} score and selects its scope`, () => {
       const html = renderToStaticMarkup(
         <MemoryRouter>
-          <CareerRatingCard scope={scope} onScopeChange={() => {}} onCohortChange={() => {}} isLoading />
+          <TooltipProvider>
+            <CareerRatingCard scope={scope} onScopeChange={() => {}} onCohortChange={() => {}} isLoading />
+          </TooltipProvider>
         </MemoryRouter>,
       );
       expect(html).toContain('aria-label="Career rating scope"');
-      expect(html).toMatch(new RegExp(`aria-pressed="true"[^>]*>${scope === "realm" ? "Realm" : "Server"}</button>`));
-      expect(html).toContain(scope === "realm" ? "Raids unlocked on this realm." : "All raids unlocked across this server’s realms.");
+      expect(html).toMatch(new RegExp(`aria-pressed="true"[^>]*>${scope === "realm" ? "Realm" : "Server"} rating</button>`));
+      expect(html).toContain(`data-scope="${scope}"`);
     });
   }
 });
