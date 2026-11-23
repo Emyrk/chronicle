@@ -28623,6 +28623,15 @@ func (q *sqlQuerier) DisableNestedLoopForTransaction(ctx context.Context) error 
 	return err
 }
 
+const disableParallelQueryForTransaction = `-- name: DisableParallelQueryForTransaction :exec
+SET LOCAL max_parallel_workers_per_gather = 0
+`
+
+func (q *sqlQuerier) DisableParallelQueryForTransaction(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, disableParallelQueryForTransaction)
+	return err
+}
+
 const getCharacterEncounterStats = `-- name: GetCharacterEncounterStats :many
 SELECT
   edr.instance_name,

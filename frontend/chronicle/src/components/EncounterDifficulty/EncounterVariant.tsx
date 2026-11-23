@@ -2,6 +2,7 @@ import type { EncounterVariantTooltipData } from "@/api/typesGenerated";
 import { SpellIdTooltip } from "@/components/ui/SpellIdTooltip/SpellIdTooltip";
 import { HintTooltip, TooltipContent, TooltipTrigger } from "@/components/ui/Tooltip/tooltip";
 import { cn } from "@/lib/utils";
+import { Lock } from "lucide-react";
 import { CHIP, difficultyChipClassName } from "./encounterDifficulty";
 import { encounterVariantLabel, encounterVariantOptions, isEncounterVariant, isHardEncounterVariant, type EncounterVariant } from "./encounterVariant";
 
@@ -50,6 +51,8 @@ export function EncounterVariantMark({ variant, tooltip, tooltipData }: {
   </HintTooltip>;
 }
 
+const LOCKED_NOTE = "Combined only in this view. Your choices are retained.";
+
 export function EncounterVariantChips({ boss, active, onSelect, disabledReason }: {
   disabledReason?: string; boss: string; active?: EncounterVariant; onSelect: (variant?: EncounterVariant) => void;
 }) {
@@ -63,6 +66,13 @@ export function EncounterVariantChips({ boss, active, onSelect, disabledReason }
       className={cn(variant ? difficultyChipClassName(isHardEncounterVariant(variant) || variant === "medium" ? "hard" : "") : cn(CHIP, "bg-sky-500/15 text-sky-200 ring-sky-400/40"),
         "cursor-pointer transition-opacity disabled:cursor-not-allowed disabled:opacity-25 disabled:grayscale", active === variant ? "ring-2" : "opacity-35 hover:opacity-80")}
     >{variant === "normal" ? "N" : variant === "hard" ? "Hard" : variant === "medium" ? "Medium" : variant ? encounterVariantLabel(variant) : "All"}</button>)}
-    {disabledReason && <span role="note" className="w-full text-[10px] leading-snug text-muted-foreground" title={disabledReason}>Combined only in this view. Your choices are retained.</span>}
+    {disabledReason && <HintTooltip>
+      <TooltipTrigger asChild>
+        <span role="note" tabIndex={0} aria-label={LOCKED_NOTE} className="inline-flex cursor-help items-center text-muted-foreground hover:text-foreground">
+          <Lock className="h-3 w-3" aria-hidden />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="right" sideOffset={6} className="max-w-xs">{LOCKED_NOTE}</TooltipContent>
+    </HintTooltip>}
   </div>;
 }
