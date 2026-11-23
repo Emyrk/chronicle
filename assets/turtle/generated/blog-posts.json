@@ -2,14 +2,14 @@
   {
     "id": "modules",
     "title": "Community modules",
-    "description": "Raid panels for Chronicle, written in Lua by the community. Track a module to add it to your raids, or build your own in the Module Workshop and tag a release for everyone.",
+    "description": "Raid panels for Chronicle, written in Lua by the community. Track a module to add it to your raids, or build your own with Claude Code and share it with your guild.",
     "publishedAt": "2026-11-23",
     "rarity": "legendary",
     "tag": "Feature",
     "icon": "inv_gizmo_02",
     "flavor": "Tinkered by raiders, for raiders.",
     "hintTitle": "Community modules",
-    "hintDescription": "Track raid panels the community built in Lua, or build your own in the Module Workshop.",
+    "hintDescription": "Track raid panels the community built in Lua, or build your own and share it with your guild.",
     "hintHref": "/modules"
   },
   {

@@ -30,9 +30,9 @@ function AccessCallout() {
         <DiscordIcon className="size-5" />
       </div>
       <div className="flex-1">
-        <p className="text-sm font-semibold text-foreground">Not Revered? Message me on Discord.</p>
+        <p className="text-sm font-semibold text-foreground">Not Revered? You can still build one.</p>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          I&apos;ll give module access to anyone who wants to build one. Join the Chronicle Discord and send me a message.
+          Message me on Discord with what you want to make, and I&apos;ll turn on module access for you.
         </p>
       </div>
       <a
@@ -81,9 +81,13 @@ export function ModulesPost({ post }: PostProps) {
         wiping.
       </p>
 
-      <h2>Build your own</h2>
+      <h2>Now make your own</h2>
       <p>
-        Making modules is a <ReveredBadge /> perk.
+        Ever finished a wipe wishing Chronicle had a panel for that? Who stood in the fire. Who forgot their Greater
+        Fire Protection. Whose Tranquilizing Shot missed the frenzy. You can build it, and your whole guild can use it.
+      </p>
+      <p>
+        Making modules is a <ReveredBadge /> perk, and it&apos;s also yours if you ask.
       </p>
       <AccessCallout />
       <p>Getting started takes three steps:</p>
@@ -98,7 +102,7 @@ export function ModulesPost({ post }: PostProps) {
         </li>
         <li>
           <strong>Tag a release.</strong> Save your work to main while it&apos;s in progress. Tag a release when it&apos;s
-          ready, and everyone can track it.
+          ready, and it&apos;s live for everyone.
         </li>
       </ul>
 
@@ -128,7 +132,17 @@ export function ModulesPost({ post }: PostProps) {
         troubleshooting.
       </p>
 
-      <p>If your module needs data or a widget that isn&apos;t there yet, ask for it.</p>
+      <h2>Share it</h2>
+      <p>
+        Every module has its own page, like <code className="before:content-none after:content-none">/modules/you/raidradar</code>.
+        Drop the link in your guild&apos;s Discord. Anyone who opens it can read the README and press{" "}
+        <strong>Track</strong>, and every release you tag reaches them on their next raid. Want help building it? Add
+        your guildmates as contributors.
+      </p>
+      <p>
+        Built something you&apos;re proud of? Show it off in the Discord. If your module needs data or a widget that
+        isn&apos;t there yet, ask for it there too.
+      </p>
     </ShortPost>
   );
 }

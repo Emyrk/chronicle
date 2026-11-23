@@ -648,7 +648,7 @@ function WorkshopScene({ frame, opacity }: { frame: number; opacity: number }) {
           style={{ right: 24, bottom: 20, opacity: interpolate(frame, [RELEASE_CLICK, RELEASE_CLICK + 8], [0, 1], clamp) }}
         >
           <Check className="mr-2 inline h-4 w-4 text-emerald-400" />
-          Released v1. Panels running the module pick it up on their next load.
+          Released v1. Share <span className="font-mono text-sky-300">/modules/you/raidradar</span> with your guild.
         </div>
       )}
     </div>
@@ -664,8 +664,8 @@ const CAPTIONS: { step: number; text: ReactNode; from: number; to: number }[] = 
   { step: 2, text: <>Press <span className="text-amber-300">Track</span> to add one to your raids</>, from: PAGE_START + 10, to: INSTANCE_START },
   { step: 3, text: <>Pick it from <span className="text-sky-300">Modules</span> in the panel picker</>, from: INSTANCE_START + 10, to: FIGHT_FROM + 10 },
   { step: 4, text: "It replays the fight with the playhead", from: FIGHT_FROM + 14, to: WORKSHOP_START },
-  { step: 5, text: <>Build your own with <span style={{ color: CLAUDE }}>Claude Code</span>, over Chronicle&apos;s MCP</>, from: WORKSHOP_START + 10, to: RELEASE_CLICK - 6 },
-  { step: 6, text: <>Tag a <span className="text-emerald-300">release</span>, and anyone can track it</>, from: RELEASE_CLICK - 2, to: FINALE },
+  { step: 5, text: <>Your turn: build one with <span style={{ color: CLAUDE }}>Claude Code</span>, over Chronicle&apos;s MCP</>, from: WORKSHOP_START + 10, to: RELEASE_CLICK - 6 },
+  { step: 6, text: <>Tag a <span className="text-emerald-300">release</span> and share the link. Anyone can track it</>, from: RELEASE_CLICK - 2, to: FINALE },
 ];
 
 function urlAt(frame: number) {
@@ -722,12 +722,15 @@ function Finale({ progress, frame }: { progress: number; frame: number }) {
       <RadarView p={interpolate(frame, [FINALE, FINALE + 110], [0.4, 0.62], clamp)} frame={frame} size={300} />
       <div>
         <h2 className="font-wow text-[64px] font-bold tracking-tight">Modules</h2>
-        <p className="mt-2 max-w-[640px] text-2xl text-muted-foreground">Raid panels built by the community, written in Lua.</p>
+        <p className="mt-2 max-w-[640px] text-2xl text-muted-foreground">
+          Raid panels built by raiders. The next one is <span className="font-semibold text-violet-300">yours</span>.
+        </p>
         <div className="mt-8 flex gap-3 font-mono text-lg">
           <span className="rounded-full border border-amber-300/40 bg-white/5 px-5 py-2 text-amber-300">Track</span>
           <span className="rounded-full border border-violet-300/40 bg-white/5 px-5 py-2 text-violet-300">Build</span>
-          <span className="rounded-full border border-white/15 bg-white/5 px-5 py-2">/modules</span>
+          <span className="rounded-full border border-emerald-300/40 bg-white/5 px-5 py-2 text-emerald-300">Share</span>
         </div>
+        <p className="mt-5 font-mono text-lg text-sky-300">/modules/you/raidradar</p>
       </div>
     </div>
   );
@@ -749,9 +752,9 @@ export default function ModulesVideo() {
             <span className="text-amber-300">Track</span> one to add it to your raids
           </>,
           <>
-            Build your own with <span style={{ color: CLAUDE }}>Claude Code</span> and Chronicle&apos;s MCP
+            <span className="text-violet-300">You</span> can build one too, with <span style={{ color: CLAUDE }}>Claude Code</span>
           </>,
-          "Tag a release, and anyone can use it",
+          "Share it with a link, and anyone can track it",
         ]}
       />
     </VideoStage>

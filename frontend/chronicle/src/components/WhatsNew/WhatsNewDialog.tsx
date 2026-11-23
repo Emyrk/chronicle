@@ -1,4 +1,4 @@
-import { ArrowRight, Bot, Radar, Star, Tag } from "lucide-react";
+import { ArrowRight, Bot, Radar, Share2, Star } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,15 +16,16 @@ interface WhatsNewDialogProps {
 const HIGHLIGHTS = [
   "Browse raid panels the community built in Lua, like RadarDurability: the raid as a radar of who was close to dying.",
   "Track a module and it shows up under Modules in your instance panel picker.",
-  "Build your own with Claude Code through Chronicle's MCP, the officially supported flow. Other MCP agents work too.",
-  "Tag a release when it's ready, and everyone tracking it gets the update.",
+  "Now make your own. Revered can start today, and anyone else can ask for access on Discord.",
+  "Build it with Claude Code through Chronicle's MCP, the officially supported flow. Other MCP agents work too.",
+  "Tag a release and share the link. Your whole guild can track it.",
 ];
 
 // The three things to do with a module, in the colours /modules uses for them.
 const STEPS = [
   { icon: Star, label: "Track", color: "#fcd34d" },
   { icon: Bot, label: "Build", color: "#d97757" },
-  { icon: Tag, label: "Release", color: "#6ee7b7" },
+  { icon: Share2, label: "Share", color: "#6ee7b7" },
 ];
 
 // Styled as a legendary item tooltip: a major launch.
@@ -53,7 +54,7 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
         </div>
 
         <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
-          <p className="text-foreground">Use: Add panels built by other raiders to your raids</p>
+          <p className="text-foreground">Use: Add raider-made panels to your raids, or make your own</p>
 
           <div aria-hidden className="mt-3 flex items-center gap-3 rounded border border-quality-legendary/30 bg-black/35 p-3 shadow-inner">
             <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 bg-white/5">
