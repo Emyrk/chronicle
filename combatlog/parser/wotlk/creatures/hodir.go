@@ -50,6 +50,13 @@ func (c *hodirCharacter) Process(m messages.Message) error {
 		return err
 	}
 
+	// Cleanup only implies surrender if Hodir stopped dealing damage after the
+	// final hit. On a wipe, reflected damage can land immediately before his
+	// lethal Frozen Blows, putting reset cleanup inside the damage window.
+	if damage, ok := m.(*messages.Damage); ok && damage.Caster != nil && *damage.Caster == c.ID() && damage.Amount > 0 {
+		c.defeat.Reset()
+	}
+
 	if signal, defeated := c.defeat.Observe(m, c.IsActive()); defeated {
 		c.Died("hodir_defeated_"+string(signal), m)
 	}
