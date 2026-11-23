@@ -16,11 +16,16 @@ func (q *sqlQuerier) withJITDisabled(ctx context.Context, query func(Store) erro
 	}, &pgx.TxOptions{AccessMode: pgx.ReadOnly})
 }
 
-// RankingsLeaderboardNoJIT runs RankingsLeaderboard without PostgreSQL JIT.
+// RankingsLeaderboardNoJIT runs RankingsLeaderboard without PostgreSQL JIT or parallel workers.
 // The ranking query is too short-lived to recover its substantial compilation cost.
+// Parallel execution can exhaust the database container's small /dev/shm allocation;
+// keep this restriction local to the leaderboard transaction, not the connection pool.
 func (q *sqlQuerier) RankingsLeaderboardNoJIT(ctx context.Context, arg RankingsLeaderboardParams) ([]RankingsLeaderboardRow, error) {
 	var rows []RankingsLeaderboardRow
 	err := q.withJITDisabled(ctx, func(tx Store) error {
+		if err := tx.DisableParallelQueryForTransaction(ctx); err != nil {
+			return fmt.Errorf("disable parallel query for leaderboard transaction: %w", err)
+		}
 		var err error
 		rows, err = tx.RankingsLeaderboard(ctx, arg)
 		return err
