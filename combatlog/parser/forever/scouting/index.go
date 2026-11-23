@@ -3,6 +3,7 @@ package scouting
 import (
 	"math"
 	"slices"
+	"time"
 
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
@@ -78,6 +79,10 @@ func (s *Scouting) PlayerIDs() []guid.GUID {
 // KnownAt merges only resolved known fields at or before at. Equal timestamps
 // retain the first source; within each source, the last known encoded row wins.
 func (s *Scouting) KnownAt(id guid.GUID, at int64) KnownFields {
+	return s.knownAt(id, at, nil)
+}
+
+func (s *Scouting) knownAt(id guid.GUID, at int64, eligible func(Player) bool) KnownFields {
 	var known KnownFields
 	if s == nil {
 		return known
@@ -89,6 +94,9 @@ func (s *Scouting) KnownAt(id guid.GUID, at int64) KnownFields {
 		return old
 	}
 	for _, player := range s.players[id] {
+		if eligible != nil && !eligible(player) {
+			continue
+		}
 		next := player.KnownAt(at)
 		known.Name = newer(known.Name, next.Name)
 		known.Level = newer(known.Level, next.Level)
@@ -193,4 +201,18 @@ func (s *Scouting) StaticAttributes(id guid.GUID) (types.HeroRaces, types.HeroGe
 		gender = types.HeroGenderUnknown
 	}
 	return race, gender
+}
+
+// FreshKnownAt carries each source's as-of known fields through its LastSeen
+// and the following 24 hours (inclusive). Never use another source's LastSeen
+// to extend that validity, or replace the original observation clocks. KnownAt
+// still excludes future observations, including when LastSeen is in the future.
+// Static race/gender deliberately bypass expiry. A missing reference admits no history.
+func (s *Scouting) FreshKnownAt(id guid.GUID, reference time.Time) KnownFields {
+	if reference.IsZero() {
+		return KnownFields{}
+	}
+	return s.knownAt(id, reference.Unix(), func(player Player) bool {
+		return !reference.After(time.Unix(player.LastSeen, 0).Add(24 * time.Hour))
+	})
 }

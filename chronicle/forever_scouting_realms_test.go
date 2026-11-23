@@ -104,7 +104,7 @@ func TestScoutingRealmResolutionBatchFailsClosed(t *testing.T) {
 		_, ok := resolved[id]
 		require.False(t, ok)
 	}
-	payload, err := scoutingPayload(index, resolved)
+	payload, err := scoutingPayload(index, resolved, time.Unix(1000, 0))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -131,7 +131,7 @@ func TestScoutingRealmResolutionBatchFailsClosed(t *testing.T) {
 	resolved, err = resolveScoutingRealms(t.Context(), store, index, tenant)
 	require.NoError(t, err)
 	require.Empty(t, resolved)
-	payload, err = scoutingPayload(index, resolved)
+	payload, err = scoutingPayload(index, resolved, time.Unix(1000, 0))
 	require.NoError(t, err)
 	require.JSONEq(t, `[]`, string(payload))
 }
@@ -180,7 +180,7 @@ func TestScoutingMixedConfirmedRealmsRemainDistinct(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 2, store.reads)
 	require.Equal(t, map[guid.GUID]uuid.UUID{1: normal, 2: pvp, 3: roleplay}, resolved)
-	payload, err := scoutingPayload(index, resolved)
+	payload, err := scoutingPayload(index, resolved, time.Unix(1000, 0))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -197,7 +197,7 @@ func TestScoutingGroupDepartureDoesNotExcludeArmoryPayload(t *testing.T) {
 	t.Parallel()
 	realm := uuid.New()
 	index := newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Synthetic", Realm: "CAMWOWUS2Realm5PvE", LastSeen: 140, Observations: []scouting.Observation{{At: 140, Name: "Synthetic", Level: ptr.Ref(19), Guild: ptr.Ref("Guild"), Party: ptr.Ref(false)}}}}})
-	payload, err := scoutingPayload(index, map[guid.GUID]uuid.UUID{1: realm})
+	payload, err := scoutingPayload(index, map[guid.GUID]uuid.UUID{1: realm}, time.Unix(1000, 0))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -252,7 +252,7 @@ func TestScoutingInferredRegionsRequireCatalogAndKeepDistinctIDs(t *testing.T) {
 	require.Equal(t, 2, store.reads)
 	expected := map[guid.GUID]uuid.UUID{1: normalUS, 2: pvpEU, 3: roleplayKR, 4: roleplayPvPTW}
 	require.Equal(t, expected, resolved)
-	payload, err := scoutingPayload(index, resolved)
+	payload, err := scoutingPayload(index, resolved, time.Unix(1000, 0))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))

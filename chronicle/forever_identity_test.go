@@ -163,7 +163,7 @@ func TestLateCombatMetadataBlocksDirectScoutingWrite(t *testing.T) {
 	units.UpdatePlayer(combatant.Combatant{Guid: id, Name: "Other"})
 	finalizeScoutingRealms(units, realms)
 	require.Empty(t, realms)
-	payload, err := scoutingPayload(filtered, realms)
+	payload, err := scoutingPayload(filtered, realms, time.Unix(1000, 0))
 	require.NoError(t, err)
 	require.JSONEq(t, `[]`, string(payload))
 }

@@ -37,7 +37,7 @@ func TestScoutingPayloadIndependentFreshness(t *testing.T) {
 			{At: 15, Name: "Nearby", Level: ptr.Ref(21), Guild: ptr.Ref("Stale")},
 		}},
 	}}
-	payload, err := scoutingPayload(newTestScouting(t, players), testScoutingRealms(players))
+	payload, err := scoutingPayload(newTestScouting(t, players), testScoutingRealms(players), time.Unix(1000, 0))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -59,7 +59,7 @@ func TestScoutingPayloadThousandPlayers(t *testing.T) {
 	for i := 1; i <= 1000; i++ {
 		players[guid.GUID(i)] = []scouting.Player{{Name: fmt.Sprintf("Nearby%d", i), LastSeen: 20, Observations: []scouting.Observation{{At: 10, Name: fmt.Sprintf("Nearby%d", i)}}}}
 	}
-	payload, err := scoutingPayload(newTestScouting(t, players), testScoutingRealms(players))
+	payload, err := scoutingPayload(newTestScouting(t, players), testScoutingRealms(players), time.Unix(1000, 0))
 	require.NoError(t, err)
 	var rows []scoutingPlayerInput
 	require.NoError(t, json.Unmarshal(payload, &rows))
@@ -203,7 +203,7 @@ func TestScoutingStaticArmoryPersistence(t *testing.T) {
 	persist := func(race string, gender int, lastSeen int64) {
 		t.Helper()
 		players := newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", Race: race, Gender: &gender, LastSeen: lastSeen}}})
-		payload, err := scoutingPayload(players, map[guid.GUID]uuid.UUID{1: realm.ID})
+		payload, err := scoutingPayload(players, map[guid.GUID]uuid.UUID{1: realm.ID}, time.Unix(1000, 0))
 		require.NoError(t, err)
 		_, err = db.UpsertScoutedPlayers(ctx, payload)
 		require.NoError(t, err)
@@ -217,4 +217,89 @@ func TestScoutingStaticArmoryPersistence(t *testing.T) {
 	require.Equal(t, database.WowPlayableGenderFemale, row.Gender)
 	require.Equal(t, int64(20), row.RaceObservedAt.Time.Unix())
 	require.Equal(t, int64(20), row.GenderObservedAt.Time.Unix())
+}
+
+func TestScoutingLastSeenFreshnessAndLogEnd(t *testing.T) {
+	t.Parallel()
+	// Historical logs use their own timestamps, never the wall clock at upload.
+	lastSeen := time.Date(2020, 1, 2, 0, 0, 0, 0, time.UTC)
+	observation := lastSeen.Add(-7 * 24 * time.Hour)
+	realm := uuid.New()
+	players := newTestScouting(t, map[guid.GUID][]scouting.Player{1: {{Name: "Scout", Race: "Human", Gender: ptr.Ref(3), LastSeen: lastSeen.Unix(), Observations: []scouting.Observation{{At: observation.Unix(), Name: "Scout", Level: ptr.Ref(60), Guild: ptr.Ref("Guild")}}}}})
+	boundary := lastSeen.Add(24 * time.Hour)
+	before := &messages.Unit{MessageBase: messages.Base(observation.Add(-time.Second)), Info: unitinfo.Info{Guid: 1}}
+	fresh := &messages.Unit{MessageBase: messages.Base(boundary), Info: unitinfo.Info{Guid: 1}}
+	stale := &messages.Unit{MessageBase: messages.Base(boundary.Add(time.Second)), Info: unitinfo.Info{Guid: 1}}
+	static := &messages.Combatant{MessageBase: messages.Base(boundary.Add(time.Second)), Combatant: combatant.Combatant{Guid: 1, Name: "Scout"}}
+	source := &streamingScoutingSource{batches: [][]messages.Message{{before}, {fresh}, {stale, static}, {before}}}
+	adv := scoutingAdvancer{players: players, realms: map[guid.GUID]uuid.UUID{1: realm}, source: source}
+	batch, err := adv.Advance(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, batch[0].(*messages.Unit).Name)
+	batch, err = adv.Advance(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, "Scout", batch[0].(*messages.Unit).Name)
+	require.Equal(t, int32(60), batch[0].(*messages.Unit).Level)
+	require.Equal(t, observation.Unix(), batch[0].(*messages.Unit).LevelObservedAt.Unix())
+	batch, err = adv.Advance(t.Context())
+	require.NoError(t, err)
+	require.Empty(t, batch[0].(*messages.Unit).Name)
+	require.Zero(t, batch[0].(*messages.Unit).Level)
+	require.Equal(t, types.HeroRacesHuman, batch[1].(*messages.Combatant).Race)
+	require.Equal(t, types.HeroGenderFemale, batch[1].(*messages.Combatant).Gender)
+	_, err = adv.Advance(t.Context())
+	require.NoError(t, err)
+	require.Equal(t, boundary.Add(time.Second), adv.end, "end is maximum, not last processed timestamp")
+	payload, err := scoutingPayload(players, adv.realms, boundary)
+	require.NoError(t, err)
+	var rows []scoutingPlayerInput
+	require.NoError(t, json.Unmarshal(payload, &rows))
+	require.Equal(t, 60, *rows[0].Level)
+	require.Equal(t, observation.Unix(), rows[0].LevelObservedAt.Unix())
+	payload, err = scoutingPayload(players, adv.realms, adv.end)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(payload, &rows))
+	require.Nil(t, rows[0].Level)
+	require.Nil(t, rows[0].NameObservedAt)
+	require.Nil(t, rows[0].GuildObservedAt)
+	require.False(t, rows[0].GuildKnown)
+	require.Equal(t, "Scout", rows[0].Name, "static-only insert still has a reconciled identity label")
+	require.Equal(t, "Human", *rows[0].Race)
+	require.Equal(t, "Female", *rows[0].Gender)
+}
+
+func TestScoutingLastSeenDoesNotReplaceObservationClock(t *testing.T) {
+	t.Parallel()
+	db, _ := dbtestutil.NewDB(t)
+	ctx := t.Context()
+	server, err := db.InsertWoWServer(ctx, database.InsertWoWServerParams{ID: uuid.New(), Name: t.Name()})
+	require.NoError(t, err)
+	realm, err := db.InsertWoWServerRealm(ctx, database.InsertWoWServerRealmParams{ID: uuid.New(), ServerID: server.ID, Name: "realm"})
+	require.NoError(t, err)
+	reference := time.Date(2020, 1, 10, 0, 0, 0, 0, time.UTC)
+	persist := func(player scouting.Player, at time.Time) {
+		t.Helper()
+		index := newTestScouting(t, map[guid.GUID][]scouting.Player{1: {player}})
+		payload, err := scoutingPayload(index, map[guid.GUID]uuid.UUID{1: realm.ID}, at)
+		require.NoError(t, err)
+		_, err = db.UpsertScoutedPlayers(ctx, payload)
+		require.NoError(t, err)
+	}
+	newerObservation := reference.Add(-time.Hour)
+	persist(scouting.Player{Name: "Scout", LastSeen: reference.Unix(), Observations: []scouting.Observation{{At: newerObservation.Unix(), Name: "Scout", Level: ptr.Ref(60), Guild: ptr.Ref("Known")}}}, reference)
+	// Older observation is still valid through its later LastSeen, but cannot
+	// overwrite the database's independently newer observation.
+	persist(scouting.Player{Name: "Scout", LastSeen: reference.Add(time.Hour).Unix(), Observations: []scouting.Observation{{At: reference.Add(-7 * 24 * time.Hour).Unix(), Name: "Scout", Level: ptr.Ref(10), Guild: ptr.Ref("")}}}, reference)
+	// Expired fields and future observations must likewise not erase known state.
+	persist(scouting.Player{Name: "Scout", Race: "Human", Gender: ptr.Ref(3), LastSeen: reference.Add(-25 * time.Hour).Unix(), Observations: []scouting.Observation{{At: reference.Add(-26 * time.Hour).Unix(), Level: ptr.Ref(20), Guild: ptr.Ref("")}}}, reference)
+	persist(scouting.Player{Name: "Scout", LastSeen: reference.Add(time.Hour).Unix(), Observations: []scouting.Observation{{At: reference.Add(time.Hour).Unix(), Name: "Future", Level: ptr.Ref(30), Guild: ptr.Ref("")}}}, reference)
+	row, err := db.GetGamePlayerByGUID(ctx, database.GetGamePlayerByGUIDParams{RealmID: realm.ID, Identifier: 1})
+	require.NoError(t, err)
+	require.Equal(t, "Scout", row.Name)
+	require.Equal(t, int16(60), row.Level)
+	require.Equal(t, newerObservation.Unix(), row.LevelObservedAt.Time.Unix())
+	require.Equal(t, newerObservation.Unix(), row.GuildObservedAt.Time.Unix())
+	require.True(t, row.GuildID.Valid)
+	require.Equal(t, database.WowPlayableRaceHuman, row.Race)
+	require.Equal(t, database.WowPlayableGenderFemale, row.Gender)
 }

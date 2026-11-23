@@ -65,13 +65,14 @@ func (f overrideGameDB) SpellsByName(ctx context.Context, name string) ([]*chron
 // parseResult holds everything produced by the parse phase that the
 // finalization phase needs.
 type parseResult struct {
-	scoutingRealms  map[guid.GUID]uuid.UUID
-	scouting        *scouting.Scouting
-	encountersState *encounters.State
-	creaturesState  *creatures.Creatures
-	consumers       *consumers.Consumers
-	logCapabilities []string
-	report          parseTimingReport
+	scoutingReference time.Time
+	scoutingRealms    map[guid.GUID]uuid.UUID
+	scouting          *scouting.Scouting
+	encountersState   *encounters.State
+	creaturesState    *creatures.Creatures
+	consumers         *consumers.Consumers
+	logCapabilities   []string
+	report            parseTimingReport
 }
 
 // parseTimingReport captures timing + metrics from the parse phase.
@@ -112,6 +113,7 @@ func (w *WorkerLogParse) parseCombatLog(
 	var scoutRealms map[guid.GUID]uuid.UUID
 	var identity *foreverIdentity
 	var scoutCatalog *participantRealmCatalog
+	var scoutAdvancer *scoutingAdvancer
 	if logFormat == database.LogFormatV22Cleu {
 		var err error
 		scoutPlayers, err = w.loadForeverScouting(ctx, artifacts)
@@ -316,7 +318,8 @@ func (w *WorkerLogParse) parseCombatLog(
 			}
 			parseAdvancer = reorder.New(p, blizzardmodern.ReorderWindow)
 			if scoutPlayers.Len() > 0 {
-				parseAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, identity: identity, catalog: scoutCatalog}
+				scoutAdvancer = &scoutingAdvancer{source: parseAdvancer, players: scoutPlayers, realms: scoutRealms, identity: identity, catalog: scoutCatalog}
+				parseAdvancer = scoutAdvancer
 			}
 		}
 		consumeErr = c.ConsumeAll(ctx, parseAdvancer)
@@ -398,14 +401,19 @@ func (w *WorkerLogParse) parseCombatLog(
 	encountersState.Units.RefreshPlayerRealms()
 	finalizeScoutingRealms(encountersState.Units, scoutRealms)
 
+	var scoutingReference time.Time
+	if scoutAdvancer != nil {
+		scoutingReference = scoutAdvancer.end
+	}
 	return &parseResult{
-		scoutingRealms:  scoutRealms,
-		scouting:        scoutPlayers,
-		encountersState: encountersState,
-		creaturesState:  creaturesState,
-		consumers:       c,
-		logCapabilities: logCapabilities,
-		report:          timing,
+		scoutingReference: scoutingReference,
+		scoutingRealms:    scoutRealms,
+		scouting:          scoutPlayers,
+		encountersState:   encountersState,
+		creaturesState:    creaturesState,
+		consumers:         c,
+		logCapabilities:   logCapabilities,
+		report:            timing,
 	}, nil
 }
 

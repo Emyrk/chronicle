@@ -30,10 +30,12 @@ type Observation struct {
 type Player struct {
 	// Identity scalars are not timestamped history. Race and Gender are static
 	// attributes valid at every timestamp, exposed separately from observations.
-	Realm        string
-	Race         string
-	Gender       *int
-	Name         string
+	Realm  string
+	Race   string
+	Gender *int
+	Name   string
+	// LastSeen extends this source's carried observation validity, not the
+	// observation timestamps used for ordering writes. Freshness expires 24h later.
 	LastSeen     int64
 	Observations []Observation
 }

@@ -71,7 +71,7 @@ type scoutingPlayerInput struct {
 	GenderObservedAt   *time.Time `json:"gender_observed_at"`
 }
 
-func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID) ([]byte, error) {
+func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID, reference time.Time) ([]byte, error) {
 	ids := players.PlayerIDs()
 	rows := make([]scoutingPlayerInput, 0, len(ids))
 	timestamp := func(o *scouting.Observation) *time.Time {
@@ -87,8 +87,12 @@ func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID)
 			continue
 		}
 		snapshot, _ := players.Latest(id)
-		known := snapshot.Known
-		row := scoutingPlayerInput{ID: id.String(), RealmID: realmID, Name: snapshot.Name}
+		known := players.FreshKnownAt(id, reference)
+		// A reconciled source identity labels new scouting-only/static profiles.
+		// It is not a fresh name observation and cannot rename existing profiles.
+		// Do not use Latest's potentially expired or future observation name.
+		name, _ := players.IdentityName(id)
+		row := scoutingPlayerInput{ID: id.String(), RealmID: realmID, Name: name}
 		row.ObservedAt = time.Unix(snapshot.LastSeen, 0).UTC()
 		row.ScoutingLastSeenAt = row.ObservedAt
 		if known.Name != nil {
@@ -133,10 +137,17 @@ type scoutingAdvancer struct {
 	players    *scouting.Scouting
 	catalog    *participantRealmCatalog
 	reconciled map[guid.GUID]scoutingReconciliation
+	// end is the maximum parsed log timestamp, never scouting LastSeen or wall time.
+	end time.Time
 }
 
 func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, error) {
 	batch, err := s.source.Advance(ctx)
+	for _, message := range batch {
+		if message.Date().After(s.end) {
+			s.end = message.Date()
+		}
+	}
 	if s.catalog != nil && s.identity != nil {
 		raw := s.identity.combat.(*combatIdentity)
 		for _, message := range batch {
@@ -180,7 +191,7 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 			continue
 		}
 		unit := message.(*messages.Unit)
-		known := players.KnownAt(unit.Guid, unit.Date().Unix())
+		known := players.FreshKnownAt(unit.Guid, unit.Date())
 		copy := *unit
 		if (copy.Name == "" || copy.Name == "Unknown") && known.Name != nil {
 			copy.Name = known.Name.Name

@@ -448,7 +448,7 @@ func (w *WorkerLogParse) work(ctx context.Context, job *river.Job[ArgsLogParse],
 	if parsed.scouting.Len() > 0 {
 		realms := parsed.scoutingRealms
 		if len(realms) > 0 {
-			payload, err := scoutingPayload(parsed.scouting, realms)
+			payload, err := scoutingPayload(parsed.scouting, realms, parsed.scoutingReference)
 			if err != nil {
 				return fmt.Errorf("encode scouting players: %w", err)
 			}
