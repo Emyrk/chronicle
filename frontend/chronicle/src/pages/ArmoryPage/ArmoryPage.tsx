@@ -291,6 +291,8 @@ function ArmoryPageContent({ player }: { player: ArmoryPlayer }) {
                 )}
                 {activeTab === "overview" && mode === "performance" && !showParses && (
                   <CareerRatingCard
+                    scope={ratings.scope}
+                    onScopeChange={ratings.setScope}
                     data={ratings.career}
                     cohort={ratings.cohort}
                     onCohortChange={ratings.setCohort}

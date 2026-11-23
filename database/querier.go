@@ -859,6 +859,10 @@ type sqlcQuerier interface {
 	// including optional bosses and zero-award bosses. No subject/realm filter.
 	// Fact retraction by D1 makes activation retractable without a sticky active row.
 	LeaderboardCareerVariantActive(ctx context.Context, arg LeaderboardCareerVariantActiveParams) (bool, error)
+	// Input bosses are the CURRENT enabled exact boss identities from configuration,
+	// including optional bosses and zero-award bosses. Armory-only realm activation.
+	// Fact retraction by D1 makes activation retractable without a sticky active row.
+	LeaderboardCareerVariantActiveInRealm(ctx context.Context, arg LeaderboardCareerVariantActiveInRealmParams) (bool, error)
 	// Shared database clock for operational diagnostics; leases never use Go time.
 	LeaderboardD2Clock(ctx context.Context) (pgtype.Timestamptz, error)
 	LeaderboardHighlightRealms(ctx context.Context, tenantID uuid.UUID) ([]uuid.UUID, error)

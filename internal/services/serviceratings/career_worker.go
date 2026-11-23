@@ -15,6 +15,10 @@ import (
 )
 
 func CareerConfiguration(ctx context.Context, db database.Store, tenant uuid.UUID) (leaderboardconfig.CareerPool, error) {
+	return careerConfiguration(ctx, db, tenant, uuid.Nil)
+}
+
+func careerConfiguration(ctx context.Context, db database.Store, tenant, realm uuid.UUID) (leaderboardconfig.CareerPool, error) {
 	t, err := db.GetTenantByID(ctx, tenant)
 	if err != nil {
 		return leaderboardconfig.CareerPool{}, err
@@ -26,6 +30,9 @@ func CareerConfiguration(ctx context.Context, db database.Store, tenant uuid.UUI
 	dataset, err := db.GetDataset(ctx, datasetID)
 	if err != nil {
 		return leaderboardconfig.CareerPool{}, err
+	}
+	if realm != uuid.Nil {
+		return leaderboardconfig.ResolveCareerInRealm(ctx, db, tenant, realm, database.FlavorFromStrings(dataset.DefaultFlavor), database.FlavorFromStrings(t.AdditionalFlavor))
 	}
 	return leaderboardconfig.ResolveCareer(ctx, db, tenant, database.FlavorFromStrings(dataset.DefaultFlavor), database.FlavorFromStrings(t.AdditionalFlavor))
 }

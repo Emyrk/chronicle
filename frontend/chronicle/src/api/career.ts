@@ -1,8 +1,10 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import type { CareerGuildResponse, CareerLeaderboardResponse, CareerPlayerResponse, LeaderboardV2PlayerHistory } from "./typesGenerated"
 
-export function playerCareerURL(realm: string, player: string) {
-  return `/api/v1/armory/${encodeURIComponent(realm)}/${encodeURIComponent(player)}/career`
+export type CareerRatingScope = "realm" | "server"
+
+export function playerCareerURL(realm: string, player: string, scope: CareerRatingScope = "realm") {
+  return `/api/v1/armory/${encodeURIComponent(realm)}/${encodeURIComponent(player)}/career?scope=${scope}`
 }
 export function guildCareerURL(id: string) {
   return `/api/v1/guilds/${encodeURIComponent(id)}/career`
@@ -18,9 +20,9 @@ export async function fetchCareer<T>(url: string): Promise<T> {
   }
   return response.json()
 }
-export function usePlayerCareer(tenantID: string | undefined, realm: string, player: string, enabled = true) {
-  return useQuery({ queryKey: ["career", tenantID, "player", realm, player],
-    queryFn: () => fetchCareer<CareerPlayerResponse>(playerCareerURL(realm, player)),
+export function usePlayerCareer(tenantID: string | undefined, realm: string, player: string, enabled = true, scope: CareerRatingScope = "realm") {
+  return useQuery({ queryKey: ["career", tenantID, "player", realm, player, scope],
+    queryFn: () => fetchCareer<CareerPlayerResponse>(playerCareerURL(realm, player, scope)),
     enabled: enabled && !!realm && !!player, staleTime: 60_000, retry: false })
 }
 /** Boss-level kill history behind a character's ratings. */

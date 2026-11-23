@@ -5,6 +5,7 @@ import (
 	"errors"
 	"github.com/google/uuid"
 	"net/http"
+	"slices"
 
 	"github.com/jackc/pgx/v5"
 
@@ -18,24 +19,45 @@ import (
 )
 
 // careerTenant requires the request's tenant scope. Public callers cannot change
-// the pool, weights, or persisted metric choice through query parameters.
-func careerTenant(w http.ResponseWriter, r *http.Request) *database.Tenant {
+// weights or persisted metric choice through query parameters. Only Armory allows
+// the explicit realm/server display scope.
+func careerTenant(w http.ResponseWriter, r *http.Request, allowedQuery ...string) *database.Tenant {
 	ctx := r.Context()
 	tenant := servicetenant.TenantFromContext(ctx)
 	if tenant == nil {
 		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Open a tenant site to view career scores."})
 		return nil
 	}
-	if len(r.URL.Query()) != 0 {
-		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Career scores do not accept scope or metric overrides."})
+	for key := range r.URL.Query() {
+		if slices.Contains(allowedQuery, key) {
+			continue
+		}
+		httpapi.Write(ctx, w, http.StatusBadRequest, chroniclesdk.Response{Message: "Career scores do not accept these query parameters."})
 		return nil
 	}
 	return tenant
 }
 
+// Scope changes raid activation, never the character identity or metric selection.
+func armoryCareerScope(r *http.Request) (string, error) {
+	values, present := r.URL.Query()["scope"]
+	if !present {
+		return "realm", nil
+	}
+	if len(values) != 1 || (values[0] != "realm" && values[0] != "server") {
+		return "", errors.New("career scope must be realm or server")
+	}
+	return values[0], nil
+}
+
 func (api *API) GetArmoryPlayerCareer(w http.ResponseWriter, r *http.Request) {
-	tenant := careerTenant(w, r)
+	tenant := careerTenant(w, r, "scope")
 	if tenant == nil {
+		return
+	}
+	scope, err := armoryCareerScope(r)
+	if err != nil {
+		httpapi.Write(r.Context(), w, http.StatusBadRequest, chroniclesdk.Response{Message: err.Error()})
 		return
 	}
 	player, realm, ok := api.resolveArmoryPlayer(w, r)
@@ -47,7 +69,11 @@ func (api *API) GetArmoryPlayerCareer(w http.ResponseWriter, r *http.Request) {
 		writeCareerError(w, r, err)
 		return
 	}
-	result, err := serviceratings.ReadPlayerCareer(r.Context(), db, tenant.ID, realm, player.ID.String())
+	read := serviceratings.ReadArmoryPlayerCareer
+	if scope == "server" {
+		read = serviceratings.ReadPlayerCareer
+	}
+	result, err := read(r.Context(), db, tenant.ID, realm, player.ID.String())
 	if err != nil {
 		writeCareerError(w, r, err)
 		return

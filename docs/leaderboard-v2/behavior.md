@@ -180,6 +180,16 @@ and implementation details.
 - A variant is active iff the tenant has at least one currently eligible canonical
   boss kill in it. Losing the last eligible kill deactivates it. Neither a full
   clear nor a kill by the displayed subject is required.
+- Armory offers Realm and Server career rating scopes for every tenant and realm.
+  Realm is the default and requires eligible boss-kill evidence in the displayed
+  realm. Server uses the full tenant-wide active raid set. Both player and guild
+  evidence count, without requiring a full clear. Raids with no evidence in the
+  selected scope are omitted from the denominator and raid breakdown; active raids
+  remain zero-filled for characters without results. These read-time scopes retain
+  the stored metric choice and leave persisted inputs, leaderboards, guild pages,
+  and Open Graph cards unchanged. Realm activation differences alone do not mark
+  inputs as awaiting refresh. The Armory career API accepts `scope=realm|server`
+  and defaults to realm; the page's `rating_scope=server` selects Server ratings.
 - Career Mastery and Peak average raid-wide values using an explicit career weight
   per exact variant, independent of Renown awards or earned counts. Weights resolve
   at reads. Migration 358 supplies the approved exact weights listed in
