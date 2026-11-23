@@ -1,4 +1,4 @@
-import { ArrowRight, Radar, Sparkles, Star, Tag } from "lucide-react";
+import { ArrowRight, Bot, Radar, Star, Tag } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -16,14 +16,14 @@ interface WhatsNewDialogProps {
 const HIGHLIGHTS = [
   "Browse raid panels the community built in Lua, like RadarDurability: the raid as a radar of who was close to dying.",
   "Track a module and it shows up under Modules in your instance panel picker.",
-  "Build your own in the Module Workshop, with an assistant and real raid logs to try it on.",
+  "Build your own with Claude Code through Chronicle's MCP, the officially supported flow. Other MCP agents work too.",
   "Tag a release when it's ready, and everyone tracking it gets the update.",
 ];
 
 // The three things to do with a module, in the colours /modules uses for them.
 const STEPS = [
   { icon: Star, label: "Track", color: "#fcd34d" },
-  { icon: Sparkles, label: "Build", color: "#c4b5fd" },
+  { icon: Bot, label: "Build", color: "#d97757" },
   { icon: Tag, label: "Release", color: "#6ee7b7" },
 ];
 

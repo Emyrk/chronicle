@@ -110,7 +110,7 @@ function remotionVideo(load: LessonVideo["load"], durationInFrames: number): Les
 }
 
 const BLOG_VIDEOS = {
-  modules: remotionVideo(() => import("@/pages/LuaProjects/videos/Modules.video"), 1000),
+  modules: remotionVideo(() => import("@/pages/LuaProjects/videos/Modules.video"), 1040),
   ratings: remotionVideo(() => import("@/pages/Ratings/videos/RatingsExplainer.video"), 1010),
   "instance-search": remotionVideo(() => import("@/pages/InstanceSearch/videos/InstanceSearch.video"), 970),
   "alt-click-compare": remotionVideo(() => import("@/pages/Instance/videos/EntityInspector.video"), 1256),

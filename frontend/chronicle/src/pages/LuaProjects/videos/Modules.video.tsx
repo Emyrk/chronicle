@@ -4,17 +4,18 @@
  * Follows a module from the gallery to a raid: browse /modules, open
  * chronicle/RadarDurability, Track it, pick it from the instance panel picker
  * under Modules, and watch the radar replay a Nefarian kill. Then the Module
- * Workshop: ask the assistant, edit Lua, and tag a release.
+ * Workshop driven by Claude Code over Chronicle's MCP: connect the tab, ask
+ * for a radar, watch the Lua and preview fill in, and tag a release.
  *
  * The radar is a stand-in drawn in SVG from a scripted fight, following the
  * module's README: players round the circle, distance from the centre is
  * seconds of safety, mobs on the outer ring, heals as green lines, deaths as
  * red crosses, raid health and healer mana as arcs. The other gallery rows
  * are illustrative.
- * 1000 frames @ 30fps, 1280x720 (INTRO_FRAMES - 10 + FINALE + 110).
+ * 1040 frames @ 30fps, 1280x720 (INTRO_FRAMES - 10 + FINALE + 110).
  */
 import type { ReactNode } from "react";
-import { Check, ChevronDown, Code2, LayoutGrid, Play, Radar, Search, Sparkles, Star, Tag } from "lucide-react";
+import { Check, ChevronDown, Code2, LayoutGrid, Play, Radar, Search, Star, Tag, Terminal } from "lucide-react";
 import { interpolate, Sequence, useCurrentFrame } from "remotion";
 import { clamp, entranceEasing, INTRO_FRAMES } from "@/pages/Instance/PanelExplainer/videos/animation";
 import { Cursor, LessonIntro, StepCaption, VideoStage } from "@/pages/Instance/PanelExplainer/videos/shared";
@@ -29,8 +30,8 @@ const PICK_CLICK = 380;
 const FIGHT_FROM = 400;
 const FIGHT_TO = 610;
 const WORKSHOP_START = 630;
-const RELEASE_CLICK = 790;
-const FINALE = 840;
+const RELEASE_CLICK = 830;
+const FINALE = 880;
 const FADE = 14;
 
 export const MODULES_VIDEO_DURATION = INTRO_FRAMES - 10 + FINALE + 110;
@@ -46,6 +47,8 @@ const GREEN = "#4ade80";
 const RED = "#ef4444";
 const PURPLE = "#c084fc";
 const SKY = "#38bdf8";
+// Claude's brand orange.
+const CLAUDE = "#d97757";
 
 /* ------------------------------------------------------------------ */
 /* Scripted fight                                                      */
@@ -550,11 +553,51 @@ const CODE = [
 
 const ASK = "Draw the raid as a radar: how many seconds each player has before they could die.";
 
+// Workshop-local frames.
+const W_CONNECT = 34;
+const W_ASK_FROM = 48;
+const W_ASK_TO = 92;
+const W_REPLY = 100;
+const W_CODE_TO = 170;
+const W_PREVIEW = 176;
+
+/** Claude Code in a terminal beside the browser, driving the Workshop tab through chronicle-mcp. */
+function ClaudeTerminal({ local }: { local: number }) {
+  const slash = "/chronicle:connect";
+  const typedSlash = slash.slice(0, Math.floor(interpolate(local, [10, 28], [0, slash.length], clamp)));
+  const typedAsk = ASK.slice(0, Math.floor(interpolate(local, [W_ASK_FROM, W_ASK_TO], [0, ASK.length], clamp)));
+  const appear = interpolate(local, [0, 14], [0, 1], ease);
+  return (
+    <div
+      className="absolute overflow-hidden rounded-xl border border-white/15 bg-[#141414] font-mono text-[12px] leading-[1.55] shadow-[0_30px_80px_rgba(0,0,0,0.7)]"
+      style={{ left: 36, top: 150, width: 380, height: 330, opacity: appear, translate: `${interpolate(appear, [0, 1], [-24, 0])}px 0`, zIndex: 50 }}
+    >
+      <div className="flex items-center gap-2 border-b border-white/10 bg-white/[0.04] px-3 py-1.5 text-[11px] text-muted-foreground">
+        <Terminal className="h-3.5 w-3.5" /> Claude Code
+      </div>
+      <div className="space-y-2 p-3">
+        <p><span style={{ color: CLAUDE }}>&gt;</span> {typedSlash}</p>
+        {local >= W_CONNECT && (
+          <p className="text-muted-foreground">
+            <span style={{ color: CLAUDE }}>⏺</span> chronicle · selected <span className="text-foreground">you/RaidRadar</span>
+          </p>
+        )}
+        {local >= W_ASK_FROM && <p><span style={{ color: CLAUDE }}>&gt;</span> {typedAsk}</p>}
+        {local >= W_REPLY && (
+          <p className="text-muted-foreground" style={{ opacity: interpolate(local, [W_REPLY, W_REPLY + 8], [0, 1], clamp) }}>
+            <span style={{ color: CLAUDE }}>⏺</span> Added a Canvas radar that follows the replay playhead, saved to main and
+            previewed on Nefarian.
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function WorkshopScene({ frame, opacity }: { frame: number; opacity: number }) {
   const local = frame - WORKSHOP_START;
-  const typed = Math.floor(interpolate(local, [10, 60], [0, ASK.length], clamp));
-  const lines = Math.floor(interpolate(local, [70, 140], [0, CODE.length], clamp));
-  const replied = local >= 70;
+  const lines = Math.floor(interpolate(local, [W_REPLY - 6, W_CODE_TO], [0, CODE.length], clamp));
+  const connected = local >= W_CONNECT;
   const released = frame >= RELEASE_CLICK;
   return (
     <div className="absolute inset-0" style={{ opacity }}>
@@ -562,31 +605,25 @@ function WorkshopScene({ frame, opacity }: { frame: number; opacity: number }) {
         <Radar className="h-4 w-4 text-sky-300" />
         <span className="font-semibold">you / RaidRadar</span>
         <span className="text-muted-foreground">· Module Workshop</span>
+        <span
+          className={`ml-4 flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11.5px] ${connected ? "border-emerald-500/40 bg-emerald-500/10 text-emerald-200" : "border-white/10 text-muted-foreground"}`}
+        >
+          <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-muted-foreground"}`} />
+          {connected ? "Claude Code" : "No agent"}
+        </span>
         <span className="ml-auto rounded border border-white/10 px-2.5 py-1">Save</span>
-        <span className={`flex items-center gap-1.5 rounded px-2.5 py-1 ${released ? "bg-emerald-600 text-white" : "bg-primary-darker text-primary-foreground"}`}>
+        <span className={`flex w-[112px] items-center justify-center gap-1.5 rounded px-2.5 py-1 ${released ? "bg-emerald-600 text-white" : "bg-primary-darker text-primary-foreground"}`}>
           <Tag className="h-3.5 w-3.5" /> {released ? "Released v1" : "Release"}
         </span>
       </div>
-      <div className="grid h-[calc(100%-41px)] grid-cols-[280px_1fr_300px]">
-        {/* Assistant chat. */}
-        <div className="flex flex-col gap-3 border-r border-white/10 p-3 text-[12px]">
-          <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-violet-300">
-            <Sparkles className="h-3.5 w-3.5" /> Assistant
-          </p>
-          {typed > 0 && <p className="self-end rounded-lg bg-white/10 px-3 py-2">{ASK.slice(0, typed)}</p>}
-          {replied && (
-            <p className="rounded-lg border border-violet-400/30 bg-violet-400/10 px-3 py-2 leading-relaxed" style={{ opacity: interpolate(local, [70, 80], [0, 1], clamp) }}>
-              Added a Canvas radar that follows the replay playhead. Try it on the preview instance.
-            </p>
-          )}
-        </div>
+      <div className="grid h-[calc(100%-41px)] grid-cols-[1fr_350px]">
         {/* Code. */}
-        <div className="border-r border-white/10 bg-black/30">
+        <div className="border-r border-white/10 bg-black/30 pl-[300px]">
           <div className="flex gap-1 border-b border-white/10 px-2 pt-1.5 text-[11.5px]">
             <span className="flex items-center gap-1.5 rounded-t border border-b-0 border-white/10 bg-white/5 px-3 py-1"><Code2 className="h-3.5 w-3.5" /> main.lua</span>
             <span className="px-3 py-1 text-muted-foreground">README.md</span>
           </div>
-          <pre className="p-3 font-mono text-[11.5px] leading-[1.6]">
+          <pre className="p-3 font-mono text-[11px] leading-[1.6]">
             {CODE.slice(0, lines).map((line, i) => (
               <div key={i} className="flex gap-3">
                 <span className="w-5 text-right text-white/25">{i + 1}</span>
@@ -598,9 +635,9 @@ function WorkshopScene({ frame, opacity }: { frame: number; opacity: number }) {
         {/* Preview. */}
         <div className="flex flex-col items-center p-3">
           <p className="self-start text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Preview · Nefarian</p>
-          {lines >= CODE.length && (
-            <div style={{ opacity: interpolate(local, [140, 152], [0, 1], clamp) }}>
-              <RadarView p={interpolate(local, [140, 220], [0.3, 0.6], clamp)} frame={frame} size={270} />
+          {local >= W_PREVIEW && (
+            <div style={{ opacity: interpolate(local, [W_PREVIEW, W_PREVIEW + 12], [0, 1], clamp) }}>
+              <RadarView p={interpolate(local, [W_PREVIEW, W_PREVIEW + 80], [0.3, 0.6], clamp)} frame={frame} size={290} />
             </div>
           )}
         </div>
@@ -627,7 +664,7 @@ const CAPTIONS: { step: number; text: ReactNode; from: number; to: number }[] = 
   { step: 2, text: <>Press <span className="text-amber-300">Track</span> to add one to your raids</>, from: PAGE_START + 10, to: INSTANCE_START },
   { step: 3, text: <>Pick it from <span className="text-sky-300">Modules</span> in the panel picker</>, from: INSTANCE_START + 10, to: FIGHT_FROM + 10 },
   { step: 4, text: "It replays the fight with the playhead", from: FIGHT_FROM + 14, to: WORKSHOP_START },
-  { step: 5, text: <>Build your own in the <span className="text-violet-300">Module Workshop</span></>, from: WORKSHOP_START + 10, to: RELEASE_CLICK - 6 },
+  { step: 5, text: <>Build your own with <span style={{ color: CLAUDE }}>Claude Code</span>, over Chronicle&apos;s MCP</>, from: WORKSHOP_START + 10, to: RELEASE_CLICK - 6 },
   { step: 6, text: <>Tag a <span className="text-emerald-300">release</span>, and anyone can track it</>, from: RELEASE_CLICK - 2, to: FINALE },
 ];
 
@@ -656,6 +693,7 @@ function Content() {
           )}
           {frame >= WORKSHOP_START - FADE && <WorkshopScene frame={frame} opacity={sceneOpacity(frame, WORKSHOP_START - FADE, FINALE + 400)} />}
         </BrowserWindow>
+        {frame >= WORKSHOP_START && frame < FINALE && <ClaudeTerminal local={frame - WORKSHOP_START} />}
         <Cursor {...cursor} />
       </div>
       <Captions frame={frame} />
@@ -711,7 +749,7 @@ export default function ModulesVideo() {
             <span className="text-amber-300">Track</span> one to add it to your raids
           </>,
           <>
-            Build your own in the <span className="text-violet-300">Module Workshop</span>
+            Build your own with <span style={{ color: CLAUDE }}>Claude Code</span> and Chronicle&apos;s MCP
           </>,
           "Tag a release, and anyone can use it",
         ]}
