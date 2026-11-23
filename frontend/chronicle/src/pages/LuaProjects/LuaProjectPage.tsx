@@ -187,6 +187,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
           </div>
           <div className="flex flex-wrap items-center gap-2">
             <ModuleStar key={project.id} project={project} canUse={can.use} />
+            <Link className="inline-flex h-9 items-center gap-2 rounded-md border border-border px-3 text-sm font-medium hover:bg-accent" to="/modules/api" title="Module API reference and FAQ"><BookOpen className="size-4" /> Docs</Link>
             {project.kind === "panel" && can.edit && <Link className="inline-flex h-9 items-center gap-2 rounded-md bg-primary-darker px-4 text-sm font-medium text-primary-foreground hover:bg-primary-darker/90" to={workshop}><Code2 className="size-4" /><span><span className="hidden sm:inline">Open in </span>Workshop</span></Link>}
             {can.edit && <DropdownMenu>
               <DropdownMenuTrigger asChild>

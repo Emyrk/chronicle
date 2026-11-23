@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { FolderOpen, Search } from "lucide-react"
+import { BookOpen, FolderOpen, Search } from "lucide-react"
 import { useAuthorizationCheck, useSession } from "@/api/queries"
 import { authorPath, getMyAuthor, latestRelease, listProjects, listPublicProjects, type LuaProject } from "./api"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
@@ -50,7 +50,10 @@ export function LuaProjectsPage() {
           <h1 className="text-3xl font-semibold tracking-tight">Modules</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">Raid panels for Chronicle, written in Lua by the community. Track a module to add it to your raid panels, or build your own in the Module Workshop.</p>
         </div>
-        {author && <Link to={authorPath(author)} className={button}><FolderOpen className="size-4" /> My modules</Link>}
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to="/modules/api" className={button}><BookOpen className="size-4" /> Docs</Link>
+          {author && <Link to={authorPath(author)} className={button}><FolderOpen className="size-4" /> My modules</Link>}
+        </div>
       </header>
       {welcome && <ModuleWelcome step={!session || !author ? 0 : 1} author={author ?? undefined}>
         {!session ? <SignInPrompt /> : !author ? <ClaimAuthorForm onClaimed={() => void authorQuery.refetch()} /> : <NewModuleForm author={author} />}

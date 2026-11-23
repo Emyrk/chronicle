@@ -1,11 +1,11 @@
 import { Link, Navigate, useParams } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { ArrowLeft, Plus } from "lucide-react"
+import { ArrowLeft, BookOpen, Plus } from "lucide-react"
 import { useSession } from "@/api/queries"
 import { getAuthorPage, getMyAuthor, listProjects } from "./api"
 import { ModuleList } from "./ModuleCard"
 import { isModuleId } from "./moduleRoute"
-import { card, errorMessage, primaryButton } from "./moduleUi"
+import { button, card, errorMessage, primaryButton } from "./moduleUi"
 
 /** /modules/<author>: that author's modules. On your own page, also the modules shared with you and a button to create one. */
 export function ModuleAuthorPage() {
@@ -29,7 +29,10 @@ export function ModuleAuthorPage() {
         <h1 className="font-mono text-3xl font-semibold tracking-tight">{author}</h1>
         <p className="mt-2 text-sm text-muted-foreground">{mine ? "Your modules. Open one to edit it in the Module Workshop or tag a release." : `Modules by ${author}.`}</p>
       </div>
-      {mine && <Link to="/modules/new" className={primaryButton}><Plus className="size-4" /> New module</Link>}
+      <div className="flex flex-wrap items-center gap-2">
+        <Link to="/modules/api" className={button}><BookOpen className="size-4" /> Docs</Link>
+        {mine && <Link to="/modules/new" className={primaryButton}><Plus className="size-4" /> New module</Link>}
+      </div>
     </header>
     {page.isError ? <p role="alert" className="text-sm text-destructive">{errorMessage(page.error)}</p> :
       <div className="space-y-8">
