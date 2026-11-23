@@ -352,3 +352,67 @@ func TestHodirEncounterFactory(t *testing.T) {
 	require.False(t, ok)
 	require.Nil(t, character)
 }
+
+// The first Hodir attempt in combatlog-1d0092b9-a4d7-4704-9e09-f2d856d38a52
+// ended in a wipe. A reflected hit just before the lethal Frozen Blows brought
+// reset cleanup inside the 100ms damage window, even with unknown survivors.
+func TestHodirDamageAfterFinalHitRejectsWipeCleanup(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name                  string
+		outgoingAmount        int32
+		outgoingHitType       types.HitType
+		finalHitAfterOutgoing bool
+		wantSlain             bool
+	}{
+		{name: "lethal frozen blows after reflection", outgoingAmount: 31636, outgoingHitType: types.HitTypeHit},
+		{name: "nonlethal continued combat", outgoingAmount: 3130, outgoingHitType: types.HitTypeHit},
+		{name: "miss is not continued damage", outgoingHitType: types.HitTypeMiss, wantSlain: true},
+		{name: "surrender after subsequent hit", outgoingAmount: 3130, outgoingHitType: types.HitTypeHit, finalHitAfterOutgoing: true, wantSlain: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			all := newHodirTestCharacters()
+			player := guid.GUID(0x8B9ED)
+			hodirID := guid.GUID(0xF13000804D0003D4)
+			start := time.Date(2026, time.November, 22, 22, 0, 2, 365000000, time.UTC)
+			process := func(m messages.Message) {
+				t.Helper()
+				_, err := all.Process(m)
+				require.NoError(t, err)
+			}
+
+			// Log lines 237109-237110: reflection then Frozen Blows, same timestamp.
+			process(&messages.Damage{
+				MessageBase: messages.Base(start), Caster: &player, Target: hodirID,
+				Amount: 163, HitType: types.HitTypeHit,
+			})
+			process(&messages.Damage{
+				MessageBase: messages.Base(start), Caster: &hodirID, Target: player,
+				Amount: tc.outgoingAmount, HitType: tc.outgoingHitType,
+			})
+			if tc.finalHitAfterOutgoing {
+				process(&messages.Damage{
+					MessageBase: messages.Base(start.Add(time.Millisecond)), Caster: &player, Target: hodirID,
+					Amount: 100, HitType: types.HitTypeHit,
+				})
+			}
+			if tc.outgoingAmount == 31636 {
+				// UNIT_DIED at 22:00:02.369, line 237129.
+				process(&messages.Slain{MessageBase: messages.Base(start.Add(4 * time.Millisecond)), Victim: player})
+			}
+			// Lines 237130-237137: eight distinct removals 83-84ms later.
+			for i, name := range []string{"Deep Wounds", "Judgement of Wisdom", "Frost Vulnerability", "Hunter's Mark", "Blood Corruption", "Deadly Poison IX", "Frozen Blows", "Singed"} {
+				process(&messages.Aura{
+					MessageBase: messages.Base(start.Add(83*time.Millisecond + time.Duration(i/6)*time.Millisecond)),
+					Target:      hodirID, SpellName: name, State: types.AuraStateRemoved,
+				})
+			}
+			process(messages.TimedOut(start.Add(time.Second)))
+			hodir, ok := all.Get(hodirID)
+			require.True(t, ok)
+			require.Equal(t, tc.wantSlain, hodir.LastEndState() == period.EndStateSlain)
+		})
+	}
+}

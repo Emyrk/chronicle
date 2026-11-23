@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/unitinfo"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func newAlgalonTestCharacters() *characters.Characters {
@@ -274,4 +275,39 @@ func TestAlgalonAuraCleanupAfterRaidDeathRemainsWipe(t *testing.T) {
 	require.True(t, ok)
 	require.True(t, boss.IsActive())
 	require.NotEqual(t, period.EndStateSlain, boss.LastEndState())
+}
+
+// The November 22 client log ends with eight player deaths, then lingering
+// periodic damage and ten distinct debuff removals at 21:33:08.978-.979.
+// No maximum-health metadata or boss UNIT_DIED event is present.
+func TestAlgalonAuraCleanupWithSurvivingMinorityWithoutHealthMarksDefeat(t *testing.T) {
+	t.Parallel()
+	all := newAlgalonTestCharacters()
+	algalon := creatureGUID(algalonEntry)
+	start := time.Date(2026, time.November, 22, 21, 27, 55, 0, time.UTC)
+	for player := guid.GUID(1); player <= 10; player++ {
+		_, err := all.Process(testDamage(start, player, algalon))
+		require.NoError(t, err)
+	}
+	for player := guid.GUID(1); player <= 8; player++ {
+		_, err := all.Process(&messages.Slain{
+			MessageBase: messages.Base(start.Add(5 * time.Minute)), Victim: player,
+		})
+		require.NoError(t, err)
+	}
+	lastDamage := time.Date(2026, time.November, 22, 21, 33, 8, 978000000, time.UTC)
+	// A dead player's DoT can supply the final damage that triggers surrender.
+	_, err := all.Process(testDamage(lastDamage, guid.GUID(1), algalon))
+	require.NoError(t, err)
+	for i, id := range []int32{20185, 49001, 49233, 50536, 51714, 51735, 53742, 55078, 55095, 57970} {
+		_, err := all.Process(&messages.Aura{
+			MessageBase: messages.Base(lastDamage.Add(time.Duration(i/5) * time.Millisecond)),
+			Target:      algalon, SpellData: &chrondbc.Spell{ID: chrondbc.SpellID(id)}, State: types.AuraStateRemoved,
+		})
+		require.NoError(t, err)
+	}
+	boss, ok := all.Get(algalon)
+	require.True(t, ok)
+	require.False(t, boss.IsActive())
+	require.Equal(t, period.EndStateSlain, boss.LastEndState())
 }
