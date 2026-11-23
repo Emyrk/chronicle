@@ -1,5 +1,18 @@
 [
   {
+    "id": "modules",
+    "title": "Community modules",
+    "description": "Raid panels for Chronicle, written in Lua by the community. Track a module to add it to your raids, or build your own in the Module Workshop and tag a release for everyone.",
+    "publishedAt": "2026-11-23",
+    "rarity": "epic",
+    "tag": "Feature",
+    "icon": "inv_gizmo_02",
+    "flavor": "Tinkered by raiders, for raiders.",
+    "hintTitle": "Community modules",
+    "hintDescription": "Track raid panels the community built in Lua, or build your own in the Module Workshop.",
+    "hintHref": "/modules"
+  },
+  {
     "id": "beyond-the-best-parse",
     "title": "Beyond the Best Parse: Why I Introduced Ratings to Chronicle",
     "description": "Removing the old Armory view was a mistake. It's back, with parse history in the new view too. Here's why I introduced ratings, what problems they try to solve, and where I'd like to take Chronicle.",
