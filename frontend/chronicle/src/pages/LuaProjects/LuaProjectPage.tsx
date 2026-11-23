@@ -6,6 +6,8 @@ import remarkGfm from "remark-gfm"
 import { ArrowLeft, BookOpen, Code2, Download, FileCode, FileImage, FileJson, FileText, MoreHorizontal, Trash2, Upload, Users } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/DropdownMenu/DropdownMenu"
 import { modulePath, authorPath, createRelease, deleteProject, deleteRelease, latestRelease, nextReleaseTag, uploadDraft, type LuaRelease } from "./api"
+import { CodeHighlightStyles } from "./ApiCodeBlock"
+import { highlightLines } from "./codeHighlight"
 import { ModuleIcon } from "./ModuleIcon"
 import { ModuleReleases, ReleasesTable, VersionPicker } from "./ModuleReleases"
 import { AdRailStack } from "@/components/Ads/AdRailStack"
@@ -44,10 +46,12 @@ function Readme({ text, images }: { text: string; images: ReadonlyMap<string, st
 }
 
 function FileViewer({ file, images }: { file: PackageFile; images: ReadonlyMap<string, string> }) {
-  const lines = useMemo(() => isImagePath(file.path) ? [] : new TextDecoder().decode(file.bytes).split("\n"), [file])
-  if (file.path === "README.md") return <Readme text={lines.join("\n")} images={images} />
+  const text = useMemo(() => isImagePath(file.path) ? "" : new TextDecoder().decode(file.bytes), [file])
+  const lines = useMemo(() => highlightLines(text, file.path.split(".").pop() ?? ""), [text, file.path])
+  if (file.path === "README.md") return <Readme text={text} images={images} />
   if (isImagePath(file.path)) return <div className="p-6"><img src={images.get(file.path)} alt={file.path} className="max-w-full rounded border border-border" /></div>
   return <div className="styled-scrollbar overflow-x-auto py-3">
+    <CodeHighlightStyles />
     <table className="font-mono text-xs leading-5"><tbody>{lines.map((line, index) => <tr key={index}>
       <td className="select-none px-4 text-right align-top text-muted-foreground/60">{index + 1}</td>
       <td className="whitespace-pre pr-4">{line}</td>
@@ -228,7 +232,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
                 : filesQuery.isError ? <p role="alert" className="p-4 text-sm text-destructive">{filesQuery.error.message}</p>
                 : <ul className="divide-y divide-border/60">{files!.map(file => <li key={file.path}>
                   <button type="button" onClick={() => show({ file: file.path })} aria-current={selected?.path === file.path}
-                    className={`flex w-full items-center gap-3 px-4 py-2 text-left text-sm hover:bg-muted/60 ${selected?.path === file.path ? "bg-muted" : ""}`}>
+                    className={`flex w-full cursor-pointer items-center gap-3 px-4 py-2 text-left text-sm hover:bg-muted/60 ${selected?.path === file.path ? "bg-muted" : ""}`}>
                     {fileIcon(file.path)}<span className="min-w-0 flex-1 truncate font-mono text-[13px]">{file.path}</span>
                     <span className="shrink-0 text-xs text-muted-foreground">{formatBytes(file.bytes.byteLength)}</span>
                   </button>
@@ -238,7 +242,7 @@ function ModulePage({ projectId }: { projectId?: string }) {
               <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-2 text-sm font-medium">
                 {fileIcon(selected?.path ?? "README.md")}<span className="font-mono text-[13px]">{selected?.path ?? "README.md"}</span>
                 {selected && selected.path !== "README.md" && files.some(file => file.path === "README.md") &&
-                  <button type="button" className="ml-auto text-xs font-normal text-muted-foreground hover:text-foreground" onClick={() => show({ file: null })}>Show README</button>}
+                  <button type="button" className="ml-auto cursor-pointer text-xs font-normal text-muted-foreground hover:text-foreground" onClick={() => show({ file: null })}>Show README</button>}
               </div>
               {selected ? <FileViewer file={selected} images={images} />
                 : <p className="p-6 text-sm text-muted-foreground">This build has no README.md. {project.kind === "panel" && can.edit && <>Add one from the README.md tab in the <Link className="text-primary underline underline-offset-2" to={workshop}>Module Workshop</Link>.</>}</p>}

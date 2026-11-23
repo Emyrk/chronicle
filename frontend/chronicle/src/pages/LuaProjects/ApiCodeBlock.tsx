@@ -1,29 +1,11 @@
-import { useMemo, useState, type ReactNode } from "react"
-import { StreamLanguage } from "@codemirror/language"
-import { json } from "@codemirror/legacy-modes/mode/javascript"
-import { lua } from "@codemirror/legacy-modes/mode/lua"
-import { highlightCode } from "@lezer/highlight"
+import { useMemo, useState } from "react"
 import { Check, Copy } from "lucide-react"
+import { highlight } from "./codeHighlight"
 import { luaHighlightStyle } from "./luaHighlight"
-
-const parsers: Record<string, StreamLanguage<unknown>["parser"]> = {
-  lua: StreamLanguage.define(lua).parser,
-  json: StreamLanguage.define(json).parser,
-}
 
 /** CSS for luaHighlightStyle's classes. An EditorView normally mounts it; render this once above static blocks. */
 export function CodeHighlightStyles() {
   return <style>{luaHighlightStyle.module?.getRules() ?? ""}</style>
-}
-
-function highlight(code: string, language: string): ReactNode[] {
-  const parser = parsers[language]
-  if (!parser) return [code]
-  const nodes: ReactNode[] = []
-  highlightCode(code, parser.parse(code), luaHighlightStyle,
-    (text, classes) => nodes.push(classes ? <span key={nodes.length} className={classes}>{text}</span> : text),
-    () => nodes.push("\n"))
-  return nodes
 }
 
 /** Read-only fenced code block for the API reference: highlighted, labelled and copyable. */
