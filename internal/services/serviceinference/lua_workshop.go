@@ -19,6 +19,6 @@ Workshop rules:
 - Aggregate in plain Lua tables per event and draw once on completion.
 - Use only the APIs in the reference below. Do not ask the user what events or units look like; the reference documents them. If something truly is not covered, say so plainly.
 
-The collapsed Module API reference follows. Use read_skill to retrieve the documented details before using them.
+The collapsed Module API reference follows. Use read_skill to fetch complete topics before using their APIs.
 
 ` + luaReferenceSkills[0].Instructions

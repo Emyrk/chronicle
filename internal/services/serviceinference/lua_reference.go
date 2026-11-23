@@ -3,18 +3,18 @@ package serviceinference
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
-	"unicode"
 
 	"github.com/Emyrk/chronicle/api/chroniclesdk"
 	"github.com/Emyrk/chronicle/frontend"
 )
 
 // Static, public documentation only. Never include project state or user data.
-// Sections are exact, contiguous slices of the human document; no second copy is maintained.
+// Topics are exact, contiguous slices of the agent-first document; no second copy is maintained.
 var luaReferenceSkills = mustLuaReferenceSkills(frontend.ModuleAPIReference)
 
-var luaReferenceReadTool = ToolDefinition{Name: "read_skill", Description: "Read a Lua Module API section by skill_id from the reference index. Static documentation only.", Parameters: json.RawMessage(`{"type":"object","properties":{"skill_id":{"type":"string","minLength":1,"maxLength":100}},"required":["skill_id"],"additionalProperties":false}`)}
+var luaReferenceReadTool = ToolDefinition{Name: "read_skill", Description: "Read a complete Lua Module API topic by skill_id from the reference index. Static documentation only.", Parameters: json.RawMessage(`{"type":"object","properties":{"skill_id":{"type":"string","minLength":1,"maxLength":100}},"required":["skill_id"],"additionalProperties":false}`)}
 
 func mustLuaReferenceSkills(source string) []runtimeSkill {
 	skills, err := buildLuaReferenceSkills(source)
@@ -24,36 +24,23 @@ func mustLuaReferenceSkills(source string) []runtimeSkill {
 	return skills
 }
 
-func luaReferenceSlug(s string) string {
-	return strings.Trim(strings.Map(func(r rune) rune {
-		if r >= 'A' && r <= 'Z' {
-			return unicode.ToLower(r)
-		}
-		if r >= 'a' && r <= 'z' || r >= '0' && r <= '9' {
-			return r
-		}
-		if r == '`' {
-			return -1
-		}
-		return '-'
-	}, s), "-")
-}
+// IDs are explicit document metadata, not slugs of incidental prose headings.
+// Each marker starts a complete topic; everything before the first is the core.
+var luaTopicMarker = regexp.MustCompile(`^<!-- LUA API TOPIC: ([a-z0-9]+(?:-[a-z0-9]+)*) \| ([^|]+) \| ([^|]+) -->$`)
 
 func buildLuaReferenceSkills(source string) ([]runtimeSkill, error) {
-	type heading struct {
-		start           int
-		title, id, line string
-		essential       bool
+	type topic struct {
+		start              int
+		id, title, summary string
 	}
-	headings := []heading{{title: "Introduction", id: luaModuleAPISkillID + "-introduction", essential: true}}
-	parent := ""
+	var topics []topic
 	offset, fenceLength := 0, 0
 	var fence byte
 	for _, line := range strings.SplitAfter(source, "\n") {
 		text := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
 		trimmed := strings.TrimLeft(text, " ")
-		// Markdown fences may be indented up to three spaces. A shorter fence,
-		// or one with a different character, cannot close the current block.
+		// Ignore topic-looking text inside fenced examples. Closing fences must
+		// have the same character and at least the opening fence's length.
 		if len(text)-len(trimmed) <= 3 && len(trimmed) >= 3 && (trimmed[0] == '`' || trimmed[0] == '~') {
 			n := 0
 			for n < len(trimmed) && trimmed[n] == trimmed[0] {
@@ -64,48 +51,42 @@ func buildLuaReferenceSkills(source string) ([]runtimeSkill, error) {
 			} else if fenceLength > 0 && trimmed[0] == fence && n >= fenceLength && strings.TrimSpace(trimmed[n:]) == "" {
 				fenceLength = 0
 			}
-		} else if fenceLength == 0 && (strings.HasPrefix(text, "## ") || strings.HasPrefix(text, "### ")) {
-			level := strings.IndexByte(text, ' ')
-			title := strings.TrimSpace(text[level+1:])
-			slug := luaReferenceSlug(title)
-			if level == 2 {
-				parent = slug
-			} else {
-				slug = parent + "-" + slug
+		} else if fenceLength == 0 && strings.Contains(text, "<!-- LUA API TOPIC") {
+			match := luaTopicMarker.FindStringSubmatch(text)
+			if match == nil || strings.TrimSpace(match[2]) == "" || strings.TrimSpace(match[3]) == "" {
+				return nil, fmt.Errorf("invalid Lua API topic marker")
 			}
-			essential := level == 2 && (title == "Quick start" || title == "How a module runs" || title == "Standard library" || title == "Limits" || title == "Performance")
-			headings = append(headings, heading{offset, title, luaModuleAPISkillID + "-" + slug, text, essential})
+			topics = append(topics, topic{offset, luaModuleAPISkillID + "-" + match[1], match[2], match[3]})
 		}
 		offset += len(line)
 	}
-	skills := []runtimeSkill{{ID: luaModuleAPISkillID, Name: "Lua Module API", Version: "2"}}
+	if len(topics) == 0 || strings.TrimSpace(source[:topics[0].start]) == "" {
+		return nil, fmt.Errorf("lua API reference requires a core and topics")
+	}
+	skills := []runtimeSkill{{ID: luaModuleAPISkillID, Name: "Lua Module API", Version: "3"}}
 	var overview strings.Builder
-	overview.WriteString("# Lua Module API agent reference\n\nThis is a collapsed view of /modules/api. Before using an API, fetch its relevant sections verbatim with read_skill using the skill_id shown below, for example read_skill({\"skill_id\":\"lua-module-api-events\"}). Do not guess omitted signatures. Every section is listed below; external callers can also discover them with list_skill.\n\n")
+	overview.WriteString(source[:topics[0].start])
+	overview.WriteString("## Topic index\n\nThe details below are collapsed. Fetch each needed topic before using its APIs. External callers can also discover these IDs with list_skill.\n\n")
 	seen := map[string]bool{luaModuleAPISkillID: true}
-	for i, h := range headings {
-		if seen[h.id] || len(h.id) > 100 {
-			return nil, fmt.Errorf("invalid or duplicate Lua reference ID: %s", h.id)
+	for i, topic := range topics {
+		if seen[topic.id] || len(topic.id) > 100 {
+			return nil, fmt.Errorf("invalid or duplicate Lua reference ID: %s", topic.id)
 		}
-		seen[h.id] = true
+		seen[topic.id] = true
 		end := len(source)
-		if i+1 < len(headings) {
-			end = headings[i+1].start
+		if i+1 < len(topics) {
+			end = topics[i+1].start
 		}
-		body := source[h.start:end]
-		skills = append(skills, runtimeSkill{ID: h.id, Name: h.title, Version: "1", Instructions: body})
-		if h.essential {
-			overview.WriteString(body)
-		} else {
-			fmt.Fprintf(&overview, "%s\n\n[Collapsed. Fetch with read_skill({\"skill_id\":%q}).]\n\n", h.line, h.id)
-		}
+		skills = append(skills, runtimeSkill{ID: topic.id, Name: topic.title, Version: "2", Instructions: source[topic.start:end]})
+		fmt.Fprintf(&overview, "### %s\n\n%s\n\nFetch: read_skill({\"skill_id\":%q}).\n\n", topic.title, topic.summary, topic.id)
 	}
 	skills[0].Instructions = overview.String()
 	for _, skill := range skills {
 		encoded, err := json.Marshal(luaReferenceResponse(skill))
-		// Leave ample room for JSON escaping and the browser/MCP continuation envelopes,
-		// including a second JSON encoding, under the historical 64 KiB bound.
+		// Reserve ample space for browser/MCP envelopes and a second JSON encoding
+		// under the historical 64 KiB bound. Never truncate documentation.
 		if err != nil || len(encoded) > 24<<10 {
-			return nil, fmt.Errorf("lua reference section exceeds budget: %s", skill.ID)
+			return nil, fmt.Errorf("lua reference topic exceeds budget: %s", skill.ID)
 		}
 	}
 	return skills, nil

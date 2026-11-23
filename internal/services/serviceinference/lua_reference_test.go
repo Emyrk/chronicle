@@ -17,29 +17,46 @@ func TestLuaReferenceCatalog(t *testing.T) {
 	skills, err := buildLuaReferenceSkills(frontend.ModuleAPIReference)
 	require.NoError(t, err)
 	require.Equal(t, luaReferenceSkills, skills)
-	t.Logf("canonical=%d bytes, overview=%d bytes, sections=%d", len(frontend.ModuleAPIReference), len(skills[0].Instructions), len(skills)-1)
+	expected := []string{"getting-started", "project-configuration", "events", "units", "ui-foundations", "text-textures-interaction", "player-metric-charts", "line-charts", "canvas", "breakout-panels", "time-replay", "runtime-publishing"}
+	require.Len(t, skills, len(expected)+1)
+	core := frontend.ModuleAPIReference[:strings.Index(frontend.ModuleAPIReference, "<!-- LUA API TOPIC:")]
+	require.True(t, strings.HasPrefix(skills[0].Instructions, core))
 	var reconstructed strings.Builder
-	seen := map[string]bool{}
-	for _, skill := range skills {
-		require.False(t, seen[skill.ID], skill.ID)
-		seen[skill.ID] = true
-		if skill.ID != luaModuleAPISkillID {
+	reconstructed.WriteString(core)
+	for i, skill := range skills {
+		if i > 0 {
+			require.Equal(t, "lua-module-api-"+expected[i-1], skill.ID)
 			reconstructed.WriteString(skill.Instructions)
 			require.Contains(t, frontend.ModuleAPIReference, skill.Instructions)
+			require.Contains(t, skills[0].Instructions, `read_skill({"skill_id":"`+skill.ID+`"})`)
 		}
 		encoded, err := json.Marshal(luaReferenceResponse(skill))
 		require.NoError(t, err)
 		envelope, err := json.Marshal(map[string]any{"result": string(encoded)})
 		require.NoError(t, err)
 		require.Less(t, len(envelope), (64<<10)-4096)
+		t.Logf("%s: text=%d JSON=%d envelope=%d bytes", skill.ID, len(skill.Instructions), len(encoded), len(envelope))
 	}
-	require.Equal(t, frontend.ModuleAPIReference, reconstructed.String(), "every source byte is retrievable exactly once")
-	require.Less(t, len(skills[0].Instructions), len(frontend.ModuleAPIReference)/3)
+	require.Equal(t, frontend.ModuleAPIReference, reconstructed.String(), "core plus topics must cover every source byte exactly once")
+	require.Less(t, len(skills[0].Instructions), 8<<10)
 	require.NotContains(t, luaWorkshopSystem, "Chronicle.GetUnit")
 	for _, title := range []string{"How a module runs", "Standard library", "Limits", "Performance"} {
+		require.Contains(t, core, "## "+title)
+	}
+	require.Contains(t, core, "no network, file or page access")
+	require.Contains(t, core, "humans are not the target audience")
+	// A complete topic contains both its explanatory prose and signatures.
+	for id, wants := range map[string][]string{
+		"units":                {"## Units", "#### `Chronicle.GetUnit", "#### `Chronicle.GetPlayers"},
+		"player-metric-charts": {"local ui = require", "## Player metric chart", "#### `ChroniclePlayerMetricChart:SetData", "## Example: damage by player"},
+		"line-charts":          {"## Line chart", "#### `ChronicleLineChart:SetSeries"},
+		"events":               {"### Streams and fields", "#### `Panel:OnEvent", "#### `Panel:OnComplete"},
+	} {
 		for _, skill := range skills[1:] {
-			if skill.Name == title {
-				require.Contains(t, skills[0].Instructions, skill.Instructions)
+			if skill.ID == "lua-module-api-"+id {
+				for _, want := range wants {
+					require.Contains(t, skill.Instructions, want)
+				}
 			}
 		}
 	}
@@ -47,14 +64,29 @@ func TestLuaReferenceCatalog(t *testing.T) {
 
 func TestLuaReferenceFencesAndValidation(t *testing.T) {
 	t.Parallel()
-	source := "# Reference\n## First\n````lua\n## Not a section\n```\n### Still fenced\n````\n   ~~~lua\n## Also fenced\n   ~~~\n## Second\n### Detail\ntext\n"
+	marker := "<!-- LUA API TOPIC: first | First topic | Use for a first task. -->\n"
+	second := "<!-- LUA API TOPIC: second | Second topic | Use for another task. -->\n"
+	source := "# Core\n" + marker + "## Prose heading\n````lua\n" + second + "```\n" + second + "````\n   ~~~lua\n" + second + "   ~~~\n" + second + "## Detail\ntext\n"
 	skills, err := buildLuaReferenceSkills(source)
 	require.NoError(t, err)
-	require.Len(t, skills, 5)
-	require.Equal(t, "lua-module-api-second-detail", skills[4].ID)
-	_, err = buildLuaReferenceSkills("## Same\na\n## Same\nb\n")
-	require.ErrorContains(t, err, "duplicate")
-	_, err = buildLuaReferenceSkills("## Large\n" + strings.Repeat("x", 25<<10))
+	require.Len(t, skills, 3)
+	require.Equal(t, "lua-module-api-second", skills[2].ID)
+	renamed, err := buildLuaReferenceSkills(strings.ReplaceAll(source, "## Detail", "## Renamed heading"))
+	require.NoError(t, err)
+	require.Equal(t, skills[2].ID, renamed[2].ID)
+	for _, source := range []string{
+		"# No topics", marker,
+		"# Core\n<!-- LUA API TOPIC: ../bad | Bad | Bad. -->\n",
+		"# Core\n<!-- LUA API TOPIC: first | | Missing title. -->\n",
+		"# Core\n" + marker + marker,
+		"# Core\n<!-- LUA API TOPIC: " + strings.Repeat("a", 100) + " | Too long | Bad. -->\n",
+	} {
+		_, err := buildLuaReferenceSkills(source)
+		require.Error(t, err, source)
+	}
+	_, err = buildLuaReferenceSkills("# Core\n" + marker + strings.Repeat("x", 25<<10))
+	require.ErrorContains(t, err, "budget")
+	_, err = buildLuaReferenceSkills(strings.Repeat("x", 25<<10) + "\n" + marker)
 	require.ErrorContains(t, err, "budget")
 }
 
