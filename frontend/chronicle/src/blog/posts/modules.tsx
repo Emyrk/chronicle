@@ -32,7 +32,7 @@ function AccessCallout() {
       <div className="flex-1">
         <p className="text-sm font-semibold text-foreground">Not Revered? You can still build one.</p>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Message me on Discord with what you want to make, and I&apos;ll turn on module access for you.
+          Message me on Discord with what you want to make, and I&apos;ll turn on module create access for you.
         </p>
       </div>
       <a
@@ -52,8 +52,10 @@ export function ModulesPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
       <p>
-        <a href="/modules">Modules</a> are raid panels for Chronicle, written in Lua by the community. Find one you like,
-        track it, and it sits beside Damage Done and the rest of your panels on every raid.
+        <a href="/modules">Modules</a> are addons for Chronicle. Like the addons you raid with, they&apos;re written in
+        Lua by other players, with a familiar API: <code className="before:content-none after:content-none">CreateFrame</code>,{" "}
+        <code className="before:content-none after:content-none">SetPoint</code>, events. Find one you like, track it, and
+        it sits beside Damage Done and the rest of your panels on every raid.
       </p>
 
       <h2>Track a module</h2>
