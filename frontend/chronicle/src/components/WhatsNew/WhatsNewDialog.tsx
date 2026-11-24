@@ -1,4 +1,4 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Bot, Radar, Share2, Star } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -6,8 +6,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { iconUrl } from "@/config/iconUrl";
-import { METRIC_THEMES } from "@/pages/Leaderboards/Ratings/ratingThemes";
-import { ratePlayerBoss, type Band } from "@/pages/Ratings/ratingMath";
 import { whatsNewLink } from "./trackedLinks";
 
 interface WhatsNewDialogProps {
@@ -16,69 +14,63 @@ interface WhatsNewDialogProps {
 }
 
 const HIGHLIGHTS = [
-  "Peak: your best kill against the benchmark, the best DPS or HPS your spec has ever done on that boss.",
-  "Mastery: your best, typical and weaker kills blended, so one lucky kill isn't the whole story.",
-  "Renown: every boss kill earns that boss's award, however you performed. It only goes up.",
-  "How Ratings Work explains it all with an example player, or with your own kills.",
+  "Browse raid panels the community built in Lua, like RadarDurability: the raid as a radar of who was close to dying.",
+  "Track a module and it shows up under Modules in your instance panel picker.",
+  "Now make your own. Revered can start today, and anyone else can ask for access on Discord.",
+  "Build it with Claude Code through Chronicle's MCP, the officially supported flow. Other MCP agents work too.",
+  "Tag a release and share the link. Your whole guild can track it.",
 ];
 
-// The /ratings example: a Fury Warrior's Nefarian kills against a 1,180 DPS benchmark.
-const EXAMPLE_KILLS = [1000, 820, 1120, 1080, 1060, 1150, 1090, 1130, 1070, 1140];
-const EXAMPLE_BENCHMARK = 1180;
-const EXAMPLE_RENOWN = EXAMPLE_KILLS.length * 9;
-const BAND_COLOR: Record<Band, string> = { ignored: "#3f3f46", floor: "#10b981", form: "#38bdf8", peak: "#fbbf24" };
+// The three things to do with a module, in the colours /modules uses for them.
+const STEPS = [
+  { icon: Star, label: "Track", color: "#fcd34d" },
+  { icon: Bot, label: "Build", color: "#d97757" },
+  { icon: Share2, label: "Share", color: "#6ee7b7" },
+];
 
-// Styled as an epic item tooltip: a big feature, short of a legendary launch.
+// Styled as a legendary item tooltip: a major launch.
 export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
   const close = () => onOpenChange(false);
-  const rating = ratePlayerBoss(EXAMPLE_KILLS, EXAMPLE_BENCHMARK);
-  const bandByIndex = new Map(rating.bands.map((b) => [b.index, b.band]));
-  const scores = [
-    { theme: METRIC_THEMES.peak, label: "Peak", value: rating.peak.toFixed(1) },
-    { theme: METRIC_THEMES.mastery, label: "Mastery", value: rating.mastery.toFixed(1) },
-    { theme: METRIC_THEMES.renown, label: "Renown", value: String(EXAMPLE_RENOWN) },
-  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100%-2rem)] max-w-[480px] gap-0 overflow-hidden rounded-md border border-[#5c6670] bg-[linear-gradient(180deg,rgba(10,16,28,0.98),rgba(6,8,16,0.98))] p-0 shadow-[0_24px_60px_rgba(0,0,0,0.7)] sm:max-w-[480px]">
         <div className="grid grid-cols-[56px_minmax(0,1fr)] items-center gap-4 px-6 pt-[22px]">
           <img
-            src={iconUrl("inv_crown_01")}
+            src={iconUrl("inv_gizmo_02")}
             alt=""
             width={56}
             height={56}
-            className="h-14 w-14 rounded border-2 border-quality-epic bg-[#08101c]"
+            className="h-14 w-14 rounded border-2 border-quality-legendary bg-[#08101c]"
           />
           <div className="flex flex-col gap-1">
-            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-quality-epic">
-              Epic feature
+            <span className="font-mono text-xs font-semibold uppercase tracking-[0.2em] text-quality-legendary">
+              Legendary feature
             </span>
-            <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-epic">
-              How ratings work
+            <DialogTitle className="font-wow text-[28px] font-normal leading-tight text-quality-legendary">
+              Community modules
             </DialogTitle>
           </div>
         </div>
 
         <div className="flex flex-col gap-1 px-6 pb-6 pt-4 text-sm leading-relaxed">
-          <p className="text-foreground">Use: Rate every player across their whole history</p>
+          <p className="text-foreground">Use: Add raider-made panels to your raids, or make your own</p>
 
-          <div aria-hidden className="mt-3 flex items-end gap-4 rounded border border-quality-epic/30 bg-black/35 p-3 shadow-inner">
-            <div className="flex h-14 flex-1 items-end gap-1">
-              {EXAMPLE_KILLS.map((value, i) => (
-                <span
-                  key={i}
-                  className="flex-1 rounded-t-sm"
-                  style={{ height: `${((value - 600) / (EXAMPLE_BENCHMARK - 600)) * 100}%`, background: BAND_COLOR[bandByIndex.get(i) ?? "form"] }}
-                />
-              ))}
+          <div aria-hidden className="mt-3 flex items-center gap-3 rounded border border-quality-legendary/30 bg-black/35 p-3 shadow-inner">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-white/10 bg-white/5">
+              <Radar className="h-5 w-5 text-sky-300" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sky-400">
+                chronicle / <span className="font-semibold">RadarDurability</span>
+              </p>
+              <p className="text-xs text-muted-foreground">Panel · v4</p>
             </div>
             <div className="flex flex-col gap-0.5">
-              {scores.map(({ theme, label, value }) => (
-                <span key={label} className="flex items-center gap-1.5 text-xs">
-                  <theme.icon className="h-3.5 w-3.5" style={{ color: theme.accent }} />
-                  <span className="w-14 text-muted-foreground">{label}</span>
-                  <span className="font-mono font-semibold" style={{ color: theme.accent }}>{value}</span>
+              {STEPS.map(({ icon: Icon, label, color }) => (
+                <span key={label} className="flex items-center gap-1.5 text-xs" style={{ color }}>
+                  <Icon className="h-3.5 w-3.5" />
+                  {label}
                 </span>
               ))}
             </div>
@@ -88,27 +80,27 @@ export function WhatsNewDialog({ open, onOpenChange }: WhatsNewDialogProps) {
             <ul>
               {HIGHLIGHTS.map((text) => (
                 <li key={text} className="grid grid-cols-[14px_minmax(0,1fr)] gap-2.5">
-                  <span aria-hidden className="text-[10px] leading-6 text-quality-epic">◆</span>
+                  <span aria-hidden className="text-[10px] leading-6 text-quality-legendary">◆</span>
                   <span>{text}</span>
                 </li>
               ))}
             </ul>
           </DialogDescription>
 
-          <p className="mt-2 italic text-[#ffd100]">&ldquo;Measure thyself.&rdquo;</p>
+          <p className="mt-2 italic text-[#ffd100]">&ldquo;Tinkered by raiders, for raiders.&rdquo;</p>
 
           <div className="mt-5 flex flex-wrap items-center gap-5">
             {/* Blog routes mount a separate app entry, so these links must reload the document. */}
             <a
-              href={whatsNewLink("/blog/ratings", "whats_new_primary", "ratings")}
+              href={whatsNewLink("/blog/modules", "whats_new_primary", "modules")}
               onClick={close}
-              className="inline-flex items-center gap-2 rounded border border-quality-epic/80 bg-[linear-gradient(180deg,#8a3fd0,#5a2290)] px-[18px] py-2.5 text-sm font-semibold text-white transition-[filter] hover:brightness-110"
+              className="inline-flex items-center gap-2 rounded border border-quality-legendary/80 bg-[linear-gradient(180deg,#d9700a,#8f4300)] px-[18px] py-2.5 text-sm font-semibold text-white transition-[filter] hover:brightness-110"
             >
-              Watch how ratings work
+              Watch how modules work
               <ArrowRight className="h-4 w-4" />
             </a>
             <a
-              href={whatsNewLink("/blog", "whats_new_archive", "ratings")}
+              href={whatsNewLink("/blog", "whats_new_archive", "modules")}
               onClick={close}
               className="text-sm text-muted-foreground transition-colors hover:text-foreground"
             >

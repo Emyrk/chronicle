@@ -22,6 +22,7 @@ func TestStatusUnreadComparison(t *testing.T) {
 		{name: "layout editing after focus mode", current: "layout-editing", seen: "focus-mode", unread: true},
 		{name: "character cosmetics after layout editing", current: "character-cosmetics", seen: "layout-editing", unread: true},
 		{name: "ranked damage after character cosmetics", current: "ranked-damage", seen: "character-cosmetics", unread: true},
+		{name: "modules after ranked damage", current: "modules", seen: "ranked-damage", unread: true},
 		{name: "no releases", current: "", seen: "", unread: false},
 	}
 
@@ -32,5 +33,5 @@ func TestStatusUnreadComparison(t *testing.T) {
 		})
 	}
 
-	require.Equal(t, "ranked-damage", CurrentID())
+	require.Equal(t, "modules", CurrentID())
 }
