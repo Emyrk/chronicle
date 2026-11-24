@@ -6,6 +6,19 @@
 //
 // Feed timestamp-reordered normalized messages, not raw modern parser output.
 // Drain the reorder buffer's EOF tail before calling Finish explicitly.
+// A single file may contain both PvE instances and BG episodes; do not select
+// one consumer for the entire file. For mixed streams, Consumers must receive
+// Recorder before encounters.State:
+// fan-out shares message pointers in registration order, and PvE hooks may mutate
+// activity or defer damage serialization. Recorder snapshots synchronously without
+// resetting shared activity. Both consumers need all zone and metadata messages;
+// do not prefilter the stream to combat events or BG-only zones. Consumers does not
+// finalize either consumer: call Recorder.Finish and finalize the PvE instances
+// separately after ConsumeAll has drained the reordered stream.
+//
+// Mixed-stream tests use synthetic telemetry, injected map classifiers, and
+// instance resolvers. They establish this consumer contract, not production
+// classification or correctness for every real-world telemetry boundary.
 // State is a single-consumer object and
 // is independent of PvE encounters. A Process or Finish error invalidates the
 // partial output, including anything already sent to the sink; callers must
