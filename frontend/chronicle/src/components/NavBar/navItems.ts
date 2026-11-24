@@ -1,4 +1,4 @@
-import { Castle, ChartSpline, Medal, Puzzle, Search, Shirt, Sparkles, Swords, Trophy, Users, UsersRound, type LucideIcon } from "lucide-react"
+import { Castle, ChartSpline, Puzzle, Search, Shirt, Sparkles, Swords, Trophy, Users, UsersRound, type LucideIcon } from "lucide-react"
 import { serverCapabilities } from "@/config/serverCapabilities"
 
 /** One site destination. The desktop menus, the mobile menu, and search all read this list. */
@@ -31,7 +31,6 @@ export function navGroups(): NavGroup[] {
       tagline: "Raids, players and guilds",
       links: [
         { id: "recent", title: "Recent raids", href: "/recent", icon: Castle, description: "The latest uploaded logs", keywords: ["logs", "latest", "uploads"] },
-        { id: "leaderboards", title: "Leaderboards", href: "/leaderboards", icon: Trophy, featured: true, description: "Ratings, speedruns and stats", keywords: ["rankings", "ladder", "speedrun", "parses", "top"] },
         ...(serverCapabilities.armory
           ? [{ id: "armory", title: "Armory", href: "/armory", icon: Swords, featured: true, description: "Look up any character", keywords: ["player", "character", "gear", "profile"] }]
           : []),
@@ -45,7 +44,7 @@ export function navGroups(): NavGroup[] {
       title: "Improve",
       tagline: "See how you stack up",
       links: [
-        { id: "ratings", title: "Ratings", href: "/ratings", icon: Medal, featured: true, description: "Peak, Mastery and Renown", keywords: ["peak", "mastery", "renown", "score"] },
+        { id: "leaderboards", title: "Leaderboards", href: "/leaderboards", icon: Trophy, featured: true, description: "Ratings, speedruns and stats", keywords: ["rankings", "ladder", "speedrun", "parses", "top", "ratings", "peak", "mastery", "renown", "score"] },
         { id: "performance", title: "Performance", href: "/performance-history", icon: ChartSpline, description: "Your DPS and HPS over time", keywords: ["history", "dps", "hps", "progress"] },
       ],
     },
