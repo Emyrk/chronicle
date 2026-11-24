@@ -337,16 +337,14 @@ function navTextLink(active: boolean) {
 }
 
 /**
- * Left half: the Chronicle icon on branded tenants (an empty spacer otherwise), then search.
- * Search lives here so it never competes with the right-hand links, and never takes the icon's slot.
+ * Left column: the Chronicle icon on branded tenants at the edge, and search pushed up against the logo.
+ * Search never takes the icon's slot, and never competes with the right-hand links.
  */
 function LeftGroup({ state }: { state: NavState }) {
   return (
-    <div className="hidden items-center gap-4 lg:flex">
-      <div className="flex w-10 items-center">
-        {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10" />}
-      </div>
-      {state.searchEnabled && <SearchTrigger onOpen={state.openSearch} className="w-56 xl:w-64" />}
+    <div className="hidden min-w-0 items-center gap-4 lg:flex">
+      {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10 shrink-0" />}
+      {state.searchEnabled && <SearchTrigger onOpen={state.openSearch} className="ml-auto mr-6 w-56 xl:w-64" />}
     </div>
   )
 }
@@ -355,11 +353,12 @@ function LeftGroup({ state }: { state: NavState }) {
 function DesktopNav({ state }: { state: NavState }) {
   const recent = allNavLinks().find((link) => link.id === "recent")!
   return (
-    <nav className="relative flex h-16 items-center justify-between border-b px-4">
+    // Equal outer columns keep the logo centred; search hugs it from the left.
+    <nav className="grid h-16 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b px-4">
       <div className="lg:hidden"><MobileMenuSheet state={state} /></div>
       <LeftGroup state={state} />
-      <Brand state={state} className="absolute left-1/2 -translate-x-1/2" />
-      <div className="hidden items-center gap-5 lg:flex">
+      <Brand state={state} />
+      <div className="hidden items-center justify-end gap-5 lg:flex">
         <RootCommunityNavButton />
         <Link to={recent.href} className={navTextLink(isActiveLink(recent, state.location.pathname))}><recent.icon className="h-4 w-4" />Recent</Link>
         <DropdownMenu modal={false}>
@@ -378,7 +377,7 @@ function DesktopNav({ state }: { state: NavState }) {
           <AccountMenu state={state} />
         </div>
       </div>
-      <div className="flex items-center lg:hidden">
+      <div className="flex items-center justify-end lg:hidden">
         <RootCommunityNavButton mobile />
         {state.searchEnabled && <SearchTrigger compact onOpen={state.openSearch} />}
       </div>
