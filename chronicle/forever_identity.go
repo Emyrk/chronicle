@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/Emyrk/chronicle/combatlog/parser/blizzard/modern"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
@@ -149,9 +148,12 @@ func reconcileForeverScouting(players *scouting.Scouting, combat playerIdentityE
 	}
 	identity := &foreverIdentity{combat: combat, inferred: make(map[guid.GUID]inferredRealm)}
 	filtered := players.FilterSources(func(id guid.GUID, player scouting.Player) (scouting.Player, bool) {
-		player.Name = modern.NormalizePlayerName(player.Name)
+		// Scouting stores the character name separately from Realm. Hyphens
+		// separate character-name components here, not a CLEU realm suffix.
+		// Realm stripping would turn First-Last into First and reject its guild.
+		player.Name = strings.ReplaceAll(player.Name, "-", " ")
 		for j := range player.Observations {
-			player.Observations[j].Name = modern.NormalizePlayerName(player.Observations[j].Name)
+			player.Observations[j].Name = strings.ReplaceAll(player.Observations[j].Name, "-", " ")
 		}
 		combatName, safe := uniqueIdentityName(combat.ObservedPlayerNames(id))
 		if !safe || !meaningfulIdentityName(player.Name) || (combatName != "" && combatName != player.Name) {
