@@ -122,7 +122,7 @@ export const Loading: Story = {
 
 export const Mobile: Story = { globals: mobile }
 export const MobileMenu: Story = { globals: mobile, play: openMenu(/open menu/i) }
-export const MobileMenuAdmin: Story = { globals: mobile, parameters: { msw: { handlers: loggedIn(true) } }, play: openMenu(/open menu/i) }
+export const MobileAccount: Story = { globals: mobile, parameters: { msw: { handlers: loggedIn(true) } }, play: openMenu(/^account/i) }
 
 // The search palette on its own, with queries that show each kind of top result.
 type PaletteStory = StoryObj<{ initialQuery: string }>
@@ -187,7 +187,7 @@ export const Compare: StoryObj = {
         <div className="flex flex-wrap gap-6">
           <StoryFrame id="mobile" title="Closed" width={390} height={760} />
           <StoryFrame id="mobile-menu" title="Menu" width={390} height={760} />
-          <StoryFrame id="mobile-menu-admin" title="Menu, admin" width={390} height={760} />
+          <StoryFrame id="mobile-account" title="Account (admin)" width={390} height={760} />
         </div>
       </section>
       <section className="flex flex-col gap-4">

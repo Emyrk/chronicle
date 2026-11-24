@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { Settings, Upload, LogOut, FileText, Shield, Key, Menu, Database, Server, Sparkles, Crown, ChevronDown, Compass, Star } from "lucide-react"
+import { Settings, Upload, LogOut, FileText, Shield, Key, Menu, Database, Server, Sparkles, Crown, ChevronDown, Compass, Star, CircleUser } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { useAuth } from "@/hooks/useAuth"
 import { uploadsDisabledForSite, useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries"
@@ -147,22 +147,41 @@ function AccountMenuItem({ item }: { item: AccountItem }) {
   )
 }
 
-/** Desktop account dropdown. Favorites and admin tools have their own menus beside it. */
-function AccountMenu({ state }: { state: NavState }) {
+/**
+ * Account dropdown. On desktop, favorites and admin tools have their own menus beside it.
+ * On phones it's an icon at the top right of the bar and carries the admin tools too,
+ * so account settings never sit below the whole feature list in the side menu.
+ */
+function AccountMenu({ state, phone }: { state: NavState; phone?: boolean }) {
   if (state.isLoading) return null
   if (!state.isAuthenticated) {
     return <Link to={state.loginUrl}><Button size="sm">Sign In</Button></Link>
   }
+  const unread = state.hasUnreadWhatsNew && <span className="absolute right-1 top-1.5 h-2 w-2 rounded-full bg-primary" aria-label="New What's New update" />
   return (
     <DropdownMenu modal={false}>
       <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" className="relative h-9 px-3 text-sm font-medium">
-          Account
-          {state.hasUnreadWhatsNew && <span className="absolute right-1 top-1.5 h-2 w-2 rounded-full bg-primary" aria-label="New What's New update" />}
-        </Button>
+        {phone ? (
+          <Button variant="ghost" size="icon" className="relative" aria-label="Account">
+            <CircleUser className="h-5 w-5" />
+            {unread}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" className="relative h-9 px-3 text-sm font-medium">
+            Account
+            {unread}
+          </Button>
+        )}
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-[200px]">
         {state.accountItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
+        {phone && state.adminItems.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">Admin</DropdownMenuLabel>
+            {state.adminItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
+          </>
+        )}
         <DropdownMenuSeparator />
         <AccountMenuItem item={state.signOut} />
       </DropdownMenuContent>
@@ -215,21 +234,6 @@ function AdminNavMenu({ state }: { state: NavState }) {
 
 const mobileRow = "flex items-center gap-3 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
 
-function MobileAccountItem({ item, close }: { item: AccountItem; close: () => void }) {
-  if ("href" in item) {
-    const body = <><item.icon className="h-4 w-4" />{item.title}</>
-    return item.external
-      ? <a href={item.href} onClick={close} className={mobileRow}>{body}</a>
-      : <Link to={item.href} onClick={close} className={cn(mobileRow, item.highlight && HIGHLIGHT_CLASS)}>{body}</Link>
-  }
-  return (
-    <button type="button" onClick={() => { item.onClick(); close() }} className={cn(mobileRow, "w-full text-left")}>
-      <item.icon className="h-4 w-4" />{item.title}
-      {item.indicator && <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="New" />}
-    </button>
-  )
-}
-
 function MobileFavoritesSection({ state, close }: { state: NavState; close: () => void }) {
   const favorites = state.favorites
   if (!state.isAuthenticated || !favorites || !state.hasFavorites) return null
@@ -250,26 +254,6 @@ function MobileFavoritesSection({ state, close }: { state: NavState; close: () =
           {player.guild_name && <span className="truncate text-xs">&lt;{player.guild_name}&gt;</span>}
         </Link>
       ))}
-    </div>
-  )
-}
-
-function MobileAccountSection({ state, close }: { state: NavState; close: () => void }) {
-  if (state.isLoading) return null
-  if (!state.isAuthenticated) {
-    return <Link to={state.loginUrl} onClick={close}><Button className="w-full">Sign In</Button></Link>
-  }
-  return (
-    <div className="flex flex-col">
-      <div className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Account</div>
-      {state.accountItems.map((item) => <MobileAccountItem key={item.title} item={item} close={close} />)}
-      {state.adminItems.length > 0 && (
-        <details className="group">
-          <summary className={cn(mobileRow, "cursor-pointer list-none")}><Shield className="h-4 w-4" />Admin<ChevronDown className="ml-auto h-4 w-4 transition-transform group-open:rotate-180" /></summary>
-          <div className="pl-4">{state.adminItems.map((item) => <MobileAccountItem key={item.title} item={item} close={close} />)}</div>
-        </details>
-      )}
-      <MobileAccountItem item={state.signOut} close={close} />
     </div>
   )
 }
@@ -350,7 +334,6 @@ function MobileMenuSheet({ state }: { state: NavState }) {
         {state.searchEnabled ? <SearchTrigger onOpen={() => { close(); state.openSearch() }} className="mt-8 w-full" /> : <div className="mt-6" />}
         <MobileFavoritesSection state={state} close={close} />
         <FeatureDirectory mobile onSelect={close} />
-        <div className="border-t pt-3"><MobileAccountSection state={state} close={close} /></div>
         {!!state.siteConfig?.tenant && (
           <div className="mt-auto flex items-center gap-1.5 pt-4 text-xs text-muted-foreground">
             <span>Powered by</span>
@@ -419,6 +402,7 @@ function DesktopNav({ state }: { state: NavState }) {
       <div className="flex items-center justify-end lg:hidden">
         <RootCommunityNavButton mobile />
         {state.searchEnabled && <SearchTrigger compact onOpen={state.openSearch} />}
+        <AccountMenu state={state} phone />
       </div>
     </nav>
   )
