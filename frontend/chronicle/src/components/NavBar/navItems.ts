@@ -54,9 +54,9 @@ export function navGroups(): NavGroup[] {
       tagline: "Plan your next raid",
       links: [
         { id: "talents", title: "Talent Builder", href: "/talents", icon: Sparkles, description: "Plan and share builds", keywords: ["talents", "build", "spec"] },
+        { id: "modules", title: "Modules", href: "/modules", icon: Puzzle, description: "Custom panels for your logs", keywords: ["lua", "addons", "panels", "custom", "workshop"] },
         { id: "gear", title: "Gear Builder", href: "/gear/progression", icon: Shirt, description: "Upgrades raid by raid", keywords: ["gear", "bis", "items", "loot"] },
         { id: "raidplanner", title: "Raid Planner", href: "/raidplanner", icon: Users, description: "Groups and assignments", keywords: ["groups", "assignments", "comp", "roster"] },
-        { id: "modules", title: "Modules", href: "/modules", icon: Puzzle, description: "Custom panels for your logs", keywords: ["lua", "addons", "panels", "custom", "workshop"] },
       ],
     },
   ]
