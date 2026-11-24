@@ -35,7 +35,7 @@ export function navGroups(): NavGroup[] {
           ? [{ id: "armory", title: "Armory", href: "/armory", icon: Swords, featured: true, description: "Look up any character", keywords: ["player", "character", "gear", "profile"] }]
           : []),
         { id: "guilds", title: "Guilds", href: "/guilds", icon: UsersRound, description: "Rosters and raid nights", keywords: ["guild", "roster"] },
-        { id: "search", title: "Search raids", href: "/search", icon: Search, description: "Build your own raid queries", keywords: ["query", "instances", "logs", "filter"] },
+        { id: "search", title: "Search raids", href: "/search", icon: Search, description: "Dig through every logged raid", keywords: ["query", "instances", "logs", "filter"] },
         { id: "census", title: "Census", href: "/census", icon: Users, description: "Class and spec populations", keywords: ["population", "classes", "specs"] },
       ],
     },
