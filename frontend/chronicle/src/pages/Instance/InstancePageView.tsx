@@ -95,6 +95,7 @@ import {
   validateSharedViewPayload,
 } from "./sharedViewImport";
 import { samePageState } from "./pageStateSync";
+import { updatePanelOptionState } from "./panelOptionState";
 import { InstanceHeader } from "./InstanceHeader";
 import { InstanceViewModeSwitch } from "./InstanceViewMode";
 import { isInstanceOverviewEnabled, parseInstanceViewMode, withInstanceViewMode, type InstanceViewMode } from "./instanceViewModeState";
@@ -2753,14 +2754,7 @@ function InstancePageViewContent({
 
   const setPanelOption = useCallback((index: number, option: string | null) => {
     if (!canEditSharedView) return;
-    setViewState((prev) => {
-      const panelOptions = [...prev.panelOptions];
-      while (panelOptions.length <= index) {
-        panelOptions.push(null);
-      }
-      panelOptions[index] = option;
-      return { ...prev, panelOptions };
-    });
+    setViewState((prev) => updatePanelOptionState(prev, index, option));
   }, [canEditSharedView]);
 
   const setPanels = useCallback((panels: PanelType[], panelOptions?: Array<string | null>) => {
