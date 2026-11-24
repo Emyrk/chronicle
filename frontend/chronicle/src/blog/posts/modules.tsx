@@ -66,29 +66,6 @@ function Step({ n, children }: { n: string; children: ReactNode }) {
   );
 }
 
-// Breaks out of the text column on wide screens.
-function RadarFigure() {
-  return (
-    <figure className="not-prose relative isolate my-12 lg:-mx-24 xl:-mx-44">
-      <div
-        aria-hidden
-        className="absolute -inset-10 -z-10 rounded-full bg-[radial-gradient(closest-side,rgba(255,128,0,0.18),transparent)] blur-2xl"
-      />
-      <img
-        src="/c/images/blog/modules-radar.webp"
-        alt="RadarDurability next to Damage Done on a Nefarian kill, replaying the fight with the playhead"
-        width={2108}
-        height={1037}
-        loading="lazy"
-        className="w-full rounded-xl border border-white/10 shadow-[0_30px_80px_rgba(0,0,0,0.55)]"
-      />
-      <figcaption className="mt-3 text-sm text-muted-foreground lg:px-24 xl:px-44">
-        RadarDurability on a Nefarian kill. Closer to the centre means closer to dying.
-      </figcaption>
-    </figure>
-  );
-}
-
 // A guild Discord post sharing a module, offset to the right on wide screens.
 function SharedInDiscord() {
   return (
@@ -144,7 +121,6 @@ export function ModulesPost({ post }: PostProps) {
         Example: <a href="/modules/chronicle/radardurability">RadarDurability</a> shows who was close to dying, and
         when. It plays along with the replay.
       </p>
-      <RadarFigure />
 
       <Step n="02">Make one</Step>
       <p>
