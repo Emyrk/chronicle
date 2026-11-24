@@ -9,7 +9,7 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types"
 import { cn } from "@/lib/utils"
 import { accentFor, featuredNavLinks, GROUP_ACCENT, type NavLink } from "../navItems"
 import {
-  guildHref, playerHref, raidSearchHref,
+  guildHref, playerHref,
   type GlobalSearchResults, type RankingMatch, type TopResult,
 } from "./globalSearch"
 import { useGlobalSearch } from "./useGlobalSearch"
@@ -83,7 +83,7 @@ const LEADERBOARD = GROUP_ACCENT.improve
 const GUILD = GROUP_ACCENT.discover
 
 function rankingLabel(ranking: RankingMatch) {
-  return ranking.boss ? `${ranking.boss} — ${ranking.instance}` : `${ranking.instance} leaderboards`
+  return ranking.boss ? `${ranking.boss} — ${ranking.instance}` : ranking.instance
 }
 
 /** The large "answer" card above the list, like a search engine's top result. */
@@ -102,8 +102,7 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
           <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: getClassColorVar(player.class) }}>Character</div>
           <div className="mt-1 text-xl font-semibold" style={{ color: getClassColorVar(player.class) }}>{player.name}</div>
           <div className="text-sm text-muted-foreground">
-            Level {player.level} {player.race} {player.class}
-            {player.guild_name && <> · &lt;{player.guild_name}&gt;</>}
+            {player.class} · {player.realm_name}
           </div>
           <div className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">Open in Armory <ArrowRight className="h-3 w-3" /></div>
         </Link>
@@ -113,11 +112,11 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
       const { guild } = top
       return (
         <Link to={guildHref(guild)} onClick={onSelect} className={cn(card, GUILD.card, "flex items-center gap-4")}>
-          {guild.logo_url ? <img src={guild.logo_url} alt="" className="h-12 w-12 rounded object-contain" /> : <UsersRound className={cn("h-10 w-10", GUILD.title)} />}
+          <UsersRound className={cn("h-10 w-10", GUILD.title)} />
           <div>
             <div className={cn("text-[11px] font-semibold uppercase tracking-wider", GUILD.title)}>Guild</div>
             <div className="text-xl font-semibold text-foreground">&lt;{guild.name}&gt;</div>
-            <div className="text-sm text-muted-foreground">{guild.player_count} characters seen</div>
+            <div className="text-sm text-muted-foreground">{guild.realm_name}</div>
           </div>
         </Link>
       )
@@ -129,7 +128,7 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
           <Link to={ranking.href} onClick={onSelect} className="flex items-start gap-3">
             <Trophy className={cn("mt-1 h-6 w-6 shrink-0", LEADERBOARD.title)} />
             <div>
-              <div className={cn("text-[11px] font-semibold uppercase tracking-wider", LEADERBOARD.title)}>{ranking.boss ? "Boss leaderboards" : "Raid leaderboards"}</div>
+              <div className={cn("text-[11px] font-semibold uppercase tracking-wider", LEADERBOARD.title)}>{ranking.boss ? "Boss" : "Instance"}</div>
               <div className="text-xl font-semibold text-foreground">{ranking.boss ?? ranking.instance}</div>
               {ranking.boss && <div className="text-sm text-muted-foreground">{ranking.instance}</div>}
             </div>
@@ -174,7 +173,7 @@ function pageRow(link: NavLink): Row {
   }
 }
 
-function useRows(query: string, results: GlobalSearchResults, isAuthenticated: boolean) {
+function useRows(query: string, results: GlobalSearchResults & { raidHref: string }, isAuthenticated: boolean) {
   const { data: favorites } = useMyFavorites({ enabled: isAuthenticated })
   const q = query.trim()
   if (!q) {
@@ -198,7 +197,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
   const sections: { title: string; rows: Row[] }[] = []
   if (results.rankings.length) {
     sections.push({
-      title: "Leaderboards",
+      title: "Instances and bosses",
       rows: results.rankings.map((ranking) => ({
         key: `rank:${ranking.instance}:${ranking.boss ?? ""}`,
         href: ranking.href,
@@ -210,13 +209,13 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
     sections.push({
       title: "Characters",
       rows: results.players.map((player) => ({
-        key: `player:${player.id}`,
+        key: `player:${player.realm_id}:${player.id}`,
         href: playerHref(player),
         render: () => (
           <>
             <Tile color={getClassColorVar(player.class)} />
             <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
-            <span className="truncate text-xs">{player.level} {player.class}{player.guild_name ? ` · <${player.guild_name}>` : ""}</span>
+            <span className="truncate text-xs">{player.class} · {player.realm_name}</span>
           </>
         ),
       })),
@@ -228,7 +227,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
       rows: results.guilds.map((guild) => ({
         key: `guild:${guild.id}`,
         href: guildHref(guild),
-        render: () => <><Tile icon={UsersRound} className={GUILD.tile} /><span className="text-foreground">&lt;{guild.name}&gt;</span><span className="text-xs">{guild.player_count} characters</span></>,
+        render: () => <><Tile icon={UsersRound} className={GUILD.tile} /><span className="text-foreground">&lt;{guild.name}&gt;</span><span className="text-xs">{guild.realm_name}</span></>,
       })),
     })
   }
@@ -237,7 +236,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
     title: "Raids",
     rows: [{
       key: "raid-search",
-      href: raidSearchHref(q),
+      href: results.raidHref,
       render: () => <><Tile icon={Search} className={LEADERBOARD.tile} /><span className="text-foreground">Search raids for “{q}”</span></>,
     }],
   })
@@ -250,7 +249,7 @@ export function SearchPalette({ open, onOpenChange, initialQuery = "" }: { open:
   const [active, setActive] = useState(0)
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
-  const results = useGlobalSearch(query)
+  const results = useGlobalSearch(query, open)
   const sections = useRows(query, results, isAuthenticated)
   const rows = sections.flatMap((section) => section.rows)
   const listRef = useRef<HTMLDivElement>(null)
@@ -297,6 +296,7 @@ export function SearchPalette({ open, onOpenChange, initialQuery = "" }: { open:
               <span className="sm:hidden">Cancel</span><span className="hidden sm:inline">Esc</span>
             </DialogPrimitive.Close>
           </div>
+          <div role="status" className="px-4 text-xs text-muted-foreground">{results.status}</div>
           <div ref={listRef} className="styled-scrollbar flex-1 overflow-y-auto p-2">
             {query.trim().length >= 2 && results.top && (
               <div className="p-1 pb-2"><TopResultCard top={results.top} onSelect={close} /></div>

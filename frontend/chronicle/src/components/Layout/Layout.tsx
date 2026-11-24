@@ -38,7 +38,7 @@ export function Layout() {
               <NoticeBanner notices={noticeResponse?.notices ?? []} />
               <RootCommunityBanner />
               <SupportBanner />
-              <NavBar />
+              <NavBar search />
             </>
           )}
           <main>

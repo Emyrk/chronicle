@@ -1,11 +1,10 @@
-import type { ArmorySearchResult, GuildInfo, SupportedInstance } from "@/api/typesGenerated"
+import type { SearchSuggestionPlayer, SearchSuggestionGuild, SupportedInstance } from "@/api/typesGenerated"
 import { encodeQuery, type Node } from "@/pages/InstanceSearch/queryModel"
 import { instancePathSegment } from "@/pages/Leaderboards/v2Selection"
 import type { NavLink } from "../navItems"
 
-// Structural subsets also accept the lean search-suggestion API responses.
-export type SearchPlayer = Pick<ArmorySearchResult, "id" | "name" | "class" | "realm_id" | "realm_name">
-export type SearchGuild = Pick<GuildInfo, "id" | "name" | "realm_id" | "realm_name">
+export type SearchPlayer = SearchSuggestionPlayer
+export type SearchGuild = SearchSuggestionGuild
 
 /** A local catalog match with only destinations supported by its metadata. */
 export interface RankingMatch {
@@ -28,8 +27,8 @@ export type TopResult =
 export interface GlobalSearchResults {
   top?: TopResult
   rankings: RankingMatch[]
-  players: SearchPlayer[]
-  guilds: SearchGuild[]
+  players: readonly SearchPlayer[]
+  guilds: readonly SearchGuild[]
   pages: NavLink[]
 }
 
@@ -160,9 +159,9 @@ export function pickTopResult(query: string, results: Omit<GlobalSearchResults, 
   return undefined
 }
 
-export const playerHref = (player: Pick<ArmorySearchResult, "realm_name" | "id">) =>
+export const playerHref = (player: Pick<SearchSuggestionPlayer, "realm_name" | "id">) =>
   `/armory/${encodeURIComponent(player.realm_name)}/${encodeURIComponent(player.id)}`
-export const guildHref = (guild: Pick<GuildInfo, "id">) => `/g/${guild.id}`
+export const guildHref = (guild: Pick<SearchSuggestionGuild, "id">) => `/g/${guild.id}`
 function searchHref(where: Node): string {
   return `/search?${new URLSearchParams({ q: encodeQuery(where) })}`
 }
