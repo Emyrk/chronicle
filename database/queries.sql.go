@@ -32142,6 +32142,166 @@ func (q *sqlQuerier) ListRiverQueueMetrics(ctx context.Context) ([]ListRiverQueu
 	return items, nil
 }
 
+const suggestGuilds = `-- name: SuggestGuilds :many
+WITH term AS (
+    SELECT lower($3::text) COLLATE "C" AS value
+), bounds AS (
+    SELECT value, CASE WHEN rtrim(value, chr(1114111)) <> '' THEN
+        left(rtrim(value, chr(1114111)), -1) ||
+        chr(CASE ascii(right(rtrim(value, chr(1114111)), 1))
+            WHEN 55295 THEN 57344 ELSE ascii(right(rtrim(value, chr(1114111)), 1)) + 1 END)
+    END AS upper_bound FROM term
+)
+SELECT e.id, e.name, r.id AS realm_id, r.name AS realm_name
+FROM bounds b CROSS JOIN wow_server_realms r
+JOIN wow_servers s ON s.id = r.server_id
+CROSS JOIN LATERAL (
+    -- Separate finite/unbounded ranges so generic prepared plans can use
+    -- both index range keys; the unbounded branch only handles all-max runes.
+    SELECT candidates.id, candidates.name FROM (
+        (SELECT e.id, e.name FROM guilds e
+        WHERE e.realm_id = r.id AND b.upper_bound IS NOT NULL
+          AND lower(e.name) COLLATE "C" < b.upper_bound COLLATE "C"
+          AND lower(e.name) COLLATE "C" >= b.value
+          AND lower(e.name) COLLATE "C" LIKE lower($1::text) COLLATE "C" ESCAPE '\'
+        ORDER BY lower(e.name) COLLATE "C", e.id LIMIT 5)
+        UNION ALL
+        (SELECT e.id, e.name FROM guilds e
+        WHERE e.realm_id = r.id AND b.upper_bound IS NULL
+          AND lower(e.name) COLLATE "C" >= b.value
+          AND lower(e.name) COLLATE "C" LIKE lower($1::text) COLLATE "C" ESCAPE '\'
+        ORDER BY lower(e.name) COLLATE "C", e.id LIMIT 5)
+    ) candidates
+    ORDER BY lower(candidates.name) COLLATE "C", candidates.id LIMIT 5
+) e
+WHERE (s.tenant_id = $2::uuid OR
+       ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND
+        (s.tenant_id IS NULL OR s.tenant_id IN (SELECT id FROM tenants WHERE include_in_all))))
+ORDER BY lower(e.name) COLLATE "C", r.id, e.id
+LIMIT 5
+`
+
+type SuggestGuildsParams struct {
+	Prefix   string    `db:"prefix" json:"prefix"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Query    string    `db:"query" json:"query"`
+}
+
+type SuggestGuildsRow struct {
+	ID        uuid.UUID `db:"id" json:"id"`
+	Name      string    `db:"name" json:"name"`
+	RealmID   uuid.UUID `db:"realm_id" json:"realm_id"`
+	RealmName string    `db:"realm_name" json:"realm_name"`
+}
+
+// Per-realm index walks bound candidates before the cross-realm merge.
+// C ordering puts an exact folded name before every longer prefix match.
+func (q *sqlQuerier) SuggestGuilds(ctx context.Context, arg SuggestGuildsParams) ([]SuggestGuildsRow, error) {
+	rows, err := q.db.Query(ctx, suggestGuilds, arg.Prefix, arg.TenantID, arg.Query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SuggestGuildsRow
+	for rows.Next() {
+		var i SuggestGuildsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.RealmID,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const suggestPlayers = `-- name: SuggestPlayers :many
+WITH term AS (
+    SELECT lower($3::text) COLLATE "C" AS value
+), bounds AS (
+    SELECT value, CASE WHEN rtrim(value, chr(1114111)) <> '' THEN
+        left(rtrim(value, chr(1114111)), -1) ||
+        chr(CASE ascii(right(rtrim(value, chr(1114111)), 1))
+            WHEN 55295 THEN 57344 ELSE ascii(right(rtrim(value, chr(1114111)), 1)) + 1 END)
+    END AS upper_bound FROM term
+)
+SELECT e.id, e.name, e.class, r.id AS realm_id, r.name AS realm_name
+FROM bounds b CROSS JOIN wow_server_realms r
+JOIN wow_servers s ON s.id = r.server_id
+CROSS JOIN LATERAL (
+    -- Separate finite/unbounded ranges so generic prepared plans can use
+    -- both index range keys; the unbounded branch only handles all-max runes.
+    SELECT candidates.id, candidates.name, candidates.class FROM (
+        (SELECT e.id, e.name, e.class FROM game_players e
+        WHERE e.realm_id = r.id AND b.upper_bound IS NOT NULL
+          AND lower(e.name) COLLATE "C" < b.upper_bound COLLATE "C"
+          AND lower(e.name) COLLATE "C" >= b.value
+          AND lower(e.name) COLLATE "C" LIKE lower($1::text) COLLATE "C" ESCAPE '\'
+        ORDER BY lower(e.name) COLLATE "C", e.id LIMIT 5)
+        UNION ALL
+        (SELECT e.id, e.name, e.class FROM game_players e
+        WHERE e.realm_id = r.id AND b.upper_bound IS NULL
+          AND lower(e.name) COLLATE "C" >= b.value
+          AND lower(e.name) COLLATE "C" LIKE lower($1::text) COLLATE "C" ESCAPE '\'
+        ORDER BY lower(e.name) COLLATE "C", e.id LIMIT 5)
+    ) candidates
+    ORDER BY lower(candidates.name) COLLATE "C", candidates.id LIMIT 5
+) e
+WHERE (s.tenant_id = $2::uuid OR
+       ($2::uuid = '00000000-0000-0000-0000-000000000000'::uuid AND
+        (s.tenant_id IS NULL OR s.tenant_id IN (SELECT id FROM tenants WHERE include_in_all))))
+ORDER BY lower(e.name) COLLATE "C", r.id, e.id
+LIMIT 5
+`
+
+type SuggestPlayersParams struct {
+	Prefix   string    `db:"prefix" json:"prefix"`
+	TenantID uuid.UUID `db:"tenant_id" json:"tenant_id"`
+	Query    string    `db:"query" json:"query"`
+}
+
+type SuggestPlayersRow struct {
+	ID        guid.GUID        `db:"id" json:"id"`
+	Name      string           `db:"name" json:"name"`
+	Class     WowPlayableClass `db:"class" json:"class"`
+	RealmID   uuid.UUID        `db:"realm_id" json:"realm_id"`
+	RealmName string           `db:"realm_name" json:"realm_name"`
+}
+
+// Per-realm index walks bound candidates before the cross-realm merge.
+// C ordering puts an exact folded name before every longer prefix match.
+func (q *sqlQuerier) SuggestPlayers(ctx context.Context, arg SuggestPlayersParams) ([]SuggestPlayersRow, error) {
+	rows, err := q.db.Query(ctx, suggestPlayers, arg.Prefix, arg.TenantID, arg.Query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []SuggestPlayersRow
+	for rows.Next() {
+		var i SuggestPlayersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Class,
+			&i.RealmID,
+			&i.RealmName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listCharacterSummaryInstances = `-- name: ListCharacterSummaryInstances :many
 SELECT id, hashed_slug, name, start_time
 FROM (

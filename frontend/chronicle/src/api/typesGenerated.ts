@@ -6097,6 +6097,29 @@ export interface RiverAttemptError {
 // From rivertype/river_type.go
 export type RiverJobState = string;
 
+// From chroniclesdk/search_suggestions.go
+export interface SearchSuggestionGuild {
+    readonly id: string;
+    readonly name: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+}
+
+// From chroniclesdk/search_suggestions.go
+export interface SearchSuggestionPlayer {
+    readonly id: string;
+    readonly name: string;
+    readonly class: string;
+    readonly realm_id: string;
+    readonly realm_name: string;
+}
+
+// From chroniclesdk/search_suggestions.go
+export interface SearchSuggestionsResponse {
+    readonly players: readonly SearchSuggestionPlayer[];
+    readonly guilds: readonly SearchSuggestionGuild[];
+}
+
 // From chroniclesdk/server_application.go
 /**
  * ServerApplication response includes all modification requests.
