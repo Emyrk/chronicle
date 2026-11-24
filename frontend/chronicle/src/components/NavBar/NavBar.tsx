@@ -336,16 +336,23 @@ function navTextLink(active: boolean) {
   return cn("flex items-center gap-1.5 text-sm transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")
 }
 
-/**
- * Left column: the Chronicle icon on branded tenants at the edge, and search pushed up against the logo.
- * Search never takes the icon's slot, and never competes with the right-hand links.
- */
+/** Left column: the Chronicle icon on branded tenants. Search never takes this slot. */
 function LeftGroup({ state }: { state: NavState }) {
   return (
-    <div className="hidden min-w-0 items-center gap-4 lg:flex">
+    <div className="hidden items-center lg:flex">
       {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10 shrink-0" />}
-      {state.searchEnabled && <SearchTrigger onOpen={state.openSearch} className="ml-auto mr-6 w-56 xl:w-64" />}
     </div>
+  )
+}
+
+/** Search hugs the logo from the right: a field that shrinks to fit, or an icon where the links leave no room. */
+function LogoSearch({ state }: { state: NavState }) {
+  if (!state.searchEnabled) return null
+  return (
+    <>
+      <SearchTrigger onOpen={state.openSearch} className="ml-6 mr-auto hidden min-w-36 max-w-64 flex-1 xl:flex" />
+      <SearchTrigger compact onOpen={state.openSearch} className="ml-4 mr-auto xl:hidden" />
+    </>
   )
 }
 
@@ -353,12 +360,13 @@ function LeftGroup({ state }: { state: NavState }) {
 function DesktopNav({ state }: { state: NavState }) {
   const recent = allNavLinks().find((link) => link.id === "recent")!
   return (
-    // Equal outer columns keep the logo centred; search hugs it from the left.
+    // Equal outer columns keep the logo centred; search hugs it from the right.
     <nav className="grid h-16 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b px-4">
       <div className="lg:hidden"><MobileMenuSheet state={state} /></div>
       <LeftGroup state={state} />
       <Brand state={state} />
-      <div className="hidden items-center justify-end gap-5 lg:flex">
+      <div className="hidden min-w-0 items-center justify-end gap-5 lg:flex">
+        <LogoSearch state={state} />
         <RootCommunityNavButton />
         <Link to={recent.href} className={navTextLink(isActiveLink(recent, state.location.pathname))}><recent.icon className="h-4 w-4" />Recent</Link>
         <DropdownMenu modal={false}>
