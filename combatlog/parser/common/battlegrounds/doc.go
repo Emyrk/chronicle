@@ -4,8 +4,9 @@
 // can be inferred here. Inactivity, deaths, and repeated same-map observations
 // do not split an episode. Without zone evidence there is no episode.
 //
-// Feed normalized messages in parser output order, including drained buffered
-// messages, then call Finish explicitly. State is a single-consumer object and
+// Feed timestamp-reordered normalized messages, not raw modern parser output.
+// Drain the reorder buffer's EOF tail before calling Finish explicitly.
+// State is a single-consumer object and
 // is independent of PvE encounters. A Process or Finish error invalidates the
 // partial output, including anything already sent to the sink; callers must
 // discard it. This package is not yet wired to uploads or persistence.

@@ -61,8 +61,10 @@ func New(format database.LogFormat, isBattleground func(uint32) bool, sink Event
 // Episodes returns a detached snapshot, including any currently open episode.
 func (s *State) Episodes() []Episode { return slices.Clone(s.episodes) }
 
-// Process implements the parser consumer contract. Errors are sticky: unsupported
-// headers or failed sinks cannot be followed by apparently successful output.
+// Process implements the parser consumer contract and expects timestamp-reordered
+// messages. Drain the reorder buffer's EOF tail before calling Finish.
+// Errors are sticky: unsupported headers or failed sinks cannot be followed by
+// apparently successful output.
 func (s *State) Process(m messages.Message) error {
 	if s.err != nil {
 		return s.err
