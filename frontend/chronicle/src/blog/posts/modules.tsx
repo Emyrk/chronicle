@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ExternalLink } from "lucide-react";
+import { ArrowDown, ExternalLink, Hammer, Star, type LucideIcon } from "lucide-react";
 import { DiscordIcon } from "@/components/icons/DiscordIcon";
 import { iconUrl } from "@/config/iconUrl";
 import { TIER_COLOR, TIER_ICON } from "@/pages/Settings/billingPricing";
@@ -51,18 +51,71 @@ function AccessCallout() {
 
 const code = "before:content-none after:content-none";
 
-// Section heading with a large number hanging in the left margin on wide screens.
+// Creator step heading with a large number hanging in the left margin on wide screens.
 function Step({ n, children }: { n: string; children: ReactNode }) {
   return (
-    <h2 className="relative">
+    <h3 className="relative">
       <span
         aria-hidden
-        className="absolute right-full top-1/2 mr-8 hidden -translate-y-1/2 font-mono text-6xl font-bold text-quality-legendary/25 xl:block"
+        className="absolute right-full top-1/2 mr-8 hidden -translate-y-1/2 font-mono text-5xl font-bold text-violet-300/25 xl:block"
       >
         {n}
       </span>
       {children}
-    </h2>
+    </h3>
+  );
+}
+
+const AUDIENCES = {
+  raiders: { icon: Star, color: "#fcd34d", label: "For raiders", title: "Use modules on your raids" },
+  creators: { icon: Hammer, color: "#c4b5fd", label: "For creators", title: "Make your own and share it" },
+} satisfies Record<string, { icon: LucideIcon; color: string; label: string; title: string }>;
+
+type Audience = keyof typeof AUDIENCES;
+
+// Two cards under the intro that jump to each audience's part.
+function AudienceLinks() {
+  return (
+    <div className="not-prose my-8 grid gap-3 sm:grid-cols-2">
+      {(Object.keys(AUDIENCES) as Audience[]).map((id) => {
+        const { icon: Icon, color, label, title } = AUDIENCES[id];
+        return (
+          <a
+            key={id}
+            href={`#${id}`}
+            className="group flex items-center gap-3 rounded-lg border bg-white/[0.03] p-4 transition-colors hover:bg-white/[0.06]"
+            style={{ borderColor: `${color}40` }}
+          >
+            <Icon className="size-5 shrink-0" style={{ color }} />
+            <span className="flex-1">
+              <span className="block font-mono text-xs uppercase tracking-wider" style={{ color }}>
+                {label}
+              </span>
+              <span className="block text-sm text-foreground">{title}</span>
+            </span>
+            <ArrowDown className="size-4 text-muted-foreground transition-transform group-hover:translate-y-0.5" />
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
+// Banner that opens each audience's part. It is wider than the text column on large screens.
+function Part({ id }: { id: Audience }) {
+  const { icon: Icon, color, label, title } = AUDIENCES[id];
+  return (
+    <div
+      id={id}
+      className="not-prose mb-6 mt-14 scroll-mt-24 rounded-xl border-l-4 px-5 py-5 lg:-mx-10"
+      style={{ borderColor: color, background: `linear-gradient(90deg, ${color}1f, transparent 85%)` }}
+    >
+      <p className="flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-[0.2em]" style={{ color }}>
+        <Icon className="size-4" />
+        {label}
+      </p>
+      <h2 className="mt-1 font-wow text-3xl text-foreground">{title}</h2>
+    </div>
   );
 }
 
@@ -81,7 +134,7 @@ function SharedInDiscord() {
           </p>
           <p className="mt-0.5 text-[15px] text-[#dbdee1]">
             Track this before tonight. It shows who nearly died on every pull.{" "}
-            <a href="/modules/chronicle/radardurability" className="break-all text-[#00a8fc] hover:underline">
+            <a href="/modules/chronicle/radardurability" className="block break-all text-[#00a8fc] hover:underline">
               chronicleclassic.com/modules/chronicle/radardurability
             </a>
           </p>
@@ -104,8 +157,9 @@ export function ModulesPost({ post }: PostProps) {
       <p>
         <a href="/modules">Modules</a> are addons for Chronicle. Players write them in Lua. They add panels to your raids.
       </p>
+      <AudienceLinks />
 
-      <Step n="01">Use one</Step>
+      <Part id="raiders" />
       <ol>
         <li>
           Open <a href="/modules">/modules</a>.
@@ -121,10 +175,12 @@ export function ModulesPost({ post }: PostProps) {
         Example: <a href="/modules/chronicle/radardurability">RadarDurability</a> shows who was close to dying, and
         when. It plays along with the replay.
       </p>
+      <p>Got a module link from your guild? Open it and press Track.</p>
 
-      <Step n="02">Make one</Step>
+      <Part id="creators" />
+      <Step n="01">Get access</Step>
       <p>
-        You can make your own. It&apos;s a <ReveredBadge /> perk.
+        Making modules is a <ReveredBadge /> perk.
       </p>
       <AccessCallout />
       <ol>
@@ -133,7 +189,7 @@ export function ModulesPost({ post }: PostProps) {
         <li>Tag a release. Now anyone can track it.</li>
       </ol>
 
-      <Step n="03">Build it with Claude Code</Step>
+      <Step n="02">Build it with Claude Code</Step>
       <p>Claude Code is the officially supported way to build. It connects through Chronicle&apos;s MCP. Linux and macOS.</p>
       <pre>
         <code>{"claude plugin marketplace add Emyrk/chronicle-mcp\nclaude plugin install chronicle@chronicle-plugins"}</code>
@@ -154,7 +210,7 @@ export function ModulesPost({ post }: PostProps) {
         <a href="/modules/api">API reference</a>.
       </p>
 
-      <Step n="04">Share it</Step>
+      <Step n="03">Share it</Step>
       <p>
         Every module has a link, like <code className={code}>/modules/you/raidradar</code>. Post it in your guild&apos;s
         Discord. Anyone who opens it can track it. Each release you tag reaches them on their next raid.
