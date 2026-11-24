@@ -58,3 +58,15 @@ func TestNewObjectRequiresObjectGUID(t *testing.T) {
 		require.NotNil(t, char)
 	}
 }
+
+// Identity registration must not introduce boss-linked death or cleanup hooks.
+func TestPlaguelandsSummonsKeepDefaultLifecycle(t *testing.T) {
+	t.Parallel()
+	for _, flavor := range []database.WoWFlavor{{database.FlavorVanilla}, {database.FlavorVanilla, database.FlavorTurtle}, {database.FlavorVanilla, database.FlavorWoWForever}} {
+		chars := characters.NewCharacters(unitdb.New(flavor), nil, identifier.NewIdentifier(map[uint32]identifier.Identity{}))
+		factories := VanillaCharacterFactories(flavor)
+		for _, entry := range []uint32{8477, 11197, 11263, 11598, 264850} {
+			require.False(t, factoryMatch(factories, creatureEntryGUID(0xF130000000000000, entry), chars), "entry %d flavor %v", entry, flavor)
+		}
+	}
+}

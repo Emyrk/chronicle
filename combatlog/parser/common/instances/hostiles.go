@@ -1190,11 +1190,25 @@ func RuinsOfAhnQirajHostiles() map[uint32]Identity {
 	return hostile
 }
 
+// ScholomanceIdentifier keeps the dungeon's gameobjects separate from creature templates.
+func ScholomanceIdentifier(_ database.WoWFlavor) *identifier.Identifier {
+	id := identifier.NewIdentifier(ScholomanceHostiles())
+	for entry, name := range map[uint32]string{176110: "Dawn's Gambit Trap", 177304: "Dawn's Gambit"} {
+		id.AddObjectEntryId(entry, Identity{Name: name, Category: unitdb.CategoryTrap, Affiliation: types.AffiliationUnknown})
+	}
+	for entry, name := range map[uint32]string{179708: "Divination Scryer", 179745: "Divination Scryer Aura"} {
+		id.AddObjectEntryId(entry, Identity{Name: name, Category: unitdb.CategoryObject, Affiliation: types.AffiliationUnknown})
+	}
+	return id
+}
+
 func ScholomanceHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 
 	LoadAdds(hostile, map[uint32]string{
 		11582: "Scholomance Dark Summoner",
+		11263: "Spectral Projection",
+		11598: "Risen Guardian",
 		10482: "Risen Lackey",
 		10678: "Plagued Hatchling",
 		14521: "Aspect of Shadow",
@@ -1233,6 +1247,8 @@ func ScholomanceHostiles() map[uint32]Identity {
 		11439: "Illusion of Jandice Barov",
 	})
 	LoadBosses(hostile, map[uint32]string{
+		10432: "Vectus",
+		10433: "Marduk Blackpool",
 		10506: "Kirtonos the Herald",
 		11622: "Rattlegore",
 		10508: "Ras Frostwhisper",
@@ -1247,6 +1263,8 @@ func ScholomanceHostiles() map[uint32]Identity {
 		// Paladin mount boss
 		14516: "Death Knight Darkreaver",
 	})
+	// Students are neutral before the Dawn's Gambit event changes their faction.
+	hostile[10475] = Identity{Name: "Scholomance Student", Affiliation: types.AffiliationNeutral}
 	return hostile
 }
 
@@ -1458,6 +1476,8 @@ func NaxxramasHostiles(fl database.WoWFlavor) map[uint32]Identity {
 func StratholmeHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		8477:  "Skeletal Servant",
+		11197: "Mindless Skeleton",
 		10408: "Rockwing Gargoyle",
 		10412: "Crypt Crawler",
 		10391: "Skeletal Berserker",
@@ -1527,6 +1547,10 @@ func StratholmeHostiles() map[uint32]Identity {
 		10812: "Grand Crusader Dathrohan",
 	})
 
+	// These stock critters attack players; category does not determine affiliation.
+	for entry, name := range map[uint32]string{10461: "Plagued Insect", 10536: "Plagued Maggot"} {
+		hostile[entry] = Identity{Name: name, Category: unitdb.CategoryCritter, Affiliation: types.AffiliationHostile}
+	}
 	return hostile
 }
 
