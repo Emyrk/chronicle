@@ -16,7 +16,7 @@ func TestForeverGlobalCreatureCategories(t *testing.T) {
 	for _, flavor := range []database.WoWFlavor{{database.FlavorWoWForever}, {database.FlavorVanilla}, {database.FlavorTurtle}, {database.FlavorNightmareOfUrsol}, {database.FlavorWrath}} {
 		units := unitdb.New(flavor)
 		idf := identifier.NewIdentifier(nil)
-		for entry, category := range map[uint32]unitdb.Category{10719: unitdb.CategoryUnknown, 1938: unitdb.CategoryUnknown, 4949: unitdb.CategoryUnknown, 268744: unitdb.CategoryGuardian} {
+		for entry, category := range map[uint32]unitdb.Category{10719: unitdb.CategoryUnknown, 1938: unitdb.CategoryUnknown, 4949: unitdb.CategoryUnknown, 264850: unitdb.CategoryGuardian, 268744: unitdb.CategoryGuardian, 8605: unitdb.CategoryUnknown, 257480: unitdb.CategoryUnknown} {
 			for _, high := range []uint64{0xF130000000000000, 0xF150000000000000, 0xF110000000000000, 0xF140000000000000} {
 				id := guid.GUID(high | uint64(entry)<<24 | 1)
 				want := unitdb.CategoryUnknown

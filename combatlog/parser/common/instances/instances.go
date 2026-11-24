@@ -289,7 +289,7 @@ var (
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"scholomance", "通灵学院"},
 		MapIDs:    []uint32{289},
-		Hostiles:  FromMap(ScholomanceHostiles()),
+		Hostiles:  ScholomanceIdentifier,
 	}
 
 	TempleOfAhnQirajFactory = &CommonFactory{

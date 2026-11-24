@@ -50,6 +50,7 @@ var knownForeverObjects = map[uint32]Category{
 // knownForeverCreatures provides semantic categories only, not affiliation,
 // ownership, boss roles, or activity/lifetime rules.
 var knownForeverCreatures = map[uint32]Category{
+	264850: CategoryGuardian, // Hawk
 	268744: CategoryGuardian, // Frog Familiar
 }
 
