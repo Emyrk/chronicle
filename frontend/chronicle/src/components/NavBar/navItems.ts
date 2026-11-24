@@ -18,6 +18,8 @@ export interface NavLink {
 export interface NavGroup {
   id: "discover" | "improve" | "build"
   title: string
+  /** What the group is for, in a few words, under its title. */
+  tagline: string
   links: NavLink[]
 }
 
@@ -26,33 +28,36 @@ export function navGroups(): NavGroup[] {
     {
       id: "discover",
       title: "Discover",
+      tagline: "Raids, players and guilds",
       links: [
-        { id: "recent", title: "Recent raids", href: "/recent", icon: Castle, description: "The latest logs uploaded to Chronicle.", keywords: ["logs", "latest", "uploads"] },
-        { id: "leaderboards", title: "Leaderboards", href: "/leaderboards", icon: Trophy, featured: true, description: "Ratings, top performances, speedruns, and statistics for every raid.", keywords: ["rankings", "ladder", "speedrun", "parses", "top"] },
+        { id: "recent", title: "Recent raids", href: "/recent", icon: Castle, description: "The latest uploaded logs", keywords: ["logs", "latest", "uploads"] },
+        { id: "leaderboards", title: "Leaderboards", href: "/leaderboards", icon: Trophy, featured: true, description: "Ratings, speedruns and stats", keywords: ["rankings", "ladder", "speedrun", "parses", "top"] },
         ...(serverCapabilities.armory
-          ? [{ id: "armory", title: "Armory", href: "/armory", icon: Swords, featured: true, description: "Look up any character's gear, career ratings, and raid history.", keywords: ["player", "character", "gear", "profile"] }]
+          ? [{ id: "armory", title: "Armory", href: "/armory", icon: Swords, featured: true, description: "Look up any character", keywords: ["player", "character", "gear", "profile"] }]
           : []),
-        { id: "guilds", title: "Guilds", href: "/guilds", icon: UsersRound, description: "Find a guild, its roster, and its raid nights.", keywords: ["guild", "roster"] },
-        { id: "search", title: "Search raids", href: "/search", icon: Search, description: "Query every raid with filters like boss, player, and kill time.", keywords: ["query", "instances", "logs", "filter"] },
-        { id: "census", title: "Census", href: "/census", icon: Users, description: "Class, spec, and population trends across realms.", keywords: ["population", "classes", "specs"] },
+        { id: "guilds", title: "Guilds", href: "/guilds", icon: UsersRound, description: "Rosters and raid nights", keywords: ["guild", "roster"] },
+        { id: "search", title: "Search raids", href: "/search", icon: Search, description: "Filter raids by boss", keywords: ["query", "instances", "logs", "filter"] },
+        { id: "census", title: "Census", href: "/census", icon: Users, description: "Class and spec populations", keywords: ["population", "classes", "specs"] },
       ],
     },
     {
       id: "improve",
       title: "Improve",
+      tagline: "See how you stack up",
       links: [
-        { id: "ratings", title: "Ratings", href: "/ratings", icon: Medal, featured: true, description: "How Peak, Mastery, and Renown work, and where you stand.", keywords: ["peak", "mastery", "renown", "score"] },
-        { id: "performance", title: "Performance", href: "/performance-history", icon: ChartSpline, description: "Your DPS and HPS over time, boss by boss.", keywords: ["history", "dps", "hps", "progress"] },
+        { id: "ratings", title: "Ratings", href: "/ratings", icon: Medal, featured: true, description: "Peak, Mastery and Renown", keywords: ["peak", "mastery", "renown", "score"] },
+        { id: "performance", title: "Performance", href: "/performance-history", icon: ChartSpline, description: "Your DPS and HPS over time", keywords: ["history", "dps", "hps", "progress"] },
       ],
     },
     {
       id: "build",
       title: "Build",
+      tagline: "Plan your next raid",
       links: [
-        { id: "modules", title: "Modules", href: "/modules", icon: Puzzle, description: "Custom Lua panels for your raid logs. Use one or build your own.", keywords: ["lua", "addons", "panels", "custom", "workshop"] },
-        { id: "talents", title: "Talent Builder", href: "/talents", icon: Sparkles, description: "Plan and share talent builds.", keywords: ["talents", "build", "spec"] },
-        { id: "gear", title: "Gear Builder", href: "/gear/progression", icon: Shirt, description: "Plan gear upgrades raid by raid.", keywords: ["gear", "bis", "items", "loot"] },
-        { id: "raidplanner", title: "Raid Planner", href: "/raidplanner", icon: Users, description: "Arrange groups and assignments for raid night.", keywords: ["groups", "assignments", "comp", "roster"] },
+        { id: "talents", title: "Talent Builder", href: "/talents", icon: Sparkles, description: "Plan and share builds", keywords: ["talents", "build", "spec"] },
+        { id: "gear", title: "Gear Builder", href: "/gear/progression", icon: Shirt, description: "Upgrades raid by raid", keywords: ["gear", "bis", "items", "loot"] },
+        { id: "raidplanner", title: "Raid Planner", href: "/raidplanner", icon: Users, description: "Groups and assignments", keywords: ["groups", "assignments", "comp", "roster"] },
+        { id: "modules", title: "Modules", href: "/modules", icon: Puzzle, description: "Custom panels for your logs", keywords: ["lua", "addons", "panels", "custom", "workshop"] },
       ],
     },
   ]
