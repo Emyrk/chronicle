@@ -9,6 +9,7 @@ export type SearchGuild = SearchSuggestionGuild
 /** A local catalog match with only destinations supported by its metadata. */
 export interface RankingMatch {
   instance: string
+  category: string
   /** Set when the query matched a boss rather than the raid itself. */
   boss?: string
   href: string
@@ -89,6 +90,7 @@ function rankingMatch(instance: SupportedInstance, boss?: string): RankingMatch 
   tabs.push({ label: boss ? "Search logs (login required)" : "Search logs", href: searchHref })
   return {
     instance: instance.name,
+    category: instance.category,
     boss,
     href: ranked ? rankingHref(instance.name, boss ? "performances" : undefined, boss) : searchHref,
     searchHref,
@@ -126,7 +128,9 @@ export function matchRankings(query: string, instances: readonly SupportedInstan
     const unitScore = Math.max(0, ...units.filter((unit) => !bosses.includes(unit.name)).map((unit) => score(unit.name, q)))
     if (unitScore > 0) add(unitScore, rankingMatch(instance))
   }
-  return [...scored.values()].sort((a, b) => b.score - a.score).slice(0, limit).map((row) => row.match)
+  return [...scored.values()].sort((a, b) =>
+    b.score - a.score || Number(b.match.category === "raid") - Number(a.match.category === "raid"),
+  ).slice(0, limit).map((row) => row.match)
 }
 
 export function matchPages(query: string, links: readonly NavLink[], limit = 4): NavLink[] {

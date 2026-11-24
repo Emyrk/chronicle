@@ -22,6 +22,36 @@ describe("matchRankings", () => {
     expect(matchRankings("rag", instances)[0].href).toBe(rankingHref("Molten Core", "performances", "Ragnaros"))
   })
 
+  it("puts raids ahead of equally strong dungeon matches before applying the limit", () => {
+    const catalog = [
+      { name: "Black Morass", category: "dungeon" },
+      { name: "Blackfathom Deeps", category: "dungeon" },
+      { name: "Blackrock Depths", category: "dungeon" },
+      { name: "Blackrock Spire", category: "dungeon" },
+      { name: "Blackwing Lair", category: "raid" },
+    ] as SupportedInstance[]
+    const rankings = matchRankings("black", catalog)
+    expect(rankings).toHaveLength(4)
+    expect(rankings[0]).toMatchObject({ instance: "Blackwing Lair", category: "raid" })
+    expect(pickTopResult("black", { rankings, players: [], guilds: [], pages: [] }))
+      .toMatchObject({ kind: "ranking", ranking: { instance: "Blackwing Lair" } })
+    expect(matchRankings("Black Morass", catalog)[0]).toMatchObject({ instance: "Black Morass", category: "dungeon" })
+  })
+
+  it("keeps stronger dungeon matches ahead of weaker raid matches", () => {
+    const catalog = [
+      { name: "Black", category: "dungeon" },
+      { name: "Blackwing Lair", category: "raid" },
+    ] as SupportedInstance[]
+    expect(matchRankings("black", catalog)[0].instance).toBe("Black")
+  })
+
+  it("preserves the instance category for boss and battleground presentation", () => {
+    expect(matchRankings("rag", instances)[0]).toMatchObject({ category: "raid", boss: "Ragnaros" })
+    expect(matchRankings("warsong", [{ name: "Warsong Gulch", category: "battleground" }] as SupportedInstance[])[0])
+      .toMatchObject({ category: "battleground" })
+  })
+
   it("ignores short queries and fallback instances", () => {
     expect(matchRankings("m", instances)).toEqual([])
     expect(matchRankings("fallback", instances)).toEqual([])

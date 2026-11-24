@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowRight, Loader2, Search, Trophy, UsersRound, type LucideIcon } from "lucide-react"
+import { ArrowRight, Loader2, Search, Castle, Swords, Trophy, UsersRound, type LucideIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { useMyFavorites } from "@/api/queries"
 import { useAuth } from "@/hooks/useAuth"
@@ -82,6 +82,31 @@ function Tile({ icon: Icon, className, color }: { icon?: LucideIcon; className?:
 const LEADERBOARD = GROUP_ACCENT.improve
 const GUILD = GROUP_ACCENT.discover
 
+/** Category labels and icons keep these distinguishable without relying on color. */
+function instanceAppearance(category: string) {
+  switch (category) {
+    case "raid": return {
+      ...GROUP_ACCENT.improve, label: "Raid", icon: Trophy,
+      chip: "border-amber-400/30 bg-amber-400/10 text-amber-100 hover:border-amber-300 hover:bg-amber-400/20",
+    }
+    case "dungeon": return {
+      ...GROUP_ACCENT.discover, label: "Dungeon", icon: Castle,
+      chip: "border-sky-400/30 bg-sky-400/10 text-sky-100 hover:border-sky-300 hover:bg-sky-400/20",
+    }
+    case "battleground": return {
+      label: "Battleground", icon: Swords, title: "text-rose-300",
+      tile: "bg-rose-400/15 text-rose-300 group-data-[active]/row:bg-rose-400/30",
+      card: "border-rose-400/30 from-rose-400/15 hover:border-rose-400/60",
+      chip: "border-rose-400/30 bg-rose-400/10 text-rose-100 hover:border-rose-300 hover:bg-rose-400/20",
+    }
+    default: return {
+      label: "Instance", icon: Castle, title: "text-muted-foreground",
+      tile: "bg-muted text-muted-foreground", card: "border-border from-muted/30",
+      chip: "border-border bg-muted text-foreground hover:bg-muted/80",
+    }
+  }
+}
+
 function rankingLabel(ranking: RankingMatch) {
   return ranking.boss ? `${ranking.boss} — ${ranking.instance}` : ranking.instance
 }
@@ -123,19 +148,21 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
     }
     case "ranking": {
       const { ranking } = top
+      const appearance = instanceAppearance(ranking.category)
+      const Icon = appearance.icon
       return (
-        <div className={cn(card, LEADERBOARD.card)}>
+        <div className={cn(card, appearance.card)}>
           <Link to={ranking.href} onClick={onSelect} className="flex items-start gap-3">
-            <Trophy className={cn("mt-1 h-6 w-6 shrink-0", LEADERBOARD.title)} />
+            <Icon className={cn("mt-1 h-6 w-6 shrink-0", appearance.title)} />
             <div>
-              <div className={cn("text-[11px] font-semibold uppercase tracking-wider", LEADERBOARD.title)}>{ranking.boss ? "Boss" : "Instance"}</div>
+              <div className={cn("text-[11px] font-semibold uppercase tracking-wider", appearance.title)}>{ranking.boss ? `${appearance.label} boss` : appearance.label}</div>
               <div className="text-xl font-semibold text-foreground">{ranking.boss ?? ranking.instance}</div>
               {ranking.boss && <div className="text-sm text-muted-foreground">{ranking.instance}</div>}
             </div>
           </Link>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {ranking.tabs.map((tab) => (
-              <Link key={tab.label} to={tab.href} onClick={onSelect} className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-0.5 text-xs text-amber-100 transition-colors hover:border-amber-300 hover:bg-amber-400/20">
+              <Link key={tab.label} to={tab.href} onClick={onSelect} className={cn("rounded-full border px-2.5 py-0.5 text-xs transition-colors", appearance.chip)}>
                 {tab.label}
               </Link>
             ))}
@@ -201,7 +228,10 @@ function useRows(query: string, results: GlobalSearchResults & { raidHref: strin
       rows: results.rankings.map((ranking) => ({
         key: `rank:${ranking.instance}:${ranking.boss ?? ""}`,
         href: ranking.href,
-        render: () => <><Tile icon={Trophy} className={LEADERBOARD.tile} /><span className="text-foreground">{rankingLabel(ranking)}</span></>,
+        render: () => {
+          const appearance = instanceAppearance(ranking.category)
+          return <><Tile icon={appearance.icon} className={appearance.tile} /><span className="text-foreground">{rankingLabel(ranking)}</span><span className={cn("ml-auto shrink-0 text-xs", appearance.title)}>{appearance.label}</span></>
+        },
       })),
     })
   }
