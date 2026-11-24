@@ -17,6 +17,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/messages"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/unitdb"
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/reorder"
 	"github.com/Emyrk/chronicle/combatlog/parser/types/zone"
 	"github.com/Emyrk/chronicle/database"
@@ -58,7 +59,9 @@ func TestMixedModernStream(t *testing.T) {
 				logger := slog.New(slog.NewTextHandler(io.Discard, nil))
 				hostiles := map[uint32]instances.Identity{}
 				instances.LoadBosses(hostiles, map[uint32]string{900099: "Fixture Boss"})
+				var resolvedMaps []uint32
 				state := encounters.NewWithInstanceResolver(t.Context(), logger, database.WoWFlavor{}, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+					resolvedMaps = append(resolvedMaps, z.MapID)
 					if z.MapID != 100 && z.MapID != 101 {
 						return nil
 					}
@@ -87,6 +90,19 @@ func TestMixedModernStream(t *testing.T) {
 				require.NoError(t, err)
 				require.NoError(t, consumers.New(logger, r, lifecycle, state, inspect).ConsumeAll(t.Context(), reorder.New(p, time.Hour)))
 				require.Equal(t, "22", state.CurrentVersions.Versions["combat_log"])
+				expectedMaps := []uint32{100, 1, 101, 2, 999}[:last]
+				if pveOnly {
+					expectedMaps = []uint32{100}
+					if last >= 3 {
+						expectedMaps = append(expectedMaps, 101)
+					}
+				}
+				require.Equal(t, expectedMaps, resolvedMaps, "BG and world zones must reach the PvE resolver, not a file-wide selector")
+				if !pveOnly && last >= 2 {
+					// Deselecting the PvE instance does not suppress parse-wide unit
+					// tracking. This player appears only as a non-PvE damage target.
+					require.Contains(t, state.Units.Players, guid.GUID(0x0000000200000002))
+				}
 				// Mutation after the real PvE consumer and before Finish must not change BG
 				// snapshots. The same pointers went through Consumers, not copied fixtures.
 				for _, d := range bgMessages {
