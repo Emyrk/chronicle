@@ -30,9 +30,9 @@ function AccessCallout() {
         <DiscordIcon className="size-5" />
       </div>
       <div className="flex-1">
-        <p className="text-sm font-semibold text-foreground">Not Revered? You can still build one.</p>
+        <p className="text-sm font-semibold text-foreground">Not Revered? Ask me.</p>
         <p className="mt-0.5 text-sm text-muted-foreground">
-          Message me on Discord with what you want to make, and I&apos;ll turn on module create access for you.
+          Message me on Discord. I&apos;ll give you module create access.
         </p>
       </div>
       <a
@@ -48,103 +48,70 @@ function AccessCallout() {
   );
 }
 
+const code = "before:content-none after:content-none";
+
 export function ModulesPost({ post }: PostProps) {
   return (
     <ShortPost post={post}>
       <p>
-        <a href="/modules">Modules</a> are addons for Chronicle. Like the addons you raid with, they&apos;re written in
-        Lua by other players, with a familiar API: <code className="before:content-none after:content-none">CreateFrame</code>,{" "}
-        <code className="before:content-none after:content-none">SetPoint</code>, events. Find one you like, track it, and
-        it sits beside Damage Done and the rest of your panels on every raid.
+        <a href="/modules">Modules</a> are addons for Chronicle. Players write them in Lua. They add panels to your raids.
       </p>
 
-      <h2>Track a module</h2>
-      <ul>
+      <h2>Use one</h2>
+      <ol>
         <li>
-          Browse the gallery at <a href="/modules">/modules</a>. Each module has its own page with a README, the data it
-          reads, how it handles the replay, and its releases.
+          Open <a href="/modules">/modules</a>.
         </li>
         <li>
-          Press <strong>Track</strong>. The module shows up under <strong>Modules</strong> in the instance panel
-          picker, so you can add it to any raid.
+          Pick a module. Press <strong>Track</strong>.
         </li>
         <li>
-          When the author tags a new release, panels running the module pick it up on their next load.
+          Open a raid. Add it from <strong>Modules</strong> in the panel picker.
         </li>
-      </ul>
-
-      <h2>An example: RadarDurability</h2>
+      </ol>
       <p>
-        <a href="/modules/chronicle/radardurability">RadarDurability</a> draws the raid as a radar, replayed from the
-        log: who was close to dying, and when. Every player sits round the circle, and their distance from the centre is
-        how many seconds of safety they had left. Mobs sit on the outer ring with a line to whoever they are hitting,
-        heals are green lines from the healer, and a red cross marks a death. Turn on <strong>Replay</strong> and it
-        plays along with the playhead, or press <strong>Worst moment</strong> to jump to where the raid came closest to
-        wiping.
+        Example: <a href="/modules/chronicle/radardurability">RadarDurability</a> shows who was close to dying, and
+        when. It plays along with the replay.
       </p>
 
-      <h2>Now make your own</h2>
+      <h2>Make one</h2>
       <p>
-        Ever finished a wipe wishing Chronicle had a panel for that? Who stood in the fire. Who forgot their Greater
-        Fire Protection. Whose Tranquilizing Shot missed the frenzy. You can build it, and your whole guild can use it.
-      </p>
-      <p>
-        Making modules is a <ReveredBadge /> perk, and it&apos;s also yours if you ask.
+        You can make your own. It&apos;s a <ReveredBadge /> perk.
       </p>
       <AccessCallout />
-      <p>Getting started takes three steps:</p>
-      <ul>
-        <li>
-          <strong>Claim your author name.</strong> It is the first part of your module links. It is public, and it
-          can&apos;t change later.
-        </li>
-        <li>
-          <strong>Build in the Module Workshop.</strong> Connect your AI agent, or use the in-browser assistant, and try
-          your panel on real raid logs as you go.
-        </li>
-        <li>
-          <strong>Tag a release.</strong> Save your work to main while it&apos;s in progress. Tag a release when it&apos;s
-          ready, and it&apos;s live for everyone.
-        </li>
-      </ul>
+      <ol>
+        <li>Claim an author name. It&apos;s public and permanent.</li>
+        <li>Build it in the Module Workshop.</li>
+        <li>Tag a release. Now anyone can track it.</li>
+      </ol>
 
-      <h2>Build with Claude Code</h2>
-      <p>
-        The officially supported way to build a module is <strong>Claude Code</strong>, through Chronicle&apos;s MCP
-        server. Claude edits the module in your open Workshop tab, previews it on real raids and saves it to main.
-        Releases stay with you. Install the plugin from Chronicle&apos;s marketplace (Linux and macOS):
-      </p>
+      <h2>Build it with Claude Code</h2>
+      <p>Claude Code is the officially supported way to build. It connects through Chronicle&apos;s MCP. Linux and macOS.</p>
       <pre>
         <code>{"claude plugin marketplace add Emyrk/chronicle-mcp\nclaude plugin install chronicle@chronicle-plugins"}</code>
       </pre>
       <ol>
         <li>
-          In Claude Code, run <code className="before:content-none after:content-none">/chronicle:setup</code> once to start the local relay.
+          Run <code className={code}>/chronicle:setup</code> once.
         </li>
         <li>
-          Open your module in the Workshop and click <strong>Connect agent</strong>.
+          In the Workshop, click <strong>Connect agent</strong>.
         </li>
         <li>
-          Run <code className="before:content-none after:content-none">/chronicle:connect</code>, pick the tab, and tell Claude what the panel should do.
+          Run <code className={code}>/chronicle:connect</code>. Tell Claude what to build.
         </li>
       </ol>
       <p>
-        Claude is the first client we support officially, but other MCP clients that support Streamable HTTP can
-        connect too. The <a href="/modules/api">API reference</a> has the full setup, other clients and
-        troubleshooting.
+        Claude saves to main. You tag releases. Other MCP clients work too. See the{" "}
+        <a href="/modules/api">API reference</a>.
       </p>
 
       <h2>Share it</h2>
       <p>
-        Every module has its own page, like <code className="before:content-none after:content-none">/modules/you/raidradar</code>.
-        Drop the link in your guild&apos;s Discord. Anyone who opens it can read the README and press{" "}
-        <strong>Track</strong>, and every release you tag reaches them on their next raid. Want help building it? Add
-        your guildmates as contributors.
+        Every module has a link, like <code className={code}>/modules/you/raidradar</code>. Post it in your guild&apos;s
+        Discord. Anyone who opens it can track it. Each release you tag reaches them on their next raid.
       </p>
-      <p>
-        Built something you&apos;re proud of? Show it off in the Discord. If your module needs data or a widget that
-        isn&apos;t there yet, ask for it there too.
-      </p>
+      <p>Need data or a widget that doesn&apos;t exist yet? Ask in the Discord.</p>
     </ShortPost>
   );
 }
