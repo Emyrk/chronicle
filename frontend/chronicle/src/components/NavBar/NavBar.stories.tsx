@@ -76,6 +76,7 @@ const meta: Meta<typeof NavBar> = {
       </MemoryRouter>
     ),
   ],
+  args: { search: true },
   parameters: { layout: "fullscreen", msw: { handlers: loggedIn(false) } },
 }
 
@@ -93,6 +94,7 @@ export const FavoritesOpen: Story = { play: openMenu(/favorites/i) }
 export const FavoritesEmpty: Story = { parameters: { msw: { handlers: noFavorites } }, play: openMenu(/favorites/i) }
 export const AccountOpen: Story = { play: openMenu(/^account/i) }
 export const AdminOpen: Story = { parameters: { msw: { handlers: loggedIn(true) } }, play: openMenu(/^admin/i) }
+export const SearchHidden: Story = { args: { search: false } }
 export const Tenant: Story = { parameters: { msw: { handlers: tenant } } }
 export const LoggedOut: Story = { parameters: { msw: { handlers: loggedOut } } }
 export const GuildPage: Story = { parameters: { route: "/g/example-guild", msw: { handlers: loggedOut } } }
@@ -157,7 +159,8 @@ export const Compare: StoryObj = {
         <h2 className="text-lg font-semibold">Desktop</h2>
         <StoryFrame id="default" title="Signed in" height={100} />
         <StoryFrame id="tenant" title="Community tenant (Chronicle icon keeps the left slot)" height={100} />
-        <StoryFrame id="tenant" title="Below 1400px (search collapses to an icon)" width={1024} height={100} />
+        <StoryFrame id="tenant" title="Tenant at 1024px" width={1024} height={100} />
+        <StoryFrame id="search-hidden" title="Search hidden (ships this way until the search endpoint lands)" height={100} />
         <StoryFrame id="logged-out" title="Signed out" height={100} />
       </section>
       <section className="flex flex-col gap-4">

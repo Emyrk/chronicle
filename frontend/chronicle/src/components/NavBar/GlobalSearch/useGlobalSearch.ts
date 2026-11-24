@@ -22,8 +22,9 @@ export function useGlobalSearch(query: string): GlobalSearchResults & { loading:
 }
 
 /** Opens search on ⌘K / Ctrl+K, and on "/" when no field has focus. */
-export function useSearchHotkey(open: () => void) {
+export function useSearchHotkey(open: () => void, enabled = true) {
   useEffect(() => {
+    if (!enabled) return
     const onKey = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement | null
       const typing = !!target && (target.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName))
@@ -34,5 +35,5 @@ export function useSearchHotkey(open: () => void) {
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [open])
+  }, [open, enabled])
 }

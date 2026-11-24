@@ -29,13 +29,13 @@ type AccountItem = {
 
 const HIGHLIGHT_CLASS = "font-medium text-[#f0c060] hover:text-[#ffd580] focus:text-[#ffd580]"
 
-function useNavBarState() {
+function useNavBarState(searchEnabled: boolean) {
   const location = useLocation()
   const { session, isAuthenticated, isLoading, logout } = useAuth()
   const [whatsNewOpen, setWhatsNewOpen] = useState(false)
   const [searchOpen, setSearchOpen] = useState(false)
   const openSearch = useCallback(() => setSearchOpen(true), [])
-  useSearchHotkey(openSearch)
+  useSearchHotkey(openSearch, searchEnabled)
 
   const { data: siteConfig } = useSiteConfig()
   const tenantID = siteConfig?.tenant?.id
@@ -93,7 +93,7 @@ function useNavBarState() {
     accountItems, adminItems, signOut, branding,
     hasBranding: !!(branding?.logo_wide || branding?.square_logo || branding?.display_name),
     loginUrl: `/login?from=${encodeURIComponent(location.pathname + location.search)}`,
-    whatsNewOpen, setWhatsNewOpen, searchOpen, setSearchOpen, openSearch,
+    whatsNewOpen, setWhatsNewOpen, searchEnabled, searchOpen, setSearchOpen, openSearch,
   }
 }
 
@@ -316,7 +316,7 @@ function MobileMenuSheet({ state }: { state: NavState }) {
       </SheetTrigger>
       <SheetContent side="left" className="styled-scrollbar w-80 overflow-y-auto p-4">
         <SheetTitle className="sr-only">Menu</SheetTitle>
-        <SearchTrigger onOpen={() => { close(); state.openSearch() }} className="mt-8 w-full" />
+        {state.searchEnabled ? <SearchTrigger onOpen={() => { close(); state.openSearch() }} className="mt-8 w-full" /> : <div className="mt-6" />}
         <MobileFavoritesSection state={state} close={close} />
         <FeatureDirectory mobile onSelect={close} />
         <div className="border-t pt-3"><MobileAccountSection state={state} close={close} /></div>
@@ -336,36 +336,31 @@ function navTextLink(active: boolean) {
   return cn("flex items-center gap-1.5 text-sm transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")
 }
 
-/** Left slot: the Chronicle icon on branded tenants, otherwise an empty spacer that balances the right side. */
-function ChronicleMark({ state }: { state: NavState }) {
+/**
+ * Left half: the Chronicle icon on branded tenants (an empty spacer otherwise), then search.
+ * Search lives here so it never competes with the right-hand links, and never takes the icon's slot.
+ */
+function LeftGroup({ state }: { state: NavState }) {
   return (
-    <div className="hidden w-10 items-center lg:flex">
-      {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10" />}
+    <div className="hidden items-center gap-4 lg:flex">
+      <div className="flex w-10 items-center">
+        {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10" />}
+      </div>
+      {state.searchEnabled && <SearchTrigger onOpen={state.openSearch} className="w-56 xl:w-64" />}
     </div>
   )
 }
 
-/** Desktop search sits with the right-hand links: a field on wide screens, an icon where a field would crowd the logo. */
-function DesktopSearch({ state }: { state: NavState }) {
-  return (
-    <>
-      <SearchTrigger onOpen={state.openSearch} className="hidden w-48 min-[1400px]:flex" />
-      <SearchTrigger compact onOpen={state.openSearch} className="min-[1400px]:hidden" />
-    </>
-  )
-}
-
-/** Search, Recent, one descriptive "Explore" menu, then the signed-in menus. */
+/** Recent, one descriptive "Explore" menu, then the signed-in menus. */
 function DesktopNav({ state }: { state: NavState }) {
   const recent = allNavLinks().find((link) => link.id === "recent")!
   return (
     <nav className="relative flex h-16 items-center justify-between border-b px-4">
       <div className="lg:hidden"><MobileMenuSheet state={state} /></div>
-      <ChronicleMark state={state} />
+      <LeftGroup state={state} />
       <Brand state={state} className="absolute left-1/2 -translate-x-1/2" />
       <div className="hidden items-center gap-5 lg:flex">
         <RootCommunityNavButton />
-        <DesktopSearch state={state} />
         <Link to={recent.href} className={navTextLink(isActiveLink(recent, state.location.pathname))}><recent.icon className="h-4 w-4" />Recent</Link>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
@@ -385,18 +380,19 @@ function DesktopNav({ state }: { state: NavState }) {
       </div>
       <div className="flex items-center lg:hidden">
         <RootCommunityNavButton mobile />
-        <SearchTrigger compact onOpen={state.openSearch} />
+        {state.searchEnabled && <SearchTrigger compact onOpen={state.openSearch} />}
       </div>
     </nav>
   )
 }
 
-export function NavBar() {
-  const state = useNavBarState()
+/** `search` shows the global search; it stays off until the backend search endpoint ships. */
+export function NavBar({ search = false }: { search?: boolean }) {
+  const state = useNavBarState(search)
   return (
     <>
       <DesktopNav state={state} />
-      <SearchPalette open={state.searchOpen} onOpenChange={state.setSearchOpen} />
+      {search && <SearchPalette open={state.searchOpen} onOpenChange={state.setSearchOpen} />}
       <WhatsNewDialog open={state.whatsNewOpen} onOpenChange={state.setWhatsNewOpen} />
     </>
   )
