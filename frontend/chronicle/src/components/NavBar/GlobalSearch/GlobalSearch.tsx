@@ -7,7 +7,7 @@ import { useAuth } from "@/hooks/useAuth"
 import { usePortalContainer } from "@/components/ui/PortalContainerContext"
 import { getClassColorVar } from "@/pages/ArmoryPage/types"
 import { cn } from "@/lib/utils"
-import { featuredNavLinks, type NavLink } from "../navItems"
+import { accentFor, featuredNavLinks, GROUP_ACCENT, type NavLink } from "../navItems"
 import {
   guildHref, playerHref, raidSearchHref,
   type GlobalSearchResults, type RankingMatch, type TopResult,
@@ -51,7 +51,7 @@ function RowLink({ row, active, onSelect, onHover }: { row: Row; active: boolean
       data-active={active || undefined}
       onClick={onSelect}
       onMouseMove={onHover}
-      className={cn("flex items-center gap-3 rounded-md px-3 py-2 text-sm", active ? "bg-muted text-foreground" : "text-muted-foreground")}
+      className={cn("group/row flex items-center gap-3 rounded-md px-2 py-1.5 text-sm transition-colors", active ? "bg-foreground/[0.07] text-foreground" : "text-muted-foreground")}
     >
       {row.render(active)}
     </Link>
@@ -61,13 +61,26 @@ function RowLink({ row, active, onSelect, onHover }: { row: Row; active: boolean
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <div className="py-1">
-      <div className="px-3 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">{title}</div>
+      <div className="px-2 pb-1 pt-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{title}</div>
       {children}
     </div>
   )
 }
 
-const iconCell = (Icon: LucideIcon) => <Icon className="h-4 w-4 shrink-0" />
+/** A tinted icon tile, the same shape the Explore menu uses. */
+function Tile({ icon: Icon, className, color }: { icon?: LucideIcon; className?: string; color?: string }) {
+  return (
+    <span
+      className={cn("flex h-7 w-7 shrink-0 items-center justify-center rounded-md transition-colors", className)}
+      style={color ? { background: `color-mix(in srgb, ${color} 18%, transparent)`, color } : undefined}
+    >
+      {Icon ? <Icon className="h-4 w-4" /> : <span className="h-2 w-2 rounded-full" style={{ background: color }} />}
+    </span>
+  )
+}
+
+const LEADERBOARD = GROUP_ACCENT.improve
+const GUILD = GROUP_ACCENT.discover
 
 function rankingLabel(ranking: RankingMatch) {
   return ranking.boss ? `${ranking.boss} — ${ranking.instance}` : `${ranking.instance} leaderboards`
@@ -75,13 +88,18 @@ function rankingLabel(ranking: RankingMatch) {
 
 /** The large "answer" card above the list, like a search engine's top result. */
 function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void }) {
-  const card = "block rounded-lg border bg-gradient-to-br from-muted/60 to-transparent p-4 transition-colors hover:border-foreground/30"
+  const card = "block rounded-lg border bg-gradient-to-br to-transparent p-4 transition-colors"
   switch (top.kind) {
     case "player": {
       const { player } = top
       return (
-        <Link to={playerHref(player)} onClick={onSelect} className={card}>
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Character</div>
+        <Link
+          to={playerHref(player)}
+          onClick={onSelect}
+          className={card}
+          style={{ borderColor: `color-mix(in srgb, ${getClassColorVar(player.class)} 40%, transparent)`, backgroundImage: `linear-gradient(to bottom right, color-mix(in srgb, ${getClassColorVar(player.class)} 14%, transparent), transparent)` }}
+        >
+          <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: getClassColorVar(player.class) }}>Character</div>
           <div className="mt-1 text-xl font-semibold" style={{ color: getClassColorVar(player.class) }}>{player.name}</div>
           <div className="text-sm text-muted-foreground">
             Level {player.level} {player.race} {player.class}
@@ -94,10 +112,10 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
     case "guild": {
       const { guild } = top
       return (
-        <Link to={guildHref(guild)} onClick={onSelect} className={cn(card, "flex items-center gap-4")}>
-          {guild.logo_url ? <img src={guild.logo_url} alt="" className="h-12 w-12 rounded object-contain" /> : <UsersRound className="h-10 w-10 text-muted-foreground" />}
+        <Link to={guildHref(guild)} onClick={onSelect} className={cn(card, GUILD.card, "flex items-center gap-4")}>
+          {guild.logo_url ? <img src={guild.logo_url} alt="" className="h-12 w-12 rounded object-contain" /> : <UsersRound className={cn("h-10 w-10", GUILD.title)} />}
           <div>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">Guild</div>
+            <div className={cn("text-[11px] font-semibold uppercase tracking-wider", GUILD.title)}>Guild</div>
             <div className="text-xl font-semibold text-foreground">&lt;{guild.name}&gt;</div>
             <div className="text-sm text-muted-foreground">{guild.player_count} characters seen</div>
           </div>
@@ -107,18 +125,18 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
     case "ranking": {
       const { ranking } = top
       return (
-        <div className={card}>
+        <div className={cn(card, LEADERBOARD.card)}>
           <Link to={ranking.href} onClick={onSelect} className="flex items-start gap-3">
-            <Trophy className="mt-1 h-6 w-6 shrink-0 text-[#f0c060]" />
+            <Trophy className={cn("mt-1 h-6 w-6 shrink-0", LEADERBOARD.title)} />
             <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">{ranking.boss ? "Boss leaderboards" : "Raid leaderboards"}</div>
+              <div className={cn("text-[11px] font-semibold uppercase tracking-wider", LEADERBOARD.title)}>{ranking.boss ? "Boss leaderboards" : "Raid leaderboards"}</div>
               <div className="text-xl font-semibold text-foreground">{ranking.boss ?? ranking.instance}</div>
               {ranking.boss && <div className="text-sm text-muted-foreground">{ranking.instance}</div>}
             </div>
           </Link>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {ranking.tabs.map((tab) => (
-              <Link key={tab.label} to={tab.href} onClick={onSelect} className="rounded-full border px-2.5 py-0.5 text-xs text-muted-foreground hover:border-foreground/40 hover:text-foreground">
+              <Link key={tab.label} to={tab.href} onClick={onSelect} className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-0.5 text-xs text-amber-100 transition-colors hover:border-amber-300 hover:bg-amber-400/20">
                 {tab.label}
               </Link>
             ))}
@@ -128,9 +146,10 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
     }
     case "page": {
       const { link } = top
+      const accent = accentFor(link)
       return (
-        <Link to={link.href} onClick={onSelect} className={cn(card, "flex items-start gap-3")}>
-          <link.icon className="mt-1 h-6 w-6 shrink-0 text-primary" />
+        <Link to={link.href} onClick={onSelect} className={cn(card, accent.card, "flex items-start gap-3")}>
+          <link.icon className={cn("mt-1 h-6 w-6 shrink-0", accent.title)} />
           <div>
             <div className="text-xl font-semibold text-foreground">{link.title}</div>
             <div className="text-sm text-muted-foreground">{link.description}</div>
@@ -147,7 +166,7 @@ function pageRow(link: NavLink): Row {
     href: link.href,
     render: () => (
       <>
-        {iconCell(link.icon)}
+        <Tile icon={link.icon} className={accentFor(link).tile} />
         <span className="text-foreground">{link.title}</span>
         <span className="truncate text-xs">{link.description}</span>
       </>
@@ -164,12 +183,12 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
       ...(favorites?.players ?? []).slice(0, 4).map((player): Row => ({
         key: `fav-player:${player.id}`,
         href: playerHref(player),
-        render: () => <><span className="h-2 w-2 rounded-full" style={{ background: getClassColorVar(player.class) }} /><span style={{ color: getClassColorVar(player.class) }}>{player.name}</span></>,
+        render: () => <><Tile color={getClassColorVar(player.class)} /><span style={{ color: getClassColorVar(player.class) }}>{player.name}</span></>,
       })),
       ...(favorites?.guilds ?? []).slice(0, 3).map((guild): Row => ({
         key: `fav-guild:${guild.id}`,
         href: guildHref(guild),
-        render: () => <>{iconCell(UsersRound)}<span className="text-foreground">&lt;{guild.name}&gt;</span></>,
+        render: () => <><Tile icon={UsersRound} className={GUILD.tile} /><span className="text-foreground">&lt;{guild.name}&gt;</span></>,
       })),
     ]
     if (favRows.length) sections.push({ title: "Favorites", rows: favRows })
@@ -183,7 +202,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
       rows: results.rankings.map((ranking) => ({
         key: `rank:${ranking.instance}:${ranking.boss ?? ""}`,
         href: ranking.href,
-        render: () => <>{iconCell(Trophy)}<span className="text-foreground">{rankingLabel(ranking)}</span></>,
+        render: () => <><Tile icon={Trophy} className={LEADERBOARD.tile} /><span className="text-foreground">{rankingLabel(ranking)}</span></>,
       })),
     })
   }
@@ -195,7 +214,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
         href: playerHref(player),
         render: () => (
           <>
-            <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: getClassColorVar(player.class) }} />
+            <Tile color={getClassColorVar(player.class)} />
             <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
             <span className="truncate text-xs">{player.level} {player.class}{player.guild_name ? ` · <${player.guild_name}>` : ""}</span>
           </>
@@ -209,7 +228,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
       rows: results.guilds.map((guild) => ({
         key: `guild:${guild.id}`,
         href: guildHref(guild),
-        render: () => <>{iconCell(UsersRound)}<span className="text-foreground">&lt;{guild.name}&gt;</span><span className="text-xs">{guild.player_count} characters</span></>,
+        render: () => <><Tile icon={UsersRound} className={GUILD.tile} /><span className="text-foreground">&lt;{guild.name}&gt;</span><span className="text-xs">{guild.player_count} characters</span></>,
       })),
     })
   }
@@ -219,7 +238,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
     rows: [{
       key: "raid-search",
       href: raidSearchHref(q),
-      render: () => <>{iconCell(Search)}<span className="text-foreground">Search raids for “{q}”</span></>,
+      render: () => <><Tile icon={Search} className={LEADERBOARD.tile} /><span className="text-foreground">Search raids for “{q}”</span></>,
     }],
   })
   return sections
@@ -258,11 +277,11 @@ export function SearchPalette({ open, onOpenChange, initialQuery = "" }: { open:
   return (
     <DialogPrimitive.Root open={open} onOpenChange={(next) => { onOpenChange(next); if (!next) { setQuery(""); setActive(0) } }}>
       <DialogPrimitive.Portal container={container}>
-        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/60" />
+        <DialogPrimitive.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
         <DialogPrimitive.Content
           aria-describedby={undefined}
           onKeyDown={onKeyDown}
-          className="fixed inset-x-0 top-0 z-50 flex h-dvh flex-col overflow-hidden bg-background sm:inset-x-auto sm:left-1/2 sm:top-[10vh] sm:h-auto sm:max-h-[75vh] sm:w-[640px] sm:-translate-x-1/2 sm:rounded-xl sm:border sm:shadow-2xl"
+          className="fixed inset-x-0 top-0 z-50 flex h-dvh flex-col overflow-hidden bg-background sm:inset-x-auto sm:left-1/2 sm:top-[10vh] sm:h-auto sm:max-h-[75vh] sm:w-[640px] sm:-translate-x-1/2 sm:rounded-xl sm:border sm:border-foreground/15 sm:bg-popover sm:shadow-2xl sm:shadow-black/60"
         >
           <DialogPrimitive.Title className="sr-only">Search Chronicle</DialogPrimitive.Title>
           <div className="flex items-center gap-3 border-b px-4">

@@ -75,3 +75,36 @@ export function isActiveLink(link: NavLink, pathname: string): boolean {
   const base = link.href.split("/").slice(0, 2).join("/")
   return pathname === base || pathname.startsWith(`${base}/`)
 }
+
+export type GroupAccent = { title: string; tile: string; rule: string; row: string; here: string; card: string }
+
+/**
+ * Each group's colour, shared by the Explore menu and search so a feature looks the same in both.
+ * Classes are written out in full so Tailwind can see them.
+ */
+export const GROUP_ACCENT: Record<NavGroup["id"], GroupAccent> = {
+  discover: {
+    title: "text-sky-300", rule: "border-sky-400/40",
+    tile: "bg-sky-400/15 text-sky-300 group-hover/row:bg-sky-400/30 group-focus/row:bg-sky-400/30 group-data-[active]/row:bg-sky-400/30",
+    row: "hover:bg-sky-400/10 focus:bg-sky-400/10", here: "border-sky-300 bg-sky-400/10",
+    card: "border-sky-400/30 from-sky-400/15 hover:border-sky-400/60",
+  },
+  improve: {
+    title: "text-amber-300", rule: "border-amber-400/40",
+    tile: "bg-amber-400/15 text-amber-300 group-hover/row:bg-amber-400/30 group-focus/row:bg-amber-400/30 group-data-[active]/row:bg-amber-400/30",
+    row: "hover:bg-amber-400/10 focus:bg-amber-400/10", here: "border-amber-300 bg-amber-400/10",
+    card: "border-amber-400/30 from-amber-400/15 hover:border-amber-400/60",
+  },
+  build: {
+    title: "text-emerald-300", rule: "border-emerald-400/40",
+    tile: "bg-emerald-400/15 text-emerald-300 group-hover/row:bg-emerald-400/30 group-focus/row:bg-emerald-400/30 group-data-[active]/row:bg-emerald-400/30",
+    row: "hover:bg-emerald-400/10 focus:bg-emerald-400/10", here: "border-emerald-300 bg-emerald-400/10",
+    card: "border-emerald-400/30 from-emerald-400/15 hover:border-emerald-400/60",
+  },
+}
+
+/** The colour of the group a link sits in. */
+export function accentFor(link: NavLink): GroupAccent {
+  const group = navGroups().find((g) => g.links.some((l) => l.id === link.id))
+  return GROUP_ACCENT[group?.id ?? "discover"]
+}

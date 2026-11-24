@@ -17,7 +17,7 @@ import {
 import { SearchPalette, SearchTrigger } from "./GlobalSearch/GlobalSearch"
 import { useSearchHotkey } from "./GlobalSearch/useGlobalSearch"
 import { guildHref, playerHref } from "./GlobalSearch/globalSearch"
-import { allNavLinks, isActiveLink, navGroups, type NavGroup } from "./navItems"
+import { allNavLinks, GROUP_ACCENT, isActiveLink, navGroups, type NavGroup } from "./navItems"
 
 type AccountItem = {
   title: string
@@ -256,25 +256,6 @@ function MobileFavoritesSection({ state, close }: { state: NavState; close: () =
       ))}
     </div>
   )
-}
-
-/** Each group gets its own colour so the three columns read apart at a glance. */
-const GROUP_ACCENT: Record<NavGroup["id"], { title: string; tile: string; rule: string; row: string; here: string }> = {
-  discover: {
-    title: "text-sky-300", rule: "border-sky-400/40",
-    tile: "bg-sky-400/15 text-sky-300 group-hover/row:bg-sky-400/30 group-focus/row:bg-sky-400/30",
-    row: "hover:bg-sky-400/10 focus:bg-sky-400/10", here: "border-sky-300 bg-sky-400/10",
-  },
-  improve: {
-    title: "text-amber-300", rule: "border-amber-400/40",
-    tile: "bg-amber-400/15 text-amber-300 group-hover/row:bg-amber-400/30 group-focus/row:bg-amber-400/30",
-    row: "hover:bg-amber-400/10 focus:bg-amber-400/10", here: "border-amber-300 bg-amber-400/10",
-  },
-  build: {
-    title: "text-emerald-300", rule: "border-emerald-400/40",
-    tile: "bg-emerald-400/15 text-emerald-300 group-hover/row:bg-emerald-400/30 group-focus/row:bg-emerald-400/30",
-    row: "hover:bg-emerald-400/10 focus:bg-emerald-400/10", here: "border-emerald-300 bg-emerald-400/10",
-  },
 }
 
 function GroupColumn({ group, onSelect, asMenuItems, compact }: { group: NavGroup; onSelect?: () => void; asMenuItems?: boolean; compact?: boolean }) {
