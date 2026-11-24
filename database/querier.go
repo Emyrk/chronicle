@@ -1496,6 +1496,12 @@ type sqlcQuerier interface {
 	// Returns distinct realm names that have at least one qualified speedrun.
 	SpeedrunRealmNames(ctx context.Context) ([]string, error)
 	StarLuaProject(ctx context.Context, arg StarLuaProjectParams) error
+	// Per-realm index walks bound candidates before the cross-realm merge.
+	// C ordering puts an exact folded name before every longer prefix match.
+	SuggestGuilds(ctx context.Context, arg SuggestGuildsParams) ([]SuggestGuildsRow, error)
+	// Per-realm index walks bound candidates before the cross-realm merge.
+	// C ordering puts an exact folded name before every longer prefix match.
+	SuggestPlayers(ctx context.Context, arg SuggestPlayersParams) ([]SuggestPlayersRow, error)
 	// Atomically refills a leaky bucket by the time since its last update
 	// (capped at burst) and takes cost tokens if enough are available. A new
 	// bucket starts full. A refused take still stores the refilled level, so

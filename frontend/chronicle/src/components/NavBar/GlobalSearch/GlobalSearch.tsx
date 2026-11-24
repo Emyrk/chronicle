@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { Link, useNavigate } from "react-router-dom"
-import { ArrowRight, Loader2, Search, Trophy, UsersRound, type LucideIcon } from "lucide-react"
+import { ArrowRight, Loader2, Search, Castle, Swords, Trophy, UsersRound, type LucideIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import { useMyFavorites } from "@/api/queries"
 import { useAuth } from "@/hooks/useAuth"
@@ -9,7 +9,7 @@ import { getClassColorVar } from "@/pages/ArmoryPage/types"
 import { cn } from "@/lib/utils"
 import { accentFor, featuredNavLinks, GROUP_ACCENT, type NavLink } from "../navItems"
 import {
-  guildHref, playerHref, raidSearchHref,
+  guildHref, playerHref,
   type GlobalSearchResults, type RankingMatch, type TopResult,
 } from "./globalSearch"
 import { useGlobalSearch } from "./useGlobalSearch"
@@ -82,8 +82,33 @@ function Tile({ icon: Icon, className, color }: { icon?: LucideIcon; className?:
 const LEADERBOARD = GROUP_ACCENT.improve
 const GUILD = GROUP_ACCENT.discover
 
+/** Category labels and icons keep these distinguishable without relying on color. */
+function instanceAppearance(category: string) {
+  switch (category) {
+    case "raid": return {
+      ...GROUP_ACCENT.improve, label: "Raid", icon: Trophy,
+      chip: "border-amber-400/30 bg-amber-400/10 text-amber-100 hover:border-amber-300 hover:bg-amber-400/20",
+    }
+    case "dungeon": return {
+      ...GROUP_ACCENT.discover, label: "Dungeon", icon: Castle,
+      chip: "border-sky-400/30 bg-sky-400/10 text-sky-100 hover:border-sky-300 hover:bg-sky-400/20",
+    }
+    case "battleground": return {
+      label: "Battleground", icon: Swords, title: "text-rose-300",
+      tile: "bg-rose-400/15 text-rose-300 group-data-[active]/row:bg-rose-400/30",
+      card: "border-rose-400/30 from-rose-400/15 hover:border-rose-400/60",
+      chip: "border-rose-400/30 bg-rose-400/10 text-rose-100 hover:border-rose-300 hover:bg-rose-400/20",
+    }
+    default: return {
+      label: "Instance", icon: Castle, title: "text-muted-foreground",
+      tile: "bg-muted text-muted-foreground", card: "border-border from-muted/30",
+      chip: "border-border bg-muted text-foreground hover:bg-muted/80",
+    }
+  }
+}
+
 function rankingLabel(ranking: RankingMatch) {
-  return ranking.boss ? `${ranking.boss} — ${ranking.instance}` : `${ranking.instance} leaderboards`
+  return ranking.boss ? `${ranking.boss} — ${ranking.instance}` : ranking.instance
 }
 
 /** The large "answer" card above the list, like a search engine's top result. */
@@ -102,8 +127,7 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
           <div className="text-[11px] font-semibold uppercase tracking-wider" style={{ color: getClassColorVar(player.class) }}>Character</div>
           <div className="mt-1 text-xl font-semibold" style={{ color: getClassColorVar(player.class) }}>{player.name}</div>
           <div className="text-sm text-muted-foreground">
-            Level {player.level} {player.race} {player.class}
-            {player.guild_name && <> · &lt;{player.guild_name}&gt;</>}
+            {player.class} · {player.realm_name}
           </div>
           <div className="mt-3 flex items-center gap-1 text-xs font-medium text-primary">Open in Armory <ArrowRight className="h-3 w-3" /></div>
         </Link>
@@ -113,30 +137,32 @@ function TopResultCard({ top, onSelect }: { top: TopResult; onSelect: () => void
       const { guild } = top
       return (
         <Link to={guildHref(guild)} onClick={onSelect} className={cn(card, GUILD.card, "flex items-center gap-4")}>
-          {guild.logo_url ? <img src={guild.logo_url} alt="" className="h-12 w-12 rounded object-contain" /> : <UsersRound className={cn("h-10 w-10", GUILD.title)} />}
+          <UsersRound className={cn("h-10 w-10", GUILD.title)} />
           <div>
             <div className={cn("text-[11px] font-semibold uppercase tracking-wider", GUILD.title)}>Guild</div>
             <div className="text-xl font-semibold text-foreground">&lt;{guild.name}&gt;</div>
-            <div className="text-sm text-muted-foreground">{guild.player_count} characters seen</div>
+            <div className="text-sm text-muted-foreground">{guild.realm_name}</div>
           </div>
         </Link>
       )
     }
     case "ranking": {
       const { ranking } = top
+      const appearance = instanceAppearance(ranking.category)
+      const Icon = appearance.icon
       return (
-        <div className={cn(card, LEADERBOARD.card)}>
+        <div className={cn(card, appearance.card)}>
           <Link to={ranking.href} onClick={onSelect} className="flex items-start gap-3">
-            <Trophy className={cn("mt-1 h-6 w-6 shrink-0", LEADERBOARD.title)} />
+            <Icon className={cn("mt-1 h-6 w-6 shrink-0", appearance.title)} />
             <div>
-              <div className={cn("text-[11px] font-semibold uppercase tracking-wider", LEADERBOARD.title)}>{ranking.boss ? "Boss leaderboards" : "Raid leaderboards"}</div>
+              <div className={cn("text-[11px] font-semibold uppercase tracking-wider", appearance.title)}>{ranking.boss ? `${appearance.label} boss` : appearance.label}</div>
               <div className="text-xl font-semibold text-foreground">{ranking.boss ?? ranking.instance}</div>
               {ranking.boss && <div className="text-sm text-muted-foreground">{ranking.instance}</div>}
             </div>
           </Link>
           <div className="mt-3 flex flex-wrap gap-1.5">
             {ranking.tabs.map((tab) => (
-              <Link key={tab.label} to={tab.href} onClick={onSelect} className="rounded-full border border-amber-400/30 bg-amber-400/10 px-2.5 py-0.5 text-xs text-amber-100 transition-colors hover:border-amber-300 hover:bg-amber-400/20">
+              <Link key={tab.label} to={tab.href} onClick={onSelect} className={cn("rounded-full border px-2.5 py-0.5 text-xs transition-colors", appearance.chip)}>
                 {tab.label}
               </Link>
             ))}
@@ -174,7 +200,7 @@ function pageRow(link: NavLink): Row {
   }
 }
 
-function useRows(query: string, results: GlobalSearchResults, isAuthenticated: boolean) {
+function useRows(query: string, results: GlobalSearchResults & { raidHref: string }, isAuthenticated: boolean) {
   const { data: favorites } = useMyFavorites({ enabled: isAuthenticated })
   const q = query.trim()
   if (!q) {
@@ -198,11 +224,14 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
   const sections: { title: string; rows: Row[] }[] = []
   if (results.rankings.length) {
     sections.push({
-      title: "Leaderboards",
+      title: "Instances and bosses",
       rows: results.rankings.map((ranking) => ({
         key: `rank:${ranking.instance}:${ranking.boss ?? ""}`,
         href: ranking.href,
-        render: () => <><Tile icon={Trophy} className={LEADERBOARD.tile} /><span className="text-foreground">{rankingLabel(ranking)}</span></>,
+        render: () => {
+          const appearance = instanceAppearance(ranking.category)
+          return <><Tile icon={appearance.icon} className={appearance.tile} /><span className="text-foreground">{rankingLabel(ranking)}</span><span className={cn("ml-auto shrink-0 text-xs", appearance.title)}>{appearance.label}</span></>
+        },
       })),
     })
   }
@@ -210,13 +239,13 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
     sections.push({
       title: "Characters",
       rows: results.players.map((player) => ({
-        key: `player:${player.id}`,
+        key: `player:${player.realm_id}:${player.id}`,
         href: playerHref(player),
         render: () => (
           <>
             <Tile color={getClassColorVar(player.class)} />
             <span className="font-medium" style={{ color: getClassColorVar(player.class) }}>{player.name}</span>
-            <span className="truncate text-xs">{player.level} {player.class}{player.guild_name ? ` · <${player.guild_name}>` : ""}</span>
+            <span className="truncate text-xs">{player.class} · {player.realm_name}</span>
           </>
         ),
       })),
@@ -228,7 +257,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
       rows: results.guilds.map((guild) => ({
         key: `guild:${guild.id}`,
         href: guildHref(guild),
-        render: () => <><Tile icon={UsersRound} className={GUILD.tile} /><span className="text-foreground">&lt;{guild.name}&gt;</span><span className="text-xs">{guild.player_count} characters</span></>,
+        render: () => <><Tile icon={UsersRound} className={GUILD.tile} /><span className="text-foreground">&lt;{guild.name}&gt;</span><span className="text-xs">{guild.realm_name}</span></>,
       })),
     })
   }
@@ -237,7 +266,7 @@ function useRows(query: string, results: GlobalSearchResults, isAuthenticated: b
     title: "Raids",
     rows: [{
       key: "raid-search",
-      href: raidSearchHref(q),
+      href: results.raidHref,
       render: () => <><Tile icon={Search} className={LEADERBOARD.tile} /><span className="text-foreground">Search raids for “{q}”</span></>,
     }],
   })
@@ -250,7 +279,7 @@ export function SearchPalette({ open, onOpenChange, initialQuery = "" }: { open:
   const [active, setActive] = useState(0)
   const navigate = useNavigate()
   const { isAuthenticated } = useAuth()
-  const results = useGlobalSearch(query)
+  const results = useGlobalSearch(query, open)
   const sections = useRows(query, results, isAuthenticated)
   const rows = sections.flatMap((section) => section.rows)
   const listRef = useRef<HTMLDivElement>(null)
@@ -297,6 +326,7 @@ export function SearchPalette({ open, onOpenChange, initialQuery = "" }: { open:
               <span className="sm:hidden">Cancel</span><span className="hidden sm:inline">Esc</span>
             </DialogPrimitive.Close>
           </div>
+          <div role="status" className="px-4 text-xs text-muted-foreground">{results.status}</div>
           <div ref={listRef} className="styled-scrollbar flex-1 overflow-y-auto p-2">
             {query.trim().length >= 2 && results.top && (
               <div className="p-1 pb-2"><TopResultCard top={results.top} onSelect={close} /></div>

@@ -1,28 +1,35 @@
-import type { ArmorySearchResult, GuildInfo, SupportedInstance } from "@/api/typesGenerated"
+import type { SearchSuggestionPlayer, SearchSuggestionGuild, SupportedInstance } from "@/api/typesGenerated"
+import { encodeQuery, type Node } from "@/pages/InstanceSearch/queryModel"
 import { instancePathSegment } from "@/pages/Leaderboards/v2Selection"
 import type { NavLink } from "../navItems"
 
-/** A raid or boss that has leaderboards. */
+export type SearchPlayer = SearchSuggestionPlayer
+export type SearchGuild = SearchSuggestionGuild
+
+/** A local catalog match with only destinations supported by its metadata. */
 export interface RankingMatch {
   instance: string
+  category: string
   /** Set when the query matched a boss rather than the raid itself. */
   boss?: string
   href: string
-  /** Quick links into the raid's leaderboard tabs. */
+  searchHref: string
+  searchRequiresLogin: boolean
+  /** Capability-aware catalog destinations. */
   tabs: { label: string; href: string }[]
 }
 
 export type TopResult =
-  | { kind: "player"; player: ArmorySearchResult }
-  | { kind: "guild"; guild: GuildInfo }
+  | { kind: "player"; player: SearchPlayer }
+  | { kind: "guild"; guild: SearchGuild }
   | { kind: "ranking"; ranking: RankingMatch }
   | { kind: "page"; link: NavLink }
 
 export interface GlobalSearchResults {
   top?: TopResult
   rankings: RankingMatch[]
-  players: ArmorySearchResult[]
-  guilds: GuildInfo[]
+  players: readonly SearchPlayer[]
+  guilds: readonly SearchGuild[]
   pages: NavLink[]
 }
 
@@ -56,36 +63,74 @@ export function rankingHref(instance: string, tab?: string, boss?: string): stri
   return boss ? `${path}?${new URLSearchParams({ encounters: boss })}` : path
 }
 
-function rankingMatch(instance: string, boss?: string): RankingMatch {
+/** Only these names are explicitly published as canonical ranking encounters. */
+function rankingBosses(instance: SupportedInstance): string[] {
+  return [...new Set([
+    ...(instance.progression_bosses ?? []),
+    ...(instance.ranking_encounter_sets ?? []).flatMap((set) => set.encounters),
+  ])]
+}
+
+function rankingMatch(instance: SupportedInstance, boss?: string): RankingMatch {
+  const ranked = rankingBosses(instance).length > 0
+  const searchHref = boss ? bossSearchHref(instance.name, boss) : instanceSearchHref(instance.name)
+  const tabs: RankingMatch["tabs"] = []
+  if (ranked) {
+    tabs.push(
+      { label: "Ratings", href: rankingHref(instance.name, "ratings", boss) },
+      { label: "Performances", href: rankingHref(instance.name, "performances", boss) },
+    )
+  }
+  // A full-clear speedrun is a raid destination, not a boss-filtered board.
+  if (instance.speedrun_rules) tabs.push({ label: "Speedruns", href: rankingHref(instance.name, "speedruns") })
+  if (ranked) tabs.push({ label: "Statistics", href: rankingHref(instance.name, "statistics", boss) })
+  if (instance.speedrun_rules || Object.keys(instance.damage_by_encounter ?? {}).length > 0) {
+    tabs.push({ label: "Rules", href: rankingHref(instance.name, "rulesets") })
+  }
+  tabs.push({ label: boss ? "Search logs (login required)" : "Search logs", href: searchHref })
   return {
-    instance,
+    instance: instance.name,
+    category: instance.category,
     boss,
-    href: rankingHref(instance, boss ? "performances" : undefined, boss),
-    tabs: [
-      { label: "Ratings", href: rankingHref(instance, "ratings", boss) },
-      { label: "Performances", href: rankingHref(instance, "performances", boss) },
-      { label: "Speedruns", href: rankingHref(instance, "speedruns", boss) },
-      { label: "Statistics", href: rankingHref(instance, "statistics", boss) },
-    ],
+    href: ranked ? rankingHref(instance.name, boss ? "performances" : undefined, boss) : searchHref,
+    searchHref,
+    searchRequiresLogin: !!boss,
+    tabs,
   }
 }
 
-/** Raids and bosses whose names (or raid initials) match the query, best first. */
+function instanceNames(instance: SupportedInstance): string[] {
+  return [instance.name, ...(instance.derived_names ?? []), ...(instance.zone_names ?? []),
+    initials(instance.name), ...(RAID_ALIASES[instance.name] ?? [])]
+}
+
+/** Local catalog only: never fetch uploaded logs to populate suggestions. */
 export function matchRankings(query: string, instances: readonly SupportedInstance[], limit = 4): RankingMatch[] {
   const q = norm(query)
   if (q.length < 2) return []
-  const scored: { score: number; match: RankingMatch }[] = []
+  const scored = new Map<string, { score: number; match: RankingMatch }>()
+  const add = (value: number, match: RankingMatch) => {
+    const key = JSON.stringify([match.instance, match.boss])
+    if (value > (scored.get(key)?.score ?? 0)) scored.set(key, { score: value, match })
+  }
   for (const instance of instances) {
     if (instance.fallback) continue
-    const names = [instance.name, ...(instance.derived_names ?? [])]
-    const raidScore = Math.max(...names.map((name) => score(name, q)), initials(instance.name) === q || RAID_ALIASES[instance.name]?.includes(q) ? 3 : 0)
-    if (raidScore > 0) scored.push({ score: raidScore + 0.5, match: rankingMatch(instance.name) })
-    for (const boss of instance.progression_bosses ?? []) {
+    const raidScore = Math.max(...instanceNames(instance).map((name) => score(name, q)))
+    if (raidScore > 0) add(raidScore + 0.5, rankingMatch(instance))
+    const bosses = rankingBosses(instance)
+    for (const boss of bosses) {
       const bossScore = score(boss, q)
-      if (bossScore > 0) scored.push({ score: bossScore, match: rankingMatch(instance.name, boss) })
+      if (bossScore > 0) add(bossScore, rankingMatch(instance, boss))
     }
+    // Creature labels are not always encounter names. Unknown bosses and adds
+    // lead to their parent instance, never a fabricated encounter filter.
+    const units = [...(instance.bosses ?? []), ...(instance.trash ?? [])]
+    const unitScore = Math.max(0, ...units.filter((unit) => !bosses.includes(unit.name)).map((unit) => score(unit.name, q)))
+    if (unitScore > 0) add(unitScore, rankingMatch(instance))
   }
-  return scored.sort((a, b) => b.score - a.score).slice(0, limit).map((row) => row.match)
+  return [...scored.values()].sort((a, b) =>
+    b.score - a.score || Number(b.match.category === "raid") - Number(a.match.category === "raid"),
+  ).slice(0, limit).map((row) => row.match)
 }
 
 export function matchPages(query: string, links: readonly NavLink[], limit = 4): NavLink[] {
@@ -118,7 +163,24 @@ export function pickTopResult(query: string, results: Omit<GlobalSearchResults, 
   return undefined
 }
 
-export const playerHref = (player: Pick<ArmorySearchResult, "realm_name" | "id">) =>
+export const playerHref = (player: Pick<SearchSuggestionPlayer, "realm_name" | "id">) =>
   `/armory/${encodeURIComponent(player.realm_name)}/${encodeURIComponent(player.id)}`
-export const guildHref = (guild: Pick<GuildInfo, "id">) => `/g/${guild.id}`
-export const raidSearchHref = (query: string) => `/search?${new URLSearchParams({ q: query })}`
+export const guildHref = (guild: Pick<SearchSuggestionGuild, "id">) => `/g/${guild.id}`
+function searchHref(where: Node): string {
+  return `/search?${new URLSearchParams({ q: encodeQuery(where) })}`
+}
+
+const instanceSearchHref = (instance: string) => searchHref({ field: "instance.name", op: "=", value: instance })
+
+/** Encounter quantifiers require login, unlike the simple raid-name handoff. */
+export const bossSearchHref = (instance: string, boss: string) => searchHref({ and: [
+  { field: "instance.name", op: "=", value: instance },
+  { any_encounter: { field: "encounter.name", op: "=", value: boss } },
+] })
+
+export function raidSearchHref(query: string, instances: readonly SupportedInstance[] = []): string {
+  const q = norm(query)
+  const instance = instances.find((row) => !row.fallback && instanceNames(row).some((name) => norm(name) === q))
+  if (instance) return instanceSearchHref(instance.name)
+  return q ? searchHref({ field: "instance.name", op: "contains", value: query.trim() }) : "/search"
+}

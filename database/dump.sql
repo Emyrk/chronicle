@@ -5123,6 +5123,8 @@ CREATE INDEX idx_game_players_guild ON game_players USING btree (guild_id) WHERE
 
 CREATE INDEX idx_game_players_realm_lower_name ON game_players USING btree (realm_id, lower(name));
 
+CREATE INDEX idx_game_players_suggestions ON game_players USING btree (realm_id, lower(name) COLLATE "C", id);
+
 CREATE INDEX idx_game_players_updated_at ON game_players USING btree (updated_at DESC);
 
 CREATE INDEX idx_game_players_updated_from_instance ON game_players USING btree (updated_from_instance) WHERE (updated_from_instance IS NOT NULL);
@@ -5132,6 +5134,8 @@ CREATE INDEX idx_guild_join_requests_guild ON guild_join_requests USING btree (g
 CREATE INDEX idx_guild_page_panels_tab ON guild_page_panels USING btree (tab_id);
 
 CREATE INDEX idx_guild_page_tabs_page ON guild_page_tabs USING btree (page_id);
+
+CREATE INDEX idx_guilds_suggestions ON guilds USING btree (realm_id, lower(name) COLLATE "C", id);
 
 CREATE INDEX idx_instance_loot_instance ON instance_loot USING btree (instance_id);
 

@@ -769,6 +769,7 @@ func (api *API) Routes() chi.Router {
 			// Public raid composition route (share links; SpiceDB gates view)
 			r.Get("/raid-comps/{compID}", api.GetRaidComposition)
 			// Public armory routes
+			r.Get("/search/suggestions", newSearchSuggestionsHandler(api.Opts.Zed))
 			r.Get("/armory/search", api.SearchArmoryPlayers)
 			r.Get("/armory/{realm}/{player}", api.GetArmoryPlayer)
 			r.Get("/armory/{realm}/{player}/gear-history", api.GetArmoryPlayerGearHistory)
