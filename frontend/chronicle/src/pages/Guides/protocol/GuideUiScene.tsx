@@ -116,7 +116,9 @@ function nodeClassName(node: SceneNode): string | undefined {
   }
   if (node.kind === "button") {
     const selected = node.id === "guide-correct" || node.id === "guide-incorrect";
-    return `rounded-md border border-border/80 px-3 py-1 font-semibold shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-px hover:border-ring hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "uppercase tracking-[0.12em]" : ""}`;
+    // Every button has a size, so its label is centred in that box with no padding: padding pushed
+    // a short label past a small button's right edge.
+    return `inline-flex items-center justify-center whitespace-nowrap rounded-md border border-border/80 font-semibold shadow-sm backdrop-blur-sm transition-all duration-200 hover:-translate-y-px hover:border-ring hover:brightness-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 ${selected ? "uppercase tracking-[0.12em]" : ""}`;
   }
   return undefined;
 }
@@ -227,7 +229,7 @@ export function GuideUiScene({ scene, assets, onNodeClick, onBreakoutClose }: Gu
     if (node.kind === "button") {
       const href = node.props.enabled === false ? undefined : linkHref(node);
       if (href) {
-        return <TextTooltip key={node.id} text={hoverText(node)}><SceneLink href={href} data-guide-node={node.id} className={`${nodeClassName(node) ?? ""} inline-flex items-center justify-center`} style={style} onClick={click}>{text(node.props.text)}</SceneLink></TextTooltip>;
+        return <TextTooltip key={node.id} text={hoverText(node)}><SceneLink href={href} data-guide-node={node.id} className={nodeClassName(node)} style={style} onClick={click}>{text(node.props.text)}</SceneLink></TextTooltip>;
       }
       return (
         <TextTooltip key={node.id} text={hoverText(node)}>
