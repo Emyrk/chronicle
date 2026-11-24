@@ -1,8 +1,9 @@
-# Search suggestion indexes: deployment gate
+# Search suggestion indexes: out-of-band preparation
 
 Production row counts, table bytes, free disk, write volume and replica lag are
-not available in this checkout. **Deployment is blocked until an operator has
-reviewed that information and approved the concurrent builds.** No production
+not available in this checkout. An operator reviews that information and runs
+the concurrent builds out of band before deployment. Migration 397 uses ordinary
+`CREATE INDEX IF NOT EXISTS`, so it skips indexes already prepared offline. No production
 build-time or WAL estimate can safely be inferred from test fixtures.
 
 1. Run `000397_preview.sql` on the target database. Record estimates, current
@@ -15,8 +16,11 @@ build-time or WAL estimate can safely be inferred from test fixtures.
 4. Check `indisvalid` and `indisready` and compare the exact index definitions
    with the preparation script. If a build failed, drop the INVALID index
    concurrently before retrying. Do not hide an invalid index with IF NOT EXISTS.
-5. Deploy only after both indexes are ready. Migration 397 refuses to build
-   indexes on populated tables. Empty new/test installations build directly.
+5. Run the offline script before deploying to a populated database. Migration 397
+   skips existing indexes and creates missing ones normally for fresh installs
+   and tests. If offline preparation is skipped, startup builds the indexes
+   synchronously and may block writes or delay availability. `IF NOT EXISTS`
+   does not validate an existing index, so complete the checks above.
 
 The query walks `(realm_id, lower(name) COLLATE "C", id)` for each visible realm,
 keeping at most five rows per realm and merging only those small candidate
