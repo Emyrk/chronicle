@@ -90,6 +90,14 @@ const openMenu = (name: RegExp): Story["play"] => async ({ canvasElement }) => {
 
 export const Default: Story = {}
 export const ExploreOpen: Story = { play: openMenu(/explore/i) }
+// On /leaderboards with the pointer over Armory: "you are here" plus the group-tinted hover.
+export const ExploreYouAreHere: Story = {
+  parameters: { route: "/leaderboards" },
+  play: async (context) => {
+    await openMenu(/explore/i)!(context)
+    await userEvent.hover(await within(document.body).findByRole("menuitem", { name: /armory/i }))
+  },
+}
 export const FavoritesOpen: Story = { play: openMenu(/favorites/i) }
 export const FavoritesEmpty: Story = { parameters: { msw: { handlers: noFavorites } }, play: openMenu(/favorites/i) }
 export const AccountOpen: Story = { play: openMenu(/^account/i) }
@@ -165,7 +173,8 @@ export const Compare: StoryObj = {
       </section>
       <section className="flex flex-col gap-4">
         <h2 className="text-lg font-semibold">Menus</h2>
-        <StoryFrame id="explore-open" title="Explore" height={560} />
+        <StoryFrame id="explore-open" title="Explore" height={440} />
+        <StoryFrame id="explore-you-are-here" title="Explore on /leaderboards, hovering Armory" height={440} />
         <div className="flex flex-wrap gap-6">
           <StoryFrame id="favorites-open" title="Favorites" height={360} />
           <StoryFrame id="favorites-empty" title="Favorites, none yet" height={300} />

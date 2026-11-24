@@ -35,7 +35,6 @@ export function navGroups(): NavGroup[] {
           ? [{ id: "armory", title: "Armory", href: "/armory", icon: Swords, featured: true, description: "Look up any character", keywords: ["player", "character", "gear", "profile"] }]
           : []),
         { id: "guilds", title: "Guilds", href: "/guilds", icon: UsersRound, description: "Rosters and raid nights", keywords: ["guild", "roster"] },
-        { id: "search", title: "Search raids", href: "/search", icon: Search, description: "Query across all raids", keywords: ["query", "instances", "logs", "filter"] },
         { id: "census", title: "Census", href: "/census", icon: Users, description: "Class and spec populations", keywords: ["population", "classes", "specs"] },
       ],
     },
@@ -46,6 +45,7 @@ export function navGroups(): NavGroup[] {
       links: [
         { id: "leaderboards", title: "Leaderboards", href: "/leaderboards", icon: Trophy, featured: true, description: "Ratings, speedruns and stats", keywords: ["rankings", "ladder", "speedrun", "parses", "top", "ratings", "peak", "mastery", "renown", "score"] },
         { id: "performance", title: "Performance", href: "/performance-history", icon: ChartSpline, description: "Your DPS and HPS over time", keywords: ["history", "dps", "hps", "progress"] },
+        { id: "search", title: "Search raids", href: "/search", icon: Search, description: "Query across all raids", keywords: ["query", "instances", "logs", "filter"] },
       ],
     },
     {

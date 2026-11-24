@@ -275,14 +275,27 @@ function MobileAccountSection({ state, close }: { state: NavState; close: () => 
 }
 
 /** Each group gets its own colour so the three columns read apart at a glance. */
-const GROUP_ACCENT: Record<NavGroup["id"], { title: string; tile: string; rule: string }> = {
-  discover: { title: "text-sky-300", tile: "bg-sky-400/15 text-sky-300", rule: "border-sky-400/40" },
-  improve: { title: "text-amber-300", tile: "bg-amber-400/15 text-amber-300", rule: "border-amber-400/40" },
-  build: { title: "text-emerald-300", tile: "bg-emerald-400/15 text-emerald-300", rule: "border-emerald-400/40" },
+const GROUP_ACCENT: Record<NavGroup["id"], { title: string; tile: string; rule: string; row: string; here: string }> = {
+  discover: {
+    title: "text-sky-300", rule: "border-sky-400/40",
+    tile: "bg-sky-400/15 text-sky-300 group-hover/row:bg-sky-400/30 group-focus/row:bg-sky-400/30",
+    row: "hover:bg-sky-400/10 focus:bg-sky-400/10", here: "border-sky-300 bg-sky-400/10",
+  },
+  improve: {
+    title: "text-amber-300", rule: "border-amber-400/40",
+    tile: "bg-amber-400/15 text-amber-300 group-hover/row:bg-amber-400/30 group-focus/row:bg-amber-400/30",
+    row: "hover:bg-amber-400/10 focus:bg-amber-400/10", here: "border-amber-300 bg-amber-400/10",
+  },
+  build: {
+    title: "text-emerald-300", rule: "border-emerald-400/40",
+    tile: "bg-emerald-400/15 text-emerald-300 group-hover/row:bg-emerald-400/30 group-focus/row:bg-emerald-400/30",
+    row: "hover:bg-emerald-400/10 focus:bg-emerald-400/10", here: "border-emerald-300 bg-emerald-400/10",
+  },
 }
 
 function GroupColumn({ group, onSelect, asMenuItems, compact }: { group: NavGroup; onSelect?: () => void; asMenuItems?: boolean; compact?: boolean }) {
   const accent = GROUP_ACCENT[group.id]
+  const { pathname } = useLocation()
   return (
     <div className="flex flex-col gap-0.5">
       <div className={cn("mx-2 mb-1.5 border-b pb-2", accent.rule)}>
@@ -290,11 +303,18 @@ function GroupColumn({ group, onSelect, asMenuItems, compact }: { group: NavGrou
         {!compact && <div className="text-xs text-muted-foreground">{group.tagline}</div>}
       </div>
       {group.links.map((link) => {
+        // "You are here": the current page gets a bar in its group's colour.
+        const here = isActiveLink(link, pathname)
         const body = (
-          <Link to={link.href} onClick={onSelect} className="flex items-center gap-3 rounded-md px-2 py-1.5 hover:bg-muted focus:bg-muted">
-            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md", accent.tile)}><link.icon className="h-4 w-4" /></span>
+          <Link
+            to={link.href}
+            onClick={onSelect}
+            aria-current={here ? "page" : undefined}
+            className={cn("group/row flex items-center gap-3 rounded-md border-l-2 border-transparent px-2 py-1.5 transition-colors", accent.row, here && accent.here)}
+          >
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors", accent.tile)}><link.icon className="h-4 w-4" /></span>
             <span className="flex min-w-0 flex-col">
-              <span className="text-sm font-medium text-foreground">{link.title}</span>
+              <span className={cn("text-sm font-medium", here ? accent.title : "text-foreground")}>{link.title}</span>
               {!compact && <span className="truncate text-xs text-muted-foreground">{link.description}</span>}
             </span>
           </Link>
