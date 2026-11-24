@@ -199,7 +199,7 @@ func (*Unit) isMessage()            {}
 type Combatant struct {
 	// Supplemental fields are valid for instance display, but only final reconciled
 	// scouting writes may persist them to armory.
-	ScoutingRace, ScoutingGender bool
+	ScoutingRace, ScoutingGender, ScoutingGuild bool
 	MessageBase
 	combatant.Combatant
 }

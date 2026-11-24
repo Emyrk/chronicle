@@ -14,6 +14,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/forever/scouting"
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
+	"github.com/Emyrk/chronicle/combatlog/parser/types/combatant"
 	"github.com/Emyrk/chronicle/database"
 	"github.com/Emyrk/chronicle/database/storage"
 	"github.com/google/uuid"
@@ -128,8 +129,9 @@ func scoutingPayload(players *scouting.Scouting, realms map[guid.GUID]uuid.UUID,
 
 // Enrich only missing fields on existing unit and combatant messages. Static
 // race/gender apply even before the first scouting observation; name and level
-// remain event-time evidence. Never synthesize party, affiliation, or guild
-// membership, which could change raid ownership votes.
+// and guild remain event-time evidence. Supplemental guilds are display-only;
+// provenance excludes them from combat-derived armory writes and ownership votes.
+// Never synthesize party or affiliation.
 type scoutingAdvancer struct {
 	realms     map[guid.GUID]uuid.UUID
 	identity   *foreverIdentity
@@ -176,8 +178,8 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 		if !s.safeIdentity(players, realms, id, unitName) {
 			continue
 		}
-		if combatant, ok := message.(*messages.Combatant); ok {
-			copy := *combatant
+		if message, ok := message.(*messages.Combatant); ok {
+			copy := *message
 			race, gender := players.StaticAttributes(id)
 			if copy.Race == "" || copy.Race == types.HeroRacesUnknown {
 				copy.Race = race
@@ -186,6 +188,15 @@ func (s *scoutingAdvancer) Advance(ctx context.Context) ([]messages.Message, err
 			if copy.Gender <= types.HeroGenderUnknown {
 				copy.Gender = gender
 				copy.ScoutingGender = gender != types.HeroGenderUnknown
+			}
+			if copy.Guild == nil {
+				known := players.FreshKnownAt(id, message.Date())
+				if known.Guild != nil {
+					// Empty means explicitly guildless; nil means unknown. Do
+					// not overwrite either genuine combat membership or guildlessness.
+					copy.Guild = &combatant.Guild{Name: *known.Guild.Guild}
+					copy.ScoutingGuild = true
+				}
 			}
 			batch[i] = &copy
 			continue

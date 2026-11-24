@@ -277,12 +277,13 @@ func TestStreamingScoutingFinalArmoryEligibility(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
 		name, earlyName, lateName, lateRealm string
-		blocked                              bool
+		blocked, noCombatGuild               bool
 	}{
-		{"collision excludes all writes", "Alice", "Bob", "Normal-US", true},
-		{"mismatched scout preserves combat identity", "", "Bob", "Normal-US", false},
-		{"different authoritative realm drops scout values", "Alice", "Alice", "Normal-EU", false},
-		{"unmapped authoritative realm excludes all writes", "Alice", "Alice", "Unmapped", true},
+		{"collision excludes all writes", "Alice", "Bob", "Normal-US", true, false},
+		{"mismatched scout preserves combat identity", "", "Bob", "Normal-US", false, false},
+		{"different authoritative realm drops scout values", "Alice", "Alice", "Normal-EU", false, false},
+		{"unmapped authoritative realm excludes all writes", "Alice", "Alice", "Unmapped", true, false},
+		{"mismatched scout cannot supply combat guild", "", "Bob", "Normal-US", false, true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -303,15 +304,25 @@ func TestStreamingScoutingFinalArmoryEligibility(t *testing.T) {
 			units := unitdb.New(nil)
 			units.SetPlayerRealmLookup(identity)
 			tracker := armory.New(units)
-			early := &messages.Combatant{MessageBase: messages.Base(time.Unix(5, 0)), Combatant: combatant.Combatant{Guid: id, Name: tc.earlyName, Seen: time.Unix(5, 0)}}
+			early := &messages.Combatant{MessageBase: messages.Base(time.Unix(15, 0)), Combatant: combatant.Combatant{Guid: id, Name: tc.earlyName, Seen: time.Unix(15, 0)}}
 			unit := &messages.Unit{MessageBase: messages.Base(time.Unix(20, 0)), Info: unitinfo.Info{Guid: id, Name: tc.earlyName}}
 			late := &messages.Combatant{MessageBase: messages.Base(time.Unix(30, 0)), Combatant: combatant.Combatant{Guid: id, Name: tc.lateName, RawRealm: tc.lateRealm, Seen: time.Unix(30, 0), HeroClass: types.HeroClassesMAGE, Guild: &combatant.Guild{Name: "CombatGuild"}, GearSetups: make([]combatant.GearItem, 19)}}
 			late.GearSetups[0].ItemID = 123
+			if tc.noCombatGuild {
+				late.Guild = nil
+			}
 			source := &streamingScoutingSource{batches: [][]messages.Message{{early, unit}, {late}}}
 			adv := scoutingAdvancer{source: source, players: scouts, realms: realms, identity: identity, catalog: catalog}
-			for range 2 {
+			for batchIndex := range 2 {
 				batch, err := adv.Advance(ctx)
 				require.NoError(t, err)
+				if batchIndex == 0 {
+					require.Equal(t, "ScoutGuild", batch[0].(*messages.Combatant).Guild.Name)
+					require.True(t, batch[0].(*messages.Combatant).ScoutingGuild)
+				} else {
+					require.Equal(t, late.Guild, batch[0].(*messages.Combatant).Guild)
+					require.False(t, batch[0].(*messages.Combatant).ScoutingGuild)
+				}
 				for _, message := range batch {
 					switch m := message.(type) {
 					case *messages.Combatant:
@@ -353,8 +364,14 @@ func TestStreamingScoutingFinalArmoryEligibility(t *testing.T) {
 			require.Equal(t, database.WowPlayableGenderNotSet, player.Gender)
 			require.Zero(t, player.Level)
 			require.Equal(t, int32(123), player.Gear[0].ItemID)
-			for _, guild := range recorder.guilds {
-				require.Equal(t, "CombatGuild", guild.Name)
+			if tc.noCombatGuild {
+				require.Empty(t, recorder.guilds)
+				require.False(t, player.GuildKnown)
+				require.False(t, player.GuildID.Valid)
+			} else {
+				for _, guild := range recorder.guilds {
+					require.Equal(t, "CombatGuild", guild.Name)
+				}
 			}
 		})
 	}

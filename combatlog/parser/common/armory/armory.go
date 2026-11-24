@@ -546,7 +546,7 @@ func talentsEqual(a, b *combatant.Talents) bool {
 }
 
 func (g *Tracker) Guild(msg *messages.Combatant) {
-	if msg.Guild == nil {
+	if msg.ScoutingGuild || msg.Guild == nil {
 		return
 	}
 	if msg.Guid.IsZero() || !msg.Guid.IsPlayer() {
@@ -601,6 +601,9 @@ func (g *Tracker) Player(msg *messages.Combatant) {
 	}
 	if msg.ScoutingGender {
 		c.Gender = types.HeroGenderUnknown
+	}
+	if msg.ScoutingGuild {
+		c.Guild = nil
 	}
 
 	// If COMBATANT_TALENTS arrived before COMBATANT_INFO, merge the
