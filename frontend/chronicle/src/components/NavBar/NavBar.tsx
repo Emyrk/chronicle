@@ -1,45 +1,44 @@
-import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation } from "react-router-dom";
-import { Settings, Upload, LogOut, FileText, Shield, Key, Castle, Menu, Swords, Trophy, ChartSpline, Database, Server, Users, Compass, Sparkles, Shirt, Crown, Search } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-import { serverCapabilities } from "@/config/serverCapabilities";
-import { useAuth } from "@/hooks/useAuth";
-import { uploadsDisabledForSite, useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries";
-import type { Branding } from "@/api/typesGenerated";
-import { Button } from "../ui/button";
-import { FavoritesMenu } from "../Favorites";
-import { WhatsNewDialog } from "../WhatsNew/WhatsNewDialog";
-import { RootCommunityNavButton } from "../RootCommunityContext/RootCommunityContext";
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Link, useLocation } from "react-router-dom"
+import { Settings, Upload, LogOut, FileText, Shield, Key, Menu, Database, Server, Sparkles, Crown, ChevronDown, Compass, Star, CircleUser } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
+import { useAuth } from "@/hooks/useAuth"
+import { uploadsDisabledForSite, useAuthorizationCheck, useMarkWhatsNewRead, useMyFavorites, useSiteConfig, useWhatsNewStatus } from "@/api/queries"
+import type { Branding } from "@/api/typesGenerated"
+import { cn } from "@/lib/utils"
+import { Button } from "../ui/button"
+import { FavoritesMenu } from "../Favorites"
+import { WhatsNewDialog } from "../WhatsNew/WhatsNewDialog"
+import { RootCommunityNavButton } from "../RootCommunityContext/RootCommunityContext"
+import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "../ui/sheet"
 import {
-  Sheet,
-  SheetContent,
-  SheetTrigger,
-} from "../ui/sheet";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "../ui/DropdownMenu/DropdownMenu";
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+} from "../ui/DropdownMenu/DropdownMenu"
+import { SearchPalette, SearchTrigger } from "./GlobalSearch/GlobalSearch"
+import { useSearchHotkey } from "./GlobalSearch/useGlobalSearch"
+import { guildHref, playerHref } from "./GlobalSearch/globalSearch"
+import { allNavLinks, GROUP_ACCENT, isActiveLink, navGroups, type NavGroup } from "./navItems"
 
-type NavItem = {
-  title: string;
-  icon: LucideIcon;
-  indicator?: boolean;
+type AccountItem = {
+  title: string
+  icon: LucideIcon
+  indicator?: boolean
   /** Gold supporter styling, so the item reads as an invitation rather than a setting. */
-  highlight?: boolean;
-} & ({ href: string; external?: boolean } | { onClick: () => void });
+  highlight?: boolean
+} & ({ href: string; external?: boolean } | { onClick: () => void })
 
-const HIGHLIGHT_CLASS = "font-medium text-[#f0c060] hover:text-[#ffd580] focus:text-[#ffd580]";
+const HIGHLIGHT_CLASS = "font-medium text-[#f0c060] hover:text-[#ffd580] focus:text-[#ffd580]"
 
-export function NavBar() {
-  const location = useLocation();
-  const { session, isAuthenticated, isLoading, logout } = useAuth();
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+function useNavBarState(searchEnabled: boolean) {
+  const location = useLocation()
+  const { session, isAuthenticated, isLoading, logout } = useAuth()
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const openSearch = useCallback(() => setSearchOpen(true), [])
+  useSearchHotkey(openSearch, searchEnabled)
 
-  const { data: siteConfig } = useSiteConfig();
-  const tenantID = siteConfig?.tenant?.id;
+  const { data: siteConfig } = useSiteConfig()
+  const tenantID = siteConfig?.tenant?.id
   // Check admin permissions via SpiceDB
   const authzChecks = useMemo(() => ({
     admin: "chronicle:chronicle#admin_users",
@@ -50,363 +49,354 @@ export function NavBar() {
     canAdminSomeServer: "lookup:wow_server#administer",
     adminServers: "chronicle:chronicle#admin_servers",
     adminLogs: "chronicle:chronicle#admin_logs",
-  }), [tenantID]);
-  const { data: authz } = useAuthorizationCheck(authzChecks, {
-    enabled: isAuthenticated,
-  });
-  const isAdmin = authz?.admin ?? false;
-  const canReviewProofs = !!(authz?.proofReviewer || (!tenantID && authz?.admin));
-  const canAdminAuthz = authz?.adminAuthz ?? false;
-  const canAdminWorldData = authz?.adminWorldData ?? false;
-  const canManageConsumables = authz?.manageConsumables ?? false;
-  const canManageServers = (authz?.canAdminSomeServer ?? false) || (authz?.adminServers ?? false);
-  const hasAdminLogs = authz?.adminLogs ?? false;
+  }), [tenantID])
+  const { data: authz } = useAuthorizationCheck(authzChecks, { enabled: isAuthenticated })
+  const isAdmin = authz?.admin ?? false
+  const canReviewProofs = !!(authz?.proofReviewer || (!tenantID && authz?.admin))
+  const canAdminWorldData = authz?.adminWorldData ?? false
+  const canManageServers = (authz?.canAdminSomeServer ?? false) || (authz?.adminServers ?? false)
+  const hasAdminLogs = authz?.adminLogs ?? false
 
-  const userID = session?.user_id ?? "";
-  const whatsNewStatus = useWhatsNewStatus(userID, isAuthenticated);
-  const { mutate: markWhatsNewRead, isPending: markingWhatsNewRead } = useMarkWhatsNewRead(userID);
-  const hasUnreadWhatsNew = whatsNewStatus.data?.has_unread ?? false;
-  const { data: favorites } = useMyFavorites({ enabled: isAuthenticated });
-  const hasFavorites = !!favorites && (favorites.guilds.length > 0 || favorites.players.length > 0);
-  const uploadsEnabled = !uploadsDisabledForSite(siteConfig) || hasAdminLogs;
-
-  // Resolve branding: tenant overrides site-level.
-  const branding: Branding | null = siteConfig?.tenant?.branding ?? siteConfig?.branding ?? null;
-  const hasBranding = !!(branding?.logo_wide || branding?.square_logo || branding?.display_name);
+  const userID = session?.user_id ?? ""
+  const whatsNewStatus = useWhatsNewStatus(userID, isAuthenticated)
+  const { mutate: markWhatsNewRead, isPending: markingWhatsNewRead } = useMarkWhatsNewRead(userID)
+  const hasUnreadWhatsNew = whatsNewStatus.data?.has_unread ?? false
+  const { data: favorites } = useMyFavorites({ enabled: isAuthenticated })
+  const hasFavorites = !!favorites && (favorites.guilds.length > 0 || favorites.players.length > 0)
+  const uploadsEnabled = !uploadsDisabledForSite(siteConfig) || hasAdminLogs
 
   useEffect(() => {
-    if (whatsNewOpen && hasUnreadWhatsNew && !markingWhatsNewRead) {
-      markWhatsNewRead();
-    }
-  }, [hasUnreadWhatsNew, markWhatsNewRead, markingWhatsNewRead, whatsNewOpen]);
+    if (whatsNewOpen && hasUnreadWhatsNew && !markingWhatsNewRead) markWhatsNewRead()
+  }, [hasUnreadWhatsNew, markWhatsNewRead, markingWhatsNewRead, whatsNewOpen])
 
-  const openWhatsNew = () => setWhatsNewOpen(true);
-
-  const accountMenuItems: NavItem[] = [
-    ...(uploadsEnabled ? [{ title: "My Logs", href: "/logs", icon: FileText } as NavItem] : []),
-    ...(uploadsEnabled ? [{ title: "Upload", href: "/upload", icon: Upload } as NavItem] : []),
-    ...(isAdmin ? [{ title: "Admin", href: "/admin", icon: Shield } as NavItem] : []),
-    ...(!isAdmin && canReviewProofs ? [{ title: "Review photo proofs", href: "/admin/photo-proofs", icon: Shield } as NavItem] : []),
-    ...(canAdminWorldData ? [{ title: "Game Data", href: "/game-data", icon: Database } as NavItem] : []),
-    ...(!canAdminWorldData && canManageConsumables ? [{ title: "Consumables", href: "/technical/consumables", icon: Database } as NavItem] : []),
-    ...(canManageServers ? [{ title: "Servers", href: "/servers", icon: Server } as NavItem] : []),
-    ...(canAdminAuthz ? [{ title: "Saffron", href: "/saffron", icon: Key, external: true } as NavItem] : []),
+  const accountItems: AccountItem[] = [
+    ...(uploadsEnabled ? [{ title: "My Logs", href: "/logs", icon: FileText }, { title: "Upload", href: "/upload", icon: Upload }] : []),
     { title: "Settings", href: "/account/settings", icon: Settings },
-    { title: "What's New", onClick: openWhatsNew, icon: Sparkles, indicator: hasUnreadWhatsNew },
+    { title: "What's New", onClick: () => setWhatsNewOpen(true), icon: Sparkles, indicator: hasUnreadWhatsNew },
     // Only invite accounts without a supporter tier.
-    ...(siteConfig?.billing_enabled && !session?.ads_free ? [{ title: "Supporter Perks", href: "/supporter", icon: Crown, highlight: true } as NavItem] : []),
-    { title: "Sign Out", onClick: logout, icon: LogOut },
-  ];
+    ...(siteConfig?.billing_enabled && !session?.ads_free ? [{ title: "Supporter Perks", href: "/supporter", icon: Crown, highlight: true }] : []),
+  ]
+  const adminItems: AccountItem[] = [
+    ...(isAdmin ? [{ title: "Admin", href: "/admin", icon: Shield }] : []),
+    ...(!isAdmin && canReviewProofs ? [{ title: "Review photo proofs", href: "/admin/photo-proofs", icon: Shield }] : []),
+    ...(canAdminWorldData ? [{ title: "Game Data", href: "/game-data", icon: Database }] : []),
+    ...(!canAdminWorldData && (authz?.manageConsumables ?? false) ? [{ title: "Consumables", href: "/technical/consumables", icon: Database }] : []),
+    ...(canManageServers ? [{ title: "Servers", href: "/servers", icon: Server }] : []),
+    ...((authz?.adminAuthz ?? false) ? [{ title: "Saffron", href: "/saffron", icon: Key, external: true }] : []),
+  ]
+  const signOut: AccountItem = { title: "Sign Out", onClick: logout, icon: LogOut }
 
-  const loginUrl = `/login?from=${encodeURIComponent(location.pathname + location.search)}`;
-  const isGuildPage = location.pathname.startsWith("/g/");
-  const siteName = branding?.display_name || "Chronicle";
+  // Resolve branding: tenant overrides site-level.
+  const branding: Branding | null = siteConfig?.tenant?.branding ?? siteConfig?.branding ?? null
+  return {
+    location, isAuthenticated, isLoading, siteConfig, favorites, hasFavorites, hasUnreadWhatsNew,
+    accountItems, adminItems, signOut, branding,
+    hasBranding: !!(branding?.logo_wide || branding?.square_logo || branding?.display_name),
+    loginUrl: `/login?from=${encodeURIComponent(location.pathname + location.search)}`,
+    whatsNewOpen, setWhatsNewOpen, searchEnabled, searchOpen, setSearchOpen, openSearch,
+  }
+}
 
-  // Reusable menu item renderer for mobile menu
-  const renderMenuItem = (item: NavItem, closeMobile?: () => void) => {
-    const className = "flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2";
-    if ("href" in item) {
-      if (item.external) {
-        return (
-          <a key={item.title} href={item.href} className={className} onClick={closeMobile}>
-            <item.icon className="h-4 w-4" />
-            {item.title}
-          </a>
-        );
-      }
-      return (
-        <Link key={item.title} to={item.href} className={item.highlight ? `${className} ${HIGHLIGHT_CLASS}` : className} onClick={closeMobile}>
-          <item.icon className="h-4 w-4" />
-          {item.title}
-        </Link>
-      );
-    }
+type NavState = ReturnType<typeof useNavBarState>
+
+function Brand({ state, className }: { state: NavState; className?: string }) {
+  const { branding, hasBranding } = state
+  if (state.location.pathname.startsWith("/g/")) {
     return (
-      <button
-        key={item.title}
-        onClick={() => {
-          item.onClick();
-          closeMobile?.();
-        }}
-        className={`${className} w-full text-left`}
-      >
-        <item.icon className="h-4 w-4" />
-        {item.title}
-        {item.indicator && <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="New" />}
-      </button>
-    );
-  };
-
+      <Link to="/" className={cn("rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", className)}>
+        Back to {branding?.display_name || "Chronicle"}
+      </Link>
+    )
+  }
   return (
-    <nav className="relative flex items-center justify-between p-4 border-b">
-      {/* Left: Mobile hamburger menu (visible on mobile only) */}
-      <div className="md:hidden">
-        <Sheet open={mobileMenuOpen} onOpenChange={setMobileMenuOpen}>
-          <SheetTrigger asChild>
-            <Button variant="ghost" size="icon">
-              <Menu className="h-5 w-5" />
-              <span className="sr-only">Open menu</span>
-            </Button>
-          </SheetTrigger>
-          <SheetContent side="left" className="w-64 p-6">
-            <nav className="flex flex-col gap-2 mt-4">
-              <Link
-                to="/recent"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Castle className="h-4 w-4" />
-                Recent
-              </Link>
-              {serverCapabilities.armory && (
-                <Link
-                  to="/armory"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-                >
-                  <Swords className="h-4 w-4" />
-                  Armory
-                </Link>
-              )}
-              <Link
-                to="/leaderboards"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Trophy className="h-4 w-4" />
-                Rankings
-              </Link>
-              <Link
-                to="/search"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Search className="h-4 w-4" />
-                Search raids
-              </Link>
-              <Link
-                to="/performance-history"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <ChartSpline className="h-4 w-4" />
-                Performance
-              </Link>
-              <Link
-                to="/talents"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Sparkles className="h-4 w-4" />
-                Talent Builder
-              </Link>
-              <Link
-                to="/gear/progression"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Shirt className="h-4 w-4" />
-                Gear Builder
-              </Link>
-              <Link
-                to="/raidplanner"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Users className="h-4 w-4" />
-                Raid Planner
-              </Link>
-              <Link
-                to="/census"
-                onClick={() => setMobileMenuOpen(false)}
-                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors py-2"
-              >
-                <Users className="h-4 w-4" />
-                Census
-              </Link>
-              {isAuthenticated && (
-                <>
-                  <div className="border-t my-2" />
-                  {accountMenuItems.map((item) =>
-                    renderMenuItem(item, () => setMobileMenuOpen(false))
-                  )}
-                </>
-              )}
-              {!isAuthenticated && !isLoading && (
-                <>
-                  <div className="border-t my-2" />
-                  <Link to={loginUrl} onClick={() => setMobileMenuOpen(false)}>
-                    <Button className="w-full">Sign In</Button>
-                  </Link>
-                </>
-              )}
-            </nav>
-            {!!siteConfig?.tenant && (
-              <div className="mt-auto pt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
-                <span>Powered by</span>
-                <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-4 w-4" />
-                <span className="font-medium">Chronicle</span>
-              </div>
-            )}
-          </SheetContent>
-        </Sheet>
-      </div>
-
-      {/* Left: Chronicle icon when custom branding is active, otherwise spacer */}
-      <div className="hidden md:flex items-center w-10">
-        {hasBranding && (
-          <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10" />
-        )}
-      </div>
-
-      {/* Center: Site logo, or a compact home link on guild pages */}
-      {isGuildPage ? (
-        <Link
-          to="/"
-          className="absolute left-1/2 -translate-x-1/2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-        >
-          Back to {siteName}
-        </Link>
+    <Link to="/" className={cn("flex items-center", className)}>
+      {hasBranding ? (
+        branding?.logo_wide ? (
+          <img src={branding.logo_wide} alt={branding?.display_name ?? ""} className="h-15 -my-2 object-contain" />
+        ) : (
+          <div className="flex items-center gap-2">
+            {branding?.square_logo && <img src={branding.square_logo} alt="" className="h-8 w-8 rounded object-contain" />}
+            {branding?.display_name && <span className="text-lg font-semibold text-foreground">{branding.display_name}</span>}
+          </div>
+        )
       ) : (
-        <Link to="/" className="absolute left-1/2 -translate-x-1/2 flex items-center">
-          {hasBranding ? (
-            branding?.logo_wide ? (
-              <img src={branding.logo_wide} alt={branding?.display_name ?? ""} className="h-15 -my-2 object-contain" />
-            ) : (
-              <div className="flex items-center gap-2">
-                {branding?.square_logo && (
-                  <img src={branding.square_logo} alt="" className="h-8 w-8 rounded object-contain" />
-                )}
-                {branding?.display_name && (
-                  <span className="text-lg font-semibold text-foreground">{branding.display_name}</span>
-                )}
-              </div>
-            )
-          ) : (
-            <img src="/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle" className="h-15 -my-2" />
-          )}
-        </Link>
+        <img src="/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle" className="h-15 -my-2" />
       )}
+    </Link>
+  )
+}
 
-      {/* Right: Desktop navigation (hidden on mobile) */}
-      <div className="hidden md:flex items-center gap-6">
-        <RootCommunityNavButton />
-        <Link
-          to="/recent"
-          className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <Castle className="h-4 w-4" />
-          Recent
+function AccountMenuItem({ item }: { item: AccountItem }) {
+  if ("href" in item) {
+    return (
+      <DropdownMenuItem asChild>
+        {item.external ? (
+          <a href={item.href} className="flex items-center gap-2"><item.icon className="h-4 w-4" />{item.title}</a>
+        ) : (
+          <Link to={item.href} className={cn("flex items-center gap-2", item.highlight && HIGHLIGHT_CLASS)}><item.icon className="h-4 w-4" />{item.title}</Link>
+        )}
+      </DropdownMenuItem>
+    )
+  }
+  return (
+    <DropdownMenuItem onSelect={item.onClick} className="flex items-center gap-2">
+      <item.icon className="h-4 w-4" />
+      {item.title}
+      {item.indicator && <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="New" />}
+    </DropdownMenuItem>
+  )
+}
+
+/**
+ * Account dropdown. On desktop, favorites and admin tools have their own menus beside it.
+ * On phones it's an icon at the top right of the bar and carries the admin tools too,
+ * so account settings never sit below the whole feature list in the side menu.
+ */
+function AccountMenu({ state, phone }: { state: NavState; phone?: boolean }) {
+  if (state.isLoading) return null
+  if (!state.isAuthenticated) {
+    return <Link to={state.loginUrl}><Button size="sm">Sign In</Button></Link>
+  }
+  const unread = state.hasUnreadWhatsNew && <span className="absolute right-1 top-1.5 h-2 w-2 rounded-full bg-primary" aria-label="New What's New update" />
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        {phone ? (
+          <Button variant="ghost" size="icon" className="relative" aria-label="Account">
+            <CircleUser className="h-5 w-5" />
+            {unread}
+          </Button>
+        ) : (
+          <Button variant="ghost" size="sm" className="relative h-9 px-3 text-sm font-medium">
+            Account
+            {unread}
+          </Button>
+        )}
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[200px]">
+        {state.accountItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
+        {phone && state.adminItems.length > 0 && (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">Admin</DropdownMenuLabel>
+            {state.adminItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
+          </>
+        )}
+        <DropdownMenuSeparator />
+        <AccountMenuItem item={state.signOut} />
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const iconTrigger = "rounded-md p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground data-[state=open]:bg-muted data-[state=open]:text-foreground"
+
+/** Starred guilds and characters, one click from any page. */
+function FavoritesNavMenu({ state }: { state: NavState }) {
+  if (!state.isAuthenticated) return null
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label="Favorites" className={iconTrigger}>
+          <Star className={cn("h-4 w-4", state.hasFavorites && "fill-amber-400 text-amber-400")} />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[300px]">
+        <FavoritesMenu data={state.favorites} />
+        {!state.hasFavorites && (
+          <DropdownMenuLabel className="flex items-center gap-2 text-xs uppercase tracking-wide text-muted-foreground">
+            <Star className="size-3.5" />Favorites
+          </DropdownMenuLabel>
+        )}
+        <p className="px-2 py-1.5 text-xs text-muted-foreground">
+          {state.hasFavorites ? "Star any guild or character to add it here." : "Star a guild or character and it shows up here, one click from any page."}
+        </p>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+/** Admin tools, shown only to accounts with admin permissions. */
+function AdminNavMenu({ state }: { state: NavState }) {
+  if (state.adminItems.length === 0) return null
+  return (
+    <DropdownMenu modal={false}>
+      <DropdownMenuTrigger asChild>
+        <button type="button" aria-label="Admin" className={iconTrigger}><Shield className="h-4 w-4" /></button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-[200px]">
+        <DropdownMenuLabel className="text-xs uppercase tracking-wide text-muted-foreground">Admin</DropdownMenuLabel>
+        {state.adminItems.map((item) => <AccountMenuItem key={item.title} item={item} />)}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+const mobileRow = "flex items-center gap-3 rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-foreground"
+
+function MobileFavoritesSection({ state, close }: { state: NavState; close: () => void }) {
+  const favorites = state.favorites
+  if (!state.isAuthenticated || !favorites || !state.hasFavorites) return null
+  return (
+    <div className="flex flex-col border-b pb-3">
+      <div className="flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+        <Star className="h-3 w-3 fill-amber-400 text-amber-400" />Favorites
+      </div>
+      {favorites.guilds.map((guild) => (
+        <Link key={guild.id} to={guildHref(guild)} onClick={close} className={mobileRow}>
+          <Shield className="h-4 w-4 text-amber-500" /><span className="font-medium text-amber-500">{guild.name}</span>
         </Link>
+      ))}
+      {favorites.players.map((player) => (
+        <Link key={`${player.realm_id}:${player.id}`} to={playerHref(player)} onClick={close} className={mobileRow}>
+          <img src={`/c/icons/class_${player.class.toLowerCase()}.png`} alt="" className="h-4 w-4 rounded-sm" />
+          <span className="font-medium" style={{ color: `var(--color-class-${player.class.toLowerCase()})` }}>{player.name}</span>
+          {player.guild_name && <span className="truncate text-xs">&lt;{player.guild_name}&gt;</span>}
+        </Link>
+      ))}
+    </div>
+  )
+}
+
+function GroupColumn({ group, onSelect, asMenuItems, compact }: { group: NavGroup; onSelect?: () => void; asMenuItems?: boolean; compact?: boolean }) {
+  const accent = GROUP_ACCENT[group.id]
+  const { pathname } = useLocation()
+  return (
+    <div className="flex flex-col gap-0.5">
+      <div className={cn("mx-2 mb-1.5 border-b pb-2", accent.rule)}>
+        <div className={cn("text-sm font-semibold", accent.title)}>{group.title}</div>
+        {!compact && <div className="text-xs text-muted-foreground">{group.tagline}</div>}
+      </div>
+      {group.links.map((link) => {
+        // "You are here": the current page gets a bar in its group's colour.
+        const here = isActiveLink(link, pathname)
+        const body = (
+          <Link
+            to={link.href}
+            onClick={onSelect}
+            aria-current={here ? "page" : undefined}
+            className={cn("group/row flex items-center gap-3 rounded-md border-l-2 border-transparent px-2 py-1.5 transition-colors", accent.row, here && accent.here)}
+          >
+            <span className={cn("flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-colors", accent.tile)}><link.icon className="h-4 w-4" /></span>
+            <span className="flex min-w-0 flex-col">
+              <span className={cn("text-sm font-medium", here ? accent.title : "text-foreground")}>{link.title}</span>
+              {!compact && <span className="truncate text-xs text-muted-foreground">{link.description}</span>}
+            </span>
+          </Link>
+        )
+        return asMenuItems ? <DropdownMenuItem key={link.id} asChild className="p-0">{body}</DropdownMenuItem> : <div key={link.id}>{body}</div>
+      })}
+    </div>
+  )
+}
+
+/** Every feature, grouped. Used as the desktop mega menu and the mobile menu. */
+function FeatureDirectory({ onSelect, asMenuItems, mobile }: { onSelect?: () => void; asMenuItems?: boolean; mobile?: boolean }) {
+  const groups = navGroups()
+  return (
+    <div className={cn("grid", mobile ? "grid-cols-1 gap-4" : "grid-cols-3 gap-6")}>
+      <GroupColumn group={groups[0]} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
+      <GroupColumn group={groups[1]} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
+      <GroupColumn group={groups[2]} onSelect={onSelect} asMenuItems={asMenuItems} compact={mobile} />
+    </div>
+  )
+}
+
+function MobileMenuSheet({ state }: { state: NavState }) {
+  const [open, setOpen] = useState(false)
+  const close = () => setOpen(false)
+  return (
+    <Sheet open={open} onOpenChange={setOpen}>
+      <SheetTrigger asChild>
+        <Button variant="ghost" size="icon"><Menu className="h-5 w-5" /><span className="sr-only">Open menu</span></Button>
+      </SheetTrigger>
+      <SheetContent side="left" className="styled-scrollbar w-80 overflow-y-auto p-4">
+        <SheetTitle className="sr-only">Menu</SheetTitle>
+        {state.searchEnabled ? <SearchTrigger onOpen={() => { close(); state.openSearch() }} className="mt-8 w-full" /> : <div className="mt-6" />}
+        <MobileFavoritesSection state={state} close={close} />
+        <FeatureDirectory mobile onSelect={close} />
+        {!!state.siteConfig?.tenant && (
+          <div className="mt-auto flex items-center gap-1.5 pt-4 text-xs text-muted-foreground">
+            <span>Powered by</span>
+            <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-4 w-4" />
+            <span className="font-medium">Chronicle</span>
+          </div>
+        )}
+      </SheetContent>
+    </Sheet>
+  )
+}
+
+function navTextLink(active: boolean) {
+  return cn("flex items-center gap-1.5 text-sm transition-colors", active ? "text-foreground" : "text-muted-foreground hover:text-foreground")
+}
+
+/** Left column: the Chronicle icon on branded tenants. Search never takes this slot. */
+function LeftGroup({ state }: { state: NavState }) {
+  return (
+    <div className="hidden items-center lg:flex">
+      {state.hasBranding && <img src="/c/chronicle/ChronicleIcon.webp" alt="Chronicle" className="h-10 w-10 shrink-0" />}
+    </div>
+  )
+}
+
+/** Search hugs the logo from the right: a field that shrinks to fit, or an icon where the links leave no room. */
+function LogoSearch({ state }: { state: NavState }) {
+  if (!state.searchEnabled) return null
+  return (
+    <>
+      <SearchTrigger onOpen={state.openSearch} className="ml-6 mr-auto hidden min-w-36 max-w-64 flex-1 xl:flex" />
+      <SearchTrigger compact onOpen={state.openSearch} className="ml-4 mr-auto xl:hidden" />
+    </>
+  )
+}
+
+/** Recent, one descriptive "Explore" menu, then the signed-in menus. */
+function DesktopNav({ state }: { state: NavState }) {
+  const recent = allNavLinks().find((link) => link.id === "recent")!
+  return (
+    // Equal outer columns keep the logo centred; search hugs it from the right.
+    <nav className="grid h-16 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b px-4">
+      <div className="lg:hidden"><MobileMenuSheet state={state} /></div>
+      <LeftGroup state={state} />
+      <Brand state={state} />
+      <div className="hidden min-w-0 items-center justify-end gap-5 lg:flex">
+        <LogoSearch state={state} />
+        <RootCommunityNavButton />
+        <Link to={recent.href} className={navTextLink(isActiveLink(recent, state.location.pathname))}><recent.icon className="h-4 w-4" />Recent</Link>
         <DropdownMenu modal={false}>
           <DropdownMenuTrigger asChild>
-            <button className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-              <Compass className="h-4 w-4" />
-              Explore
+            <button type="button" className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground data-[state=open]:text-foreground">
+              <Compass className="h-4 w-4" />Explore<ChevronDown className="h-3 w-3" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-[180px]">
-            {serverCapabilities.armory && (
-              <DropdownMenuItem asChild>
-                <Link to="/armory" className="flex items-center gap-2">
-                  <Swords className="h-4 w-4" />
-                  Armory
-                </Link>
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem asChild>
-              <Link to="/leaderboards" className="flex items-center gap-2">
-                <Trophy className="h-4 w-4" />
-                Rankings
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/search" className="flex items-center gap-2">
-                <Search className="h-4 w-4" />
-                Search raids
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/performance-history" className="flex items-center gap-2">
-                <ChartSpline className="h-4 w-4" />
-                Performance
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/talents" className="flex items-center gap-2">
-                <Sparkles className="h-4 w-4" />
-                Talent Builder
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/gear/progression" className="flex items-center gap-2">
-                <Shirt className="h-4 w-4" />
-                Gear Builder
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/raidplanner" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Raid Planner
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuItem asChild>
-              <Link to="/census" className="flex items-center gap-2">
-                <Users className="h-4 w-4" />
-                Census
-              </Link>
-            </DropdownMenuItem>
+          <DropdownMenuContent align="end" className="w-[760px] p-4">
+            <FeatureDirectory asMenuItems />
           </DropdownMenuContent>
         </DropdownMenu>
-        {isLoading ? null : isAuthenticated ? (
-          <DropdownMenu modal={false}>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="relative h-9 px-4 text-sm font-medium">
-                Account
-                {hasUnreadWhatsNew && (
-                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" aria-label="New What's New update" />
-                )}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className={hasFavorites ? "w-[300px]" : "w-[200px]"}>
-              <FavoritesMenu data={favorites} />
-              {accountMenuItems.map((item) =>
-                "href" in item ? (
-                  <DropdownMenuItem key={item.title} asChild>
-                    {item.external ? (
-                      <a href={item.href} className="flex items-center gap-2">
-                        <item.icon className="h-4 w-4" />
-                        {item.title}
-                      </a>
-                    ) : (
-                      <Link to={item.href} className={item.highlight ? `flex items-center gap-2 ${HIGHLIGHT_CLASS}` : "flex items-center gap-2"}>
-                        <item.icon className="h-4 w-4" />
-                        {item.title}
-                      </Link>
-                    )}
-                  </DropdownMenuItem>
-                ) : (
-                  <DropdownMenuItem key={item.title} onSelect={item.onClick} className="flex items-center gap-2">
-                    <item.icon className="h-4 w-4" />
-                    {item.title}
-                    {item.indicator && <span className="ml-auto h-2 w-2 rounded-full bg-primary" aria-label="New" />}
-                  </DropdownMenuItem>
-                )
-              )}
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Link to={loginUrl}>
-            <Button>Sign In</Button>
-          </Link>
-        )}
+        <div className="flex items-center gap-1">
+          <FavoritesNavMenu state={state} />
+          <AdminNavMenu state={state} />
+          <AccountMenu state={state} />
+        </div>
       </div>
-
-      {/* Right: community chooser after the root notice is dismissed, otherwise a balancing spacer. */}
-      <div className="flex w-10 justify-end md:hidden">
+      <div className="flex items-center justify-end lg:hidden">
         <RootCommunityNavButton mobile />
+        {state.searchEnabled && <SearchTrigger compact onOpen={state.openSearch} />}
+        <AccountMenu state={state} phone />
       </div>
-      <WhatsNewDialog open={whatsNewOpen} onOpenChange={setWhatsNewOpen} />
     </nav>
-  );
+  )
+}
+
+/** `search` shows the global search; it stays off until the backend search endpoint ships. */
+export function NavBar({ search = false }: { search?: boolean }) {
+  const state = useNavBarState(search)
+  return (
+    <>
+      <DesktopNav state={state} />
+      {search && <SearchPalette open={state.searchOpen} onOpenChange={state.setSearchOpen} />}
+      <WhatsNewDialog open={state.whatsNewOpen} onOpenChange={state.setWhatsNewOpen} />
+    </>
+  )
 }
