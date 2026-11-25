@@ -1921,10 +1921,11 @@ func ZulFarrakHostiles() map[uint32]Identity {
 	return hostile
 }
 
-// BlackfathomDeepsHostiles returns creature entry IDs for Blackfathom Deeps (map 48).
-func BlackfathomDeepsHostiles() map[uint32]Identity {
+// BlackfathomDeepsHostiles returns creature entries for Blackfathom Deeps (map 48).
+func BlackfathomDeepsHostiles(flavor database.WoWFlavor) map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		8996: "Voidwalker Minion",
 		4787: "Argent Guard Thaelrid",
 		4798: "Fallenroot Shadowstalker",
 		4799: "Fallenroot Hellcaller",
@@ -1948,6 +1949,7 @@ func BlackfathomDeepsHostiles() map[uint32]Identity {
 		4827: "Deep Pool Threshfin",
 	})
 	LoadBosses(hostile, map[uint32]string{
+		12876: "Baron Aquanis",
 		4829:  "Aku'mai",
 		4830:  "Old Serra'kis",
 		4831:  "Lady Sarevess",
@@ -1956,6 +1958,9 @@ func BlackfathomDeepsHostiles() map[uint32]Identity {
 		6243:  "Gelihast",
 		12902: "Lorgus Jett",
 	})
+	if flavor.Has(database.FlavorNightmareOfUrsol) {
+		LoadBosses(hostile, map[uint32]string{62530: "Velthelaxx the Defiler"})
+	}
 	return hostile
 }
 

@@ -46,3 +46,46 @@ func TestFinalizeIgnoresRemoteBuffNPCsAcrossFlavors(t *testing.T) {
 		require.Empty(t, result.UnknownUnits)
 	}
 }
+
+func TestFinalizeIgnoresOnlyForeverSleepingBagCreature(t *testing.T) {
+	t.Parallel()
+	for _, flavor := range []database.WoWFlavor{nil, {database.FlavorVanilla}, {database.FlavorVanilla, database.FlavorWoWForever}, {database.FlavorTurtle}, {database.FlavorWrath}} {
+		units := unitdb.New(flavor)
+		ctx := parsectx.With(t.Context(), parsectx.Context{Flavor: flavor})
+		h := NewHookable(ctx, slog.Default(), units, zone.Zone{Name: "blackfathom deeps", MapID: 48}, InstanceParams{Name: "Blackfathom Deeps", Idf: BlackfathomDeepsFactory.Hostiles(flavor)})
+		now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+		player := guid.GUID(1)
+		for _, high := range []uint64{0xF130000000000000, 0xF150000000000000, 0xF110000000000000, 0xF140000000000000} {
+			id := guid.GUID(high | uint64(214589)<<24 | 1)
+			require.NoError(t, h.Process(&messages.Unit{MessageBase: messages.Base(now), Info: unitinfo.Info{Guid: id, Name: "Cozy Sleeping Bag"}}))
+			summon := &messages.NewOwner{MessageBase: messages.Base(now), Target: id, NewOwner: player}
+			before := *summon
+			require.NoError(t, h.Process(summon))
+			require.Equal(t, before, *summon)
+		}
+		minion := creatureGUID(8996, 1)
+		require.NoError(t, h.Process(&messages.Unit{MessageBase: messages.Base(now), Info: unitinfo.Info{Guid: minion}}))
+		result, err := h.Finalize(ctx)
+		require.NoError(t, err)
+		require.Contains(t, result.PersistedUnits, minion)
+		require.Equal(t, unitdb.CategoryOrdinary, result.UnitCategories[minion])
+		for _, high := range []uint64{0xF130000000000000, 0xF150000000000000, 0xF110000000000000, 0xF140000000000000} {
+			id := guid.GUID(high | uint64(214589)<<24 | 1)
+			if id.IsCreature() && flavor.Has(database.FlavorWoWForever) {
+				require.NotContains(t, result.PersistedUnits, id)
+				require.NotContains(t, result.UnitCategories, id)
+				require.NotContains(t, result.UnknownUnits[214589].Samples, id)
+			} else {
+				require.Contains(t, result.PersistedUnits, id)
+				want := unitdb.CategoryUnknown
+				if id.IsPet() {
+					want = unitdb.CategoryPet
+				}
+				if id.IsObject() && flavor.Has(database.FlavorWoWForever) {
+					want = unitdb.CategoryObject
+				}
+				require.Equal(t, want, result.UnitCategories[id])
+			}
+		}
+	}
+}

@@ -21,6 +21,7 @@ func TestForeverDungeonAddIdentities(t *testing.T) {
 			entries map[uint32]string
 		}{
 			{RagefireChasmFactory, map[uint32]string{8996: "Voidwalker Minion"}},
+			{BlackfathomDeepsFactory, map[uint32]string{8996: "Voidwalker Minion"}},
 			{RuinsOfLordaeronFactory, map[uint32]string{250619: "Broodwidow", 250623: "Mangled Cadaver", 250650: "Wailing Banshee"}},
 		} {
 			idf := tc.factory.Hostiles(flavor)
@@ -49,6 +50,7 @@ func TestForeverDungeonAddIdentities(t *testing.T) {
 	}
 	// Dungeon-specific lists contain their adds without redundant flavor gates.
 	require.Contains(t, RagefireChasmHostiles(), uint32(8996))
+	require.Contains(t, BlackfathomDeepsHostiles(database.WoWFlavor{database.FlavorVanilla}), uint32(8996))
 	for _, entry := range []uint32{250619, 250623, 250650} {
 		require.Contains(t, RuinsOfLordaeronHostiles(), entry)
 	}
@@ -57,7 +59,7 @@ func TestForeverDungeonAddIdentities(t *testing.T) {
 func TestFinalizeForeverCategoriesAndOwnership(t *testing.T) {
 	t.Parallel()
 	for _, flavor := range []database.WoWFlavor{{database.FlavorWoWForever}, {database.FlavorVanilla}} {
-		for _, factory := range []*CommonFactory{RagefireChasmFactory, RuinsOfLordaeronFactory} {
+		for _, factory := range []*CommonFactory{RagefireChasmFactory, BlackfathomDeepsFactory, RuinsOfLordaeronFactory} {
 			units := unitdb.New(flavor)
 			h := &Hookable{units: units, Identifier: factory.Hostiles(flavor)}
 			player := guid.GUID(1)
@@ -93,7 +95,7 @@ func TestFinalizeForeverCategoriesAndOwnership(t *testing.T) {
 				if entry == 5873 {
 					want = unitdb.CategoryTotem
 				}
-				if entry == 8996 && factory == RagefireChasmFactory {
+				if entry == 8996 && (factory == RagefireChasmFactory || factory == BlackfathomDeepsFactory) {
 					want = unitdb.CategoryOrdinary
 				}
 				if factory == RuinsOfLordaeronFactory && (entry == 250619 || entry == 250623 || entry == 250650) {

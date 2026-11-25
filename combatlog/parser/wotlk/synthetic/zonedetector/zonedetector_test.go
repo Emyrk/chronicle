@@ -222,3 +222,40 @@ func TestZoneDetector_ScarshieldSpellbinderDoesNotIdentifyZone(t *testing.T) {
 		})
 	}
 }
+
+func TestZoneDetector_VoidwalkerMinionDoesNotIdentifyZone(t *testing.T) {
+	t.Parallel()
+	flavor := database.WoWFlavor{database.FlavorVanilla}
+	for _, tc := range []struct {
+		name     string
+		hostiles map[uint32]instances.Identity
+		distinct uint32
+	}{
+		{"ragefire chasm", instances.RagefireChasmHostiles(), 11324},
+		{"blackfathom deeps", instances.BlackfathomDeepsHostiles(flavor), 4813},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Contains(t, tc.hostiles, uint32(8996))
+			for _, initialZone := range []string{"", "molten core"} {
+				// A singleton registry must still exclude this cross-dungeon summon.
+				reg := registry.NewRegistry(testutil.Logger(t), flavor)
+				reg.RegisterEntry(registry.Entry{ZoneNames: []string{tc.name}, HostileEntries: tc.hostiles})
+				zd := zonedetector.New(testutil.Logger(t), reg)
+				ts := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+				if initialZone != "" {
+					zd.ProcessMessages([]messages.Message{&messages.Zone{MessageBase: messages.Base(ts), Zone: zone.Zone{Name: initialZone, IsInstance: true}}})
+				}
+				msg := unitMsg(ts, creatureGUID(8996))
+				require.Equal(t, []messages.Message{msg}, zd.ProcessMessages([]messages.Message{msg}))
+				require.Equal(t, initialZone, zd.LastZone())
+				distinct := unitMsg(ts, creatureGUID(tc.distinct))
+				result := zd.ProcessMessages([]messages.Message{distinct})
+				require.Len(t, result, 2)
+				require.Equal(t, tc.name, result[0].(*messages.Zone).Name)
+				require.Equal(t, distinct, result[1])
+				require.Equal(t, tc.name, zd.LastZone())
+			}
+		})
+	}
+}

@@ -121,7 +121,7 @@ func (s *Creatures) Process(m messages.Message) error {
 		}
 	}
 
-	for _, gid := range messages.ObservedGUIDs(m) {
+	for _, gid := range messages.ObservedGUIDs(m, messages.ObservationPolicy{WoWForever: s.Units.Flavor().Has(database.FlavorWoWForever)}) {
 		if !gid.IsCreature() {
 			continue
 		}
