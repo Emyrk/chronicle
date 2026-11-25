@@ -323,7 +323,7 @@ describe("encounter variant request boundaries", () => {
   it("retains legacy single-boss validation and accepts Renown", () => {
     const hard = { ...hodir, encounterVariant: "hard" as const };
     expect(v2RatingParams(hard, {}, "renown").get("encounter_variant")).toBe("hard");
-    expect(() => v2RatingParams(hard, { boss: "Freya" }, "peak")).toThrow("single supported boss");
+    expect(() => v2RatingParams(hard, { boss: "Ignis the Furnace Master" }, "peak")).toThrow("single supported boss");
     expect(() => v2RatingParams({ ...hard, selected: ["Hodir", "Freya"] }, {}, "mastery")).toThrow("single supported boss");
   });
 });

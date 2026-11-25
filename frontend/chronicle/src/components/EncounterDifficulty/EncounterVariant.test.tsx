@@ -8,7 +8,7 @@ describe("encounter variant presentation", () => {
   it("only exposes proven Ulduar support", () => {
     expect(supportsEncounterVariant("Ulduar", "Hodir")).toBe(true);
     expect(supportsEncounterVariant("Ulduar", "XT-002 Deconstructor")).toBe(true);
-    expect(supportsEncounterVariant("Ulduar", "Freya")).toBe(false);
+    expect(supportsEncounterVariant("Ulduar", "Ignis the Furnace Master")).toBe(false);
     expect(supportsEncounterVariant("Other", "Hodir")).toBe(false);
   });
   it("leaves historical or unknown reports unclassified", () => {
@@ -28,12 +28,12 @@ describe("encounter variant presentation", () => {
 });
 
 it("hard-mode shortcut applies the highest supported tier without collapsing mixed selection", () => {
-  const selected = ["Freya", "Hodir"];
+  const selected = ["Ignis the Furnace Master", "Hodir"];
   const variants = withHighestEncounterVariants("Ulduar", selected, { Hodir: "normal" });
   expect(variants).toEqual({ Hodir: "hard" });
-  expect(selected).toEqual(["Freya", "Hodir"]);
+  expect(selected).toEqual(["Ignis the Furnace Master", "Hodir"]);
   expect(withHighestEncounterVariants("Ulduar", selected, variants, true)).toEqual({});
-  expect(withHighestEncounterVariants("Ulduar", ["Freya"], { Hodir: "normal" })).toEqual({ Hodir: "normal" });
+  expect(withHighestEncounterVariants("Ulduar", ["Ignis the Furnace Master"], { Hodir: "normal" })).toEqual({ Hodir: "normal" });
 });
 
 it("retains inactive choices across unsupported tabs without enabling filters", () => {
@@ -49,9 +49,9 @@ it("retains inactive choices across unsupported tabs without enabling filters", 
   expect(encounterVariantsEnabled("ratings", "overview")).toBe(false);
   for (const tab of ["ratings", "performances", "statistics"]) {
     expect(encounterVariantsEnabled(tab, "peak")).toBe(true);
-    expect(activeEncounterVariants("Ulduar", ["Hodir", "Freya"], retained)).toEqual(retained);
+    expect(activeEncounterVariants("Ulduar", ["Hodir", "Ignis the Furnace Master"], retained)).toEqual(retained);
   }
-  expect(activeEncounterVariants("Ulduar", ["Freya"], retained)).toBeUndefined();
+  expect(activeEncounterVariants("Ulduar", ["Ignis the Furnace Master"], retained)).toBeUndefined();
   expect(activeEncounterVariants("Other", ["Hodir"], retained)).toBeUndefined();
   expect(retained).toEqual({ Hodir: "hard" });
 });
@@ -64,7 +64,7 @@ it("hides exact success rates and attempt counts even if cached data exists", ()
 });
 
 it("keeps XT and Hodir independent through the hard-mode shortcut", () => {
- const selected = ["Hodir", "XT-002 Deconstructor", "Freya"];
+ const selected = ["Hodir", "XT-002 Deconstructor", "Ignis the Furnace Master"];
  const variants = { Hodir: "normal" as const, "XT-002 Deconstructor": "hard" as const };
  expect(activeEncounterVariants("Ulduar", selected, variants)).toEqual(variants);
  expect(withHighestEncounterVariants("Ulduar", selected, variants)).toEqual({ Hodir: "hard", "XT-002 Deconstructor": "hard" });
@@ -213,4 +213,34 @@ it("supports Thorim normal and hard independently of other bosses", () => {
     const html = renderToStaticMarkup(<EncounterVariantChips boss="Thorim" active={active} onSelect={() => {}} />);
     expect(html).toContain(`aria-pressed="true" aria-label="Thorim ${active === "hard" ? "Hard mode" : "Normal"}"`);
   }
+});
+
+it("exposes four exact Freya tree cohorts with only three trees hard", () => {
+  const options = encounterVariantOptions("Freya");
+  expect(options).toEqual(["trees_0", "trees_1", "trees_2", "trees_3"]);
+  expect(supportsEncounterVariant("Ulduar", "Freya")).toBe(true);
+  expect(supportsEncounterVariant("Other", "Freya")).toBe(false);
+  expect(highestEncounterVariant("Ulduar", "Freya")).toBe("trees_3");
+  expect(withHighestEncounterVariants("Ulduar", ["Freya"], { Hodir: "normal" })).toEqual({ Hodir: "normal", Freya: "trees_3" });
+  for (const [count, variant] of options.entries()) {
+    expect(isEncounterVariant(variant)).toBe(true);
+    expect(encounterVariantLabel(variant)).toBe(`${count} Tree`);
+    expect(isHardEncounterVariant(variant)).toBe(count === 3);
+    expect(activeEncounterVariants("Ulduar", ["Freya", "Hodir"], { Freya: variant, Hodir: "hard" })).toEqual({ Freya: variant, Hodir: "hard" });
+    const badge = renderToStaticMarkup(<EncounterVariantMark variant={variant} />);
+    expect(badge).toContain(`${count} Tree`);
+    expect(badge.includes("bg-amber-500/15")).toBe(count === 3);
+    expect(badge.includes("bg-slate-500/15")).toBe(count !== 3);
+    const chips = renderToStaticMarkup(<EncounterVariantChips boss="Freya" active={variant} onSelect={() => {}} />);
+    expect(chips.match(/<button /g)).toHaveLength(5);
+    expect(chips.match(/aria-pressed="true"/g)).toHaveLength(1);
+    expect(chips.match(/bg-amber-500\/15/g)).toHaveLength(1);
+    expect(chips.match(/bg-slate-500\/15/g)).toHaveLength(3);
+  }
+  for (const variant of ["normal", "hard", "towers_3", "lights_3"] as const) {
+    expect(activeEncounterVariants("Ulduar", ["Freya"], { Freya: variant })).toBeUndefined();
+  }
+  expect(activeEncounterVariants("Ulduar", ["Hodir"], { Hodir: "trees_3" })).toBeUndefined();
+  expect(isEncounterVariant("trees_4")).toBe(false);
+  expect(isEncounterVariant("trees_-1")).toBe(false);
 });

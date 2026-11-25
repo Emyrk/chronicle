@@ -4,7 +4,7 @@ package encountervariant
 
 func Valid(key string) bool {
 	switch key {
-	case "towers_0", "towers_1", "towers_2", "towers_3", "towers_4", "normal", "medium", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4":
+	case "trees_0", "trees_1", "trees_2", "trees_3", "towers_0", "towers_1", "towers_2", "towers_3", "towers_4", "normal", "medium", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4":
 		return true
 	default:
 		return false
@@ -16,6 +16,8 @@ func Supported(instance, boss, key string) bool {
 		return false
 	}
 	switch boss {
+	case "Freya":
+		return key == "trees_0" || key == "trees_1" || key == "trees_2" || key == "trees_3"
 	case "Flame Leviathan":
 		return key == "towers_0" || key == "towers_1" || key == "towers_2" || key == "towers_3" || key == "towers_4"
 	case "Yogg-Saron":
