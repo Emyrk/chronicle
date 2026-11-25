@@ -1043,8 +1043,12 @@ func UlduarRankingEncounterSets(flavor database.WoWFlavor) []instances.RankingEn
 }
 
 var UlduarFactory = &instances.CommonFactory{
-	EncounterVariant:     ulduarEncounterVariant,
-	VariantAuraSpells:    []int32{62670, 62650, 62702, 62671},
+	EncounterVariant:  ulduarEncounterVariant,
+	VariantAuraSpells: []int32{62670, 62650, 62702, 62671},
+	VariantBossAuraSpells: map[uint32][]int32{
+		33113: {65075, 65076, 64482, 65077, 65079},
+		34003: {65075, 65076, 64482, 65077, 65079},
+	},
 	Name:                 "Ulduar",
 	Category:             instances.InstanceCategoryRaid,
 	ZoneNames:            []string{"ulduar"},

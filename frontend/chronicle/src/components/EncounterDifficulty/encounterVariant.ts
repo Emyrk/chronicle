@@ -1,18 +1,18 @@
 /** Encounter variants are independent of raid difficulty and size. Only proven classifications belong here. */
-export type EncounterVariant = "normal" | "medium" | "hard" | "lights_0" | "lights_1" | "lights_2" | "lights_3" | "lights_4";
+export type EncounterVariant = "towers_0" | "towers_1" | "towers_2" | "towers_3" | "towers_4" | "normal" | "medium" | "hard" | "lights_0" | "lights_1" | "lights_2" | "lights_3" | "lights_4";
 export type EncounterVariants = Record<string, EncounterVariant>;
 
 export function supportsEncounterVariant(instance: string, boss: string): boolean {
-  return instance === "Ulduar" && (boss === "Assembly of Iron" || boss === "Hodir" || boss === "XT-002 Deconstructor" || boss === "General Vezax" || boss === "Yogg-Saron");
+  return instance === "Ulduar" && (boss === "Flame Leviathan" || boss === "Assembly of Iron" || boss === "Hodir" || boss === "XT-002 Deconstructor" || boss === "General Vezax" || boss === "Yogg-Saron");
 }
 
 export function encounterVariantLabel(variant: EncounterVariant): string {
-  return variant.startsWith("lights_") ? `${variant.slice(-1)} Light` : variant === "normal" ? "Normal" : variant === "medium" ? "Medium mode" : "Hard mode";
+  return variant.startsWith("towers_") ? `${variant.slice(-1)} Tower` : variant.startsWith("lights_") ? `${variant.slice(-1)} Light` : variant === "normal" ? "Normal" : variant === "medium" ? "Medium mode" : "Hard mode";
 }
 
 /** Highest tier currently backed by classification and published ratings. */
 export function highestEncounterVariant(instance: string, boss: string): EncounterVariant | undefined {
-  return supportsEncounterVariant(instance, boss) ? boss === "Yogg-Saron" ? "lights_0" : "hard" : undefined;
+  return supportsEncounterVariant(instance, boss) ? boss === "Flame Leviathan" ? "towers_4" : boss === "Yogg-Saron" ? "lights_0" : "hard" : undefined;
 }
 
 /** Preserve other per-boss choices and never change the encounter selection. */
@@ -37,15 +37,16 @@ export function encounterVariantsEnabled(tab: string, ratingView: string): boole
 }
 
 export function encounterVariantOptions(boss: string): readonly EncounterVariant[] {
+  if (boss === "Flame Leviathan") return ["towers_0", "towers_1", "towers_2", "towers_3", "towers_4"];
   // Assembly of Iron tiers follow the last surviving member: Stormcaller Brundir (normal), Runemaster Molgeim (medium), Steelbreaker (hard).
   if (boss === "Assembly of Iron") return ["normal", "medium", "hard"];
   return boss === "Yogg-Saron" ? ["lights_0", "lights_1", "lights_2", "lights_3", "lights_4"] : ["normal", "hard"];
 }
 
 export function isEncounterVariant(value?: string): value is EncounterVariant {
-  return value !== undefined && ["normal", "medium", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4"].includes(value);
+  return value !== undefined && ["towers_0", "towers_1", "towers_2", "towers_3", "towers_4", "normal", "medium", "hard", "lights_0", "lights_1", "lights_2", "lights_3", "lights_4"].includes(value);
 }
 
 export function isHardEncounterVariant(variant: EncounterVariant): boolean {
-  return variant === "hard" || variant === "lights_0" || variant === "lights_1";
+  return variant === "towers_4" || variant === "hard" || variant === "lights_0" || variant === "lights_1";
 }

@@ -88,6 +88,7 @@ type Hookable struct {
 
 	// Live tracking data
 	variantAuraSpells          map[int32]struct{}
+	variantBossAuraSpells      map[uint32][]int32
 	variantAuraEvidence        map[uuid.UUID][]variantAuraObservation
 	Auras                      *auras.Tracking
 	Characters                 *characters.Characters
@@ -113,15 +114,16 @@ type Hookable struct {
 }
 
 type InstanceParams struct {
-	Name              string
-	Category          InstanceCategory
-	MatchesZone       func(z zone.Zone) bool
-	Idf               *identifier.Identifier
-	Rankings          *rankings.Rankings
-	Preprocessors     []instancehook.Preprocessor
-	VariantAuraSpells []int32
-	ExtraHooks        []instancehook.Hook
-	EncounterVariant  func(*encounter.Encounter) string
+	Name                  string
+	Category              InstanceCategory
+	MatchesZone           func(z zone.Zone) bool
+	Idf                   *identifier.Identifier
+	Rankings              *rankings.Rankings
+	Preprocessors         []instancehook.Preprocessor
+	VariantAuraSpells     []int32
+	VariantBossAuraSpells map[uint32][]int32
+	ExtraHooks            []instancehook.Hook
+	EncounterVariant      func(*encounter.Encounter) string
 }
 
 func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z zone.Zone, flavor database.WoWFlavor) *Hookable {
@@ -146,14 +148,15 @@ func (f *CommonFactory) NewHookable(ctx context.Context, logger *slog.Logger, db
 		variant = func(enc *encounter.Encounter) string { return f.EncounterVariant(enc, flavor, preprocessors) }
 	}
 	return NewHookable(ctx, logger, db, z, InstanceParams{
-		Name:              name,
-		EncounterVariant:  variant,
-		VariantAuraSpells: f.VariantAuraSpells,
-		Category:          f.Category,
-		MatchesZone:       f.MatchZone,
-		Idf:               f.Hostiles(flavor),
-		Rankings:          r,
-		Preprocessors:     preprocessors,
+		Name:                  name,
+		EncounterVariant:      variant,
+		VariantAuraSpells:     f.VariantAuraSpells,
+		VariantBossAuraSpells: f.VariantBossAuraSpells,
+		Category:              f.Category,
+		MatchesZone:           f.MatchZone,
+		Idf:                   f.Hostiles(flavor),
+		Rankings:              r,
+		Preprocessors:         preprocessors,
 	})
 }
 
@@ -271,6 +274,7 @@ func NewHookable(ctx context.Context, logger *slog.Logger, db *unitdb.Units, z z
 		units:                      db,
 		preprocessors:              ip.Preprocessors,
 		variantAuraSpells:          variantAuraSpellSet(ip.VariantAuraSpells),
+		variantBossAuraSpells:      ip.VariantBossAuraSpells,
 		variantAuraEvidence:        make(map[uuid.UUID][]variantAuraObservation),
 		encounterVariant:           ip.EncounterVariant,
 		CurrentZone:                z,

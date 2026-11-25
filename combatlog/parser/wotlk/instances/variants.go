@@ -19,6 +19,9 @@ func ulduarEncounterVariant(enc *encounter.Encounter, flavor database.WoWFlavor,
 	if enc.KillType != encounter.KillTypeClean && enc.KillType != encounter.KillTypePartial {
 		return ""
 	}
+	if enc.Name == "Flame Leviathan" {
+		return leviathanEncounterVariant(enc)
+	}
 	if enc.Name == "Assembly of Iron" {
 		return assemblyEncounterVariant(enc)
 	}
