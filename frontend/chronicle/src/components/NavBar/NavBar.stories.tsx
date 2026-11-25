@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite"
 import { http, HttpResponse, delay } from "msw"
 import { MemoryRouter } from "react-router-dom"
-import { expect, userEvent, within } from "storybook/test"
+import { expect, userEvent, waitFor, within } from "storybook/test"
 import type { ArmorySearchResult, GuildInfo, SupportedInstance } from "@/api/typesGenerated"
 import { NavBar } from "./NavBar"
 import { SearchPalette } from "./GlobalSearch/GlobalSearch"
@@ -123,6 +123,57 @@ export const Loading: Story = {
 export const Mobile: Story = { globals: mobile }
 export const MobileMenu: Story = { globals: mobile, play: openMenu(/open menu/i) }
 export const MobileAccount: Story = { globals: mobile, parameters: { msw: { handlers: loggedIn(true) } }, play: openMenu(/^account/i) }
+
+// A deliberately wide tenant logo exercises the phone layout without a remote asset.
+const wideLogo = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="600" height="100"><rect width="600" height="100" fill="#443719"/><text x="300" y="70" text-anchor="middle" font-size="64" fill="#f0c060">Wide Tenant Logo</text></svg>')}`
+const wideTenant = http.get("/api/v1/site-config", () => HttpResponse.json({
+  tenant: { id: "wide", branding: { display_name: "Wide Tenant", logo_wide: wideLogo } },
+}))
+
+const checkMobileBrand: Story["play"] = async ({ canvasElement }) => {
+  const canvas = within(canvasElement)
+  const logo = await canvas.findByRole("img", { name: /Tenant$/ })
+  await waitFor(() => expect((logo as HTMLImageElement).naturalWidth).toBeGreaterThan(0))
+  const menu = canvas.getByRole("button", { name: /open menu/i })
+  const account = await canvas.findByRole("button", { name: /^(account|sign in)$/i })
+  await expect(account).toBeVisible()
+  const logoBox = logo.getBoundingClientRect()
+  const menuBox = menu.getBoundingClientRect()
+  const accountBox = account.getBoundingClientRect()
+  await expect(logoBox.height).toBeLessThanOrEqual(60)
+  await expect(logoBox.width).toBeGreaterThan(0)
+  const image = logo as HTMLImageElement
+  await expect(logoBox.width / logoBox.height).toBeCloseTo(image.naturalWidth / image.naturalHeight, 1)
+  if (image.naturalWidth === image.naturalHeight) await expect(logoBox.height).toBe(60)
+  await expect(logoBox.left).toBeGreaterThanOrEqual(menuBox.right)
+  await expect(logoBox.right).toBeLessThanOrEqual(accountBox.left)
+  await expect(accountBox.right).toBeLessThanOrEqual(canvasElement.getBoundingClientRect().right)
+}
+
+export const MobileWideTenant: Story = {
+  globals: mobile,
+  parameters: { msw: { handlers: [wideTenant, ...loggedIn(false)] } },
+  play: checkMobileBrand,
+}
+export const MobileWideTenantLoggedOut: Story = {
+  globals: mobile,
+  parameters: { msw: { handlers: [wideTenant, ...loggedOut] } },
+  play: checkMobileBrand,
+}
+
+export const MobileNarrowTenant: Story = {
+  globals: mobile,
+  parameters: { msw: { handlers: [
+    http.get("/api/v1/site-config", () => HttpResponse.json({
+      tenant: { id: "narrow", branding: {
+        display_name: "Narrow Tenant",
+        logo_wide: `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="#f0c060"/></svg>')}`,
+      } },
+    })),
+    ...loggedOut,
+  ] } },
+  play: checkMobileBrand,
+}
 
 // The search palette on its own, with queries that show each kind of top result.
 type PaletteStory = StoryObj<{ initialQuery: string }>

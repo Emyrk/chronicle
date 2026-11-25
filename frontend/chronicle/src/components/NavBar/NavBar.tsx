@@ -103,24 +103,24 @@ function Brand({ state, className }: { state: NavState; className?: string }) {
   const { branding, hasBranding } = state
   if (state.location.pathname.startsWith("/g/")) {
     return (
-      <Link to="/" className={cn("rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", className)}>
+      <Link to="/" className={cn("min-w-0 truncate rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground", className)}>
         Back to {branding?.display_name || "Chronicle"}
       </Link>
     )
   }
   return (
-    <Link to="/" className={cn("flex items-center", className)}>
+    <Link to="/" className={cn("flex min-w-0 items-center justify-center", className)}>
       {hasBranding ? (
         branding?.logo_wide ? (
-          <img src={branding.logo_wide} alt={branding?.display_name ?? ""} className="h-15 -my-2 object-contain" />
+          <img src={branding.logo_wide} alt={branding?.display_name ?? ""} className="h-auto max-h-15 min-w-0 max-w-full object-contain lg:-my-2 lg:h-15" />
         ) : (
-          <div className="flex items-center gap-2">
-            {branding?.square_logo && <img src={branding.square_logo} alt="" className="h-8 w-8 rounded object-contain" />}
-            {branding?.display_name && <span className="text-lg font-semibold text-foreground">{branding.display_name}</span>}
+          <div className="flex min-w-0 items-center gap-2">
+            {branding?.square_logo && <img src={branding.square_logo} alt="" className="h-8 w-8 shrink-0 rounded object-contain" />}
+            {branding?.display_name && <span className="truncate text-lg font-semibold text-foreground">{branding.display_name}</span>}
           </div>
         )
       ) : (
-        <img src="/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle" className="h-15 -my-2" />
+        <img src="/c/chronicle/ChronicleLogoCenter.svg" alt="Chronicle" className="h-auto max-h-15 min-w-0 max-w-full object-contain lg:-my-2 lg:h-15" />
       )}
     </Link>
   )
@@ -355,8 +355,9 @@ function LogoSearch({ state }: { state: NavState }) {
 function DesktopNav({ state }: { state: NavState }) {
   const recent = allNavLinks().find((link) => link.id === "recent")!
   return (
-    // Equal outer columns keep the logo centred; search hugs it from the right.
-    <nav className="grid h-16 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center border-b px-4">
+    // Phones reserve space for controls and let the brand shrink. Equal outer
+    // columns keep the desktop logo centred; search hugs it from the right.
+    <nav className="grid h-16 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b px-4 lg:grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] lg:gap-0">
       <div className="lg:hidden"><MobileMenuSheet state={state} /></div>
       <LeftGroup state={state} />
       <Brand state={state} />
