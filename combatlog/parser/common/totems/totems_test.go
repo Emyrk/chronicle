@@ -91,15 +91,20 @@ func TestDiseaseCleansingTotem(t *testing.T) {
 	}
 }
 
-func TestStoneskinTotemRankOne(t *testing.T) {
+func TestStoneskinTotemEarlyRanks(t *testing.T) {
 	t.Parallel()
-	want := Totem{ID: 5873, Name: "Stoneskin Totem", NormalDuration: 120 * time.Second, Modifier: modifierTotemicMastery}
-	for _, high := range []uint64{0xF130000000000000, 0xF150000000000000, 0xF110000000000000, 0xF140000000000000} {
-		got, ok := IsTotem(totemEntryGUID(high, 5873))
-		require.Equal(t, high == 0xF130000000000000, ok)
-		if ok {
-			require.Equal(t, want, got)
-			require.Equal(t, 144*time.Second, got.MaxDuration())
+	for _, entry := range []uint32{5873, 5919, 5920} {
+		want := Totem{ID: entry, Name: "Stoneskin Totem", NormalDuration: 120 * time.Second, Modifier: modifierTotemicMastery}
+		got, ok := EntryIsTotem(entry)
+		require.True(t, ok)
+		require.Equal(t, want, got)
+		require.Equal(t, 144*time.Second, got.MaxDuration())
+		for _, high := range []uint64{0xF130000000000000, 0xF150000000000000, 0xF110000000000000, 0xF140000000000000} {
+			got, ok := IsTotem(totemEntryGUID(high, entry))
+			require.Equal(t, high == 0xF130000000000000, ok)
+			if ok {
+				require.Equal(t, want, got)
+			}
 		}
 	}
 }

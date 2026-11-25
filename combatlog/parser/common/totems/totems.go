@@ -61,7 +61,8 @@ func init() {
 	// (120 seconds) in Turtle Spell.dbc, matching ClassicDB's two-minute duration.
 	register("Stoneskin Totem", modifierTotemicMastery,
 		variant{id: 5873, duration: 120 * time.Second}, // Rank I, spell 8071
-		variant{id: 5920, duration: 120 * time.Second}, // Rank II
+		variant{id: 5919, duration: 120 * time.Second}, // Rank II, ClassicDB spell 8154
+		variant{id: 5920, duration: 120 * time.Second}, // Rank III
 		variant{id: 7368, duration: 120 * time.Second}) // Rank VI
 	register("Tranquil Air Totem", modifierTotemicMastery,
 		variant{id: 15803, duration: 120 * time.Second})

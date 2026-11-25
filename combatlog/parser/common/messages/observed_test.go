@@ -25,7 +25,7 @@ func TestObservedGUIDsIncludesPassiveReferences(t *testing.T) {
 		{&VehicleControl{VehicleGUID: 1, ControllerGUID: 2}, []guid.GUID{1, 2}},
 		{&Damage{Target: 0}, []guid.GUID{}},
 	} {
-		require.Equal(t, test.want, ObservedGUIDs(test.message), "%T", test.message)
+		require.Equal(t, test.want, ObservedGUIDs(test.message, ObservationPolicy{}), "%T", test.message)
 	}
 	// Catalogue-only references must not alter encounter detection.
 	require.Equal(t, []guid.GUID{1}, (&Unit{Info: unitinfo.Info{Guid: 1, Owner: &owner}}).Affects())
@@ -36,11 +36,11 @@ func TestObservedGUIDsExcludesRaidMarkers(t *testing.T) {
 	id := guid.GUID(0xF1300036B7000001)
 	for _, index := range []uint8{0, 1, 8} {
 		marker := &RaidMark{Unit: id, Index: index}
-		require.Nil(t, ObservedGUIDs(marker))
+		require.Nil(t, ObservedGUIDs(marker, ObservationPolicy{}))
 		require.Equal(t, []guid.GUID{id}, marker.Affects(), "marker consumers still receive the affected unit")
 		require.Equal(t, index, marker.Index)
 	}
-	require.Equal(t, []guid.GUID{id}, ObservedGUIDs(&Unit{Info: unitinfo.Info{Guid: id}}))
+	require.Equal(t, []guid.GUID{id}, ObservedGUIDs(&Unit{Info: unitinfo.Info{Guid: id}}, ObservationPolicy{}))
 }
 
 func TestObservedGUIDsIgnoresRemoteBuffNPCs(t *testing.T) {
@@ -61,7 +61,7 @@ func TestObservedGUIDsIgnoresRemoteBuffNPCs(t *testing.T) {
 				&Versions{Player: &id},
 			} {
 				before := append([]guid.GUID(nil), msg.Affects()...)
-				observed := ObservedGUIDs(msg)
+				observed := ObservedGUIDs(msg, ObservationPolicy{})
 				require.Equal(t, before, append([]guid.GUID(nil), msg.Affects()...), "must not alter event participants")
 				if ignored {
 					require.NotContains(t, observed, id)
@@ -82,6 +82,30 @@ func TestObservedGUIDsIgnoresRemoteBuffNPCs(t *testing.T) {
 						require.Equal(t, player, *aura.Source)
 						require.Equal(t, id, aura.Target)
 					}
+				}
+			}
+		}
+	}
+}
+
+func TestObservedGUIDsForeverSleepingBag(t *testing.T) {
+	t.Parallel()
+	for _, policy := range []ObservationPolicy{{}, {WoWForever: true}} {
+		for _, entry := range []uint32{214589, 214588, 10719, 1938, 4949} {
+			for _, high := range []uint64{0xF130000000000000, 0xF150000000000000, 0xF110000000000000, 0xF140000000000000} {
+				id := guid.GUID(high | uint64(entry)<<24 | 1)
+				player := guid.GUID(1)
+				msg := &NewOwner{Target: id, NewOwner: player}
+				before := *msg
+				observed := ObservedGUIDs(msg, policy)
+				ignored := (entry == 10719 || entry == 1938 || entry == 4949) && (id.IsCreature() || id.IsVehicle())
+				ignored = ignored || (entry == 214589 && id.IsCreature() && policy.WoWForever)
+				require.Equal(t, before, *msg, "summon ownership evidence must remain intact")
+				require.Contains(t, observed, player)
+				if ignored {
+					require.NotContains(t, observed, id)
+				} else {
+					require.Contains(t, observed, id)
 				}
 			}
 		}

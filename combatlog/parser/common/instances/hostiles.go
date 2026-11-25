@@ -1925,6 +1925,7 @@ func ZulFarrakHostiles() map[uint32]Identity {
 func BlackfathomDeepsHostiles() map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
+		8996: "Voidwalker Minion",
 		4787: "Argent Guard Thaelrid",
 		4798: "Fallenroot Shadowstalker",
 		4799: "Fallenroot Hellcaller",

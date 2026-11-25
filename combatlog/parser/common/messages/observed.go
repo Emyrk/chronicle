@@ -1,6 +1,8 @@
 package messages
 
-import "github.com/Emyrk/chronicle/combatlog/parser/guid"
+import (
+	"github.com/Emyrk/chronicle/combatlog/parser/guid"
+)
 
 // ignoredObservedCreatures are remote world-buff NPCs whose references do not
 // establish instance presence, regardless of server flavor. Keep their events
@@ -11,9 +13,21 @@ var ignoredObservedCreatures = map[uint32]string{
 	4949:  "Thrall",
 }
 
+// ignoredForeverObservedCreatures are utility summons, not instance inhabitants.
+// This only filters catalogue membership, never their summon or other events.
+var ignoredForeverObservedCreatures = map[uint32]string{
+	214589: "Cozy Sleeping Bag",
+}
+
+// ObservationPolicy carries flavor-specific catalogue rules without coupling
+// message types to the database package that defines server flavors.
+type ObservationPolicy struct {
+	WoWForever bool
+}
+
 // ObservedGUIDs is metadata membership, not combat activity. Affects deliberately
 // omits some passive references, so never use it alone to catalogue an instance.
-func ObservedGUIDs(m Message) []guid.GUID {
+func ObservedGUIDs(m Message, policy ObservationPolicy) []guid.GUID {
 	// Raid markers can reference units from a previous instance. Assignment or
 	// removal alone is not evidence of presence; keep Affects for marker consumers.
 	if _, ok := m.(*RaidMark); ok {
@@ -55,6 +69,13 @@ func ObservedGUIDs(m Message) []guid.GUID {
 		if id.IsCreature() || id.IsVehicle() {
 			if entry, ok := id.GetEntry(); ok {
 				if _, ignored := ignoredObservedCreatures[entry]; ignored {
+					continue
+				}
+			}
+		}
+		if id.IsCreature() && policy.WoWForever {
+			if entry, ok := id.GetEntry(); ok {
+				if _, ignored := ignoredForeverObservedCreatures[entry]; ignored {
 					continue
 				}
 			}
