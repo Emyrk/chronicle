@@ -146,6 +146,20 @@ func (c *thorimCharacter) Process(m messages.Message) error {
 	wasAnyActive := c.anyEncounterUnitActive()
 	wasActive := c.IsActive()
 
+	if c.entry == thorimEntry {
+		// Check expiry before gating so a timed-out Thorim cannot reactivate
+		// from balcony spells. Each activity period needs positive incoming damage.
+		if cur, ok := c.Activity.Current(); ok && !c.all.ExplicitEncounterActive() {
+			cur.HandleTimeout(m.Date())
+		}
+		if damage, ok := m.(*messages.Damage); !c.IsActive() && (!ok || damage.Target != c.ID() || !isThorimBossHit(damage)) {
+			if wasActive {
+				c.resetStateIfInactive()
+			}
+			return nil
+		}
+	}
+
 	if err := c.RoomMechanic.Process(m); err != nil {
 		return err
 	}

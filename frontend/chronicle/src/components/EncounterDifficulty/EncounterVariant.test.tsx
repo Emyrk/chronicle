@@ -200,3 +200,17 @@ it("supports Mimiron normal and hard cohorts with the binary shortcut and stylin
     expect(badge).toContain(variant === "normal" ? "bg-slate-500/15" : "bg-amber-500/15");
   }
 });
+
+it("supports Thorim normal and hard independently of other bosses", () => {
+  expect(supportsEncounterVariant("Ulduar", "Thorim")).toBe(true);
+  expect(supportsEncounterVariant("Other", "Thorim")).toBe(false);
+  expect(encounterVariantOptions("Thorim")).toEqual(["normal", "hard"]);
+  const variants = { Thorim: "normal" as const, Hodir: "normal" as const };
+  expect(withHighestEncounterVariants("Ulduar", ["Thorim"], variants)).toEqual({ Thorim: "hard", Hodir: "normal" });
+  expect(activeEncounterVariants("Ulduar", ["Thorim"], variants)).toEqual({ Thorim: "normal" });
+  expect(activeEncounterVariants("Ulduar", ["Thorim"], { Thorim: "medium" })).toBeUndefined();
+  for (const active of ["normal", "hard"] as const) {
+    const html = renderToStaticMarkup(<EncounterVariantChips boss="Thorim" active={active} onSelect={() => {}} />);
+    expect(html).toContain(`aria-pressed="true" aria-label="Thorim ${active === "hard" ? "Hard mode" : "Normal"}"`);
+  }
+});

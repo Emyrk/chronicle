@@ -3,7 +3,7 @@ export type EncounterVariant = "towers_0" | "towers_1" | "towers_2" | "towers_3"
 export type EncounterVariants = Record<string, EncounterVariant>;
 
 export function supportsEncounterVariant(instance: string, boss: string): boolean {
-  return instance === "Ulduar" && (boss === "Mimiron" || boss === "Flame Leviathan" || boss === "Assembly of Iron" || boss === "Hodir" || boss === "XT-002 Deconstructor" || boss === "General Vezax" || boss === "Yogg-Saron");
+  return instance === "Ulduar" && (boss === "Mimiron" || boss === "Flame Leviathan" || boss === "Assembly of Iron" || boss === "Hodir" || boss === "XT-002 Deconstructor" || boss === "General Vezax" || boss === "Thorim" || boss === "Yogg-Saron");
 }
 
 export function encounterVariantLabel(variant: EncounterVariant): string {

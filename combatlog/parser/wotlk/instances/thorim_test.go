@@ -60,6 +60,15 @@ func TestThorimRoomMechanicBridgesEncounterPacks(t *testing.T) {
 		Victim:      guard,
 	}))
 
+	// Balcony damage must not activate Thorim or cut the gauntlet phase short.
+	balcony := damageEvent(thorim, player, 1)
+	balcony.MessageBase = messages.Base(start.Add(40 * time.Second))
+	balcony.SpellData = &chrondbc.Spell{ID: 62042}
+	require.NoError(t, instance.Process(balcony))
+	boss, ok := instance.Characters.Get(thorim)
+	require.True(t, ok)
+	require.False(t, boss.IsActive())
+
 	bossStart := start.Add(54 * time.Second)
 	bossHit := damageEvent(player, thorim, 1)
 	bossHit.MessageBase = messages.Base(bossStart)
