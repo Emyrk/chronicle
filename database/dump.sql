@@ -4590,43 +4590,43 @@ ALTER TABLE ONLY leaderboard_sets
     ADD CONSTRAINT leaderboard_sets_pkey PRIMARY KEY (instance_name, set_key);
 
 ALTER TABLE leaderboard_variant_dirty_guild_boss_benchmarks
-    ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_be_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_be_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_dirty_guild_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant);
 
 ALTER TABLE leaderboard_variant_dirty_guild_boss_subjects
-    ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_su_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_su_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_dirty_guild_boss_subjects
     ADD CONSTRAINT leaderboard_variant_dirty_guild_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id);
 
 ALTER TABLE leaderboard_variant_dirty_player_boss_benchmarks
-    ADD CONSTRAINT leaderboard_variant_dirty_player_boss_b_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_dirty_player_boss_b_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_dirty_player_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_dirty_player_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric);
 
 ALTER TABLE leaderboard_variant_dirty_player_boss_subjects
-    ADD CONSTRAINT leaderboard_variant_dirty_player_boss_s_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_dirty_player_boss_s_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_dirty_player_boss_subjects
     ADD CONSTRAINT leaderboard_variant_dirty_player_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);
 
 ALTER TABLE leaderboard_variant_guild_boss_benchmarks
-    ADD CONSTRAINT leaderboard_variant_guild_boss_benchmar_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_guild_boss_benchmar_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_guild_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_guild_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant);
 
 ALTER TABLE leaderboard_variant_guild_boss_observations
-    ADD CONSTRAINT leaderboard_variant_guild_boss_observat_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_guild_boss_observat_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_guild_boss_observations
     ADD CONSTRAINT leaderboard_variant_guild_boss_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, run_id, realm_id, guild_id);
 
 ALTER TABLE leaderboard_variant_guild_boss_subjects
-    ADD CONSTRAINT leaderboard_variant_guild_boss_subjects_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_guild_boss_subjects_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_guild_boss_subjects
     ADD CONSTRAINT leaderboard_variant_guild_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, realm_id, guild_id);
@@ -4635,19 +4635,19 @@ ALTER TABLE ONLY leaderboard_variant_overrides
     ADD CONSTRAINT leaderboard_variant_overrides_pkey PRIMARY KEY (layer_key, instance_name, difficulty_name, max_players);
 
 ALTER TABLE leaderboard_variant_player_boss_benchmarks
-    ADD CONSTRAINT leaderboard_variant_player_boss_benchma_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_player_boss_benchma_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_player_boss_benchmarks
     ADD CONSTRAINT leaderboard_variant_player_boss_benchmarks_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric);
 
 ALTER TABLE leaderboard_variant_player_boss_subjects
-    ADD CONSTRAINT leaderboard_variant_player_boss_subject_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_player_boss_subject_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_player_boss_subjects
     ADD CONSTRAINT leaderboard_variant_player_boss_subjects_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, player_class, player_spec, player_sub_spec, metric, realm_id, player_guid);
 
 ALTER TABLE leaderboard_variant_player_observations
-    ADD CONSTRAINT leaderboard_variant_player_observations_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT leaderboard_variant_player_observations_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY leaderboard_variant_player_observations
     ADD CONSTRAINT leaderboard_variant_player_observations_pkey PRIMARY KEY (tenant_id, instance_name, difficulty_name, max_players, encounter_name, encounter_variant, run_id, realm_id, player_guid, metric);
@@ -4767,7 +4767,7 @@ ALTER TABLE ONLY parse_score_results
     ADD CONSTRAINT parse_score_results_pkey PRIMARY KEY (id);
 
 ALTER TABLE parse_variant_memberships
-    ADD CONSTRAINT parse_variant_memberships_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT parse_variant_memberships_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY parse_variant_memberships
     ADD CONSTRAINT parse_variant_memberships_pkey PRIMARY KEY (id);
@@ -4776,7 +4776,7 @@ ALTER TABLE ONLY parse_variant_memberships
     ADD CONSTRAINT parse_variant_memberships_tenant_id_policy_version_query_ve_key UNIQUE (tenant_id, policy_version, query_version, run_id, encounter_name, player_guid, difficulty_name, max_players, encounter_variant);
 
 ALTER TABLE parse_variant_results
-    ADD CONSTRAINT parse_variant_results_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text]))) NOT VALID;
+    ADD CONSTRAINT parse_variant_results_encounter_variant_check CHECK ((encounter_variant = ANY (ARRAY['normal'::text, 'medium'::text, 'hard'::text, 'lights_0'::text, 'lights_1'::text, 'lights_2'::text, 'lights_3'::text, 'lights_4'::text, 'towers_0'::text, 'towers_1'::text, 'towers_2'::text, 'towers_3'::text, 'towers_4'::text, 'trees_0'::text, 'trees_1'::text, 'trees_2'::text, 'trees_3'::text]))) NOT VALID;
 
 ALTER TABLE ONLY parse_variant_results
     ADD CONSTRAINT parse_variant_results_pkey PRIMARY KEY (tenant_id, instance_id, encounter_name, difficulty_name, max_players, encounter_variant, player_guid, metric);
