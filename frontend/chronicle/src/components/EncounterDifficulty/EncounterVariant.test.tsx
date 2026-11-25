@@ -184,3 +184,19 @@ it("exposes five Leviathan tower cohorts with only four towers hard", () => {
   }
   expect(activeEncounterVariants("Ulduar", ["Flame Leviathan"], { "Flame Leviathan": "hard" })).toBeUndefined();
 });
+it("supports Mimiron normal and hard cohorts with the binary shortcut and styling", () => {
+  expect(supportsEncounterVariant("Ulduar", "Mimiron")).toBe(true);
+  expect(supportsEncounterVariant("Other", "Mimiron")).toBe(false);
+  expect(encounterVariantOptions("Mimiron")).toEqual(["normal", "hard"]);
+  expect(highestEncounterVariant("Ulduar", "Mimiron")).toBe("hard");
+  expect(withHighestEncounterVariants("Ulduar", ["Mimiron"], { Hodir: "normal" })).toEqual({ Hodir: "normal", Mimiron: "hard" });
+  expect(activeEncounterVariants("Ulduar", ["Mimiron"], { Mimiron: "medium" })).toBeUndefined();
+  for (const variant of ["normal", "hard"] as const) {
+    expect(activeEncounterVariants("Ulduar", ["Mimiron"], { Mimiron: variant })).toEqual({ Mimiron: variant });
+    const chips = renderToStaticMarkup(<EncounterVariantChips boss="Mimiron" active={variant} onSelect={() => {}} />);
+    expect(chips.match(/<button /g)).toHaveLength(3);
+    expect(chips.match(/aria-pressed="true"/g)).toHaveLength(1);
+    const badge = renderToStaticMarkup(<EncounterVariantMark variant={variant} />);
+    expect(badge).toContain(variant === "normal" ? "bg-slate-500/15" : "bg-amber-500/15");
+  }
+});

@@ -4,6 +4,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/common/encounter"
 	"github.com/Emyrk/chronicle/combatlog/parser/common/instances/instancehook"
 	"github.com/Emyrk/chronicle/database"
+	"slices"
 	"time"
 )
 
@@ -18,6 +19,18 @@ func ulduarEncounterVariant(enc *encounter.Encounter, flavor database.WoWFlavor,
 	}
 	if enc.KillType != encounter.KillTypeClean && enc.KillType != encounter.KillTypePartial {
 		return ""
+	}
+	if enc.Name == "Mimiron" {
+		if enc.VariantAuras == nil || enc.Combat.Start.IsZero() || !enc.Combat.End.After(enc.Combat.Start) {
+			return ""
+		}
+		// Boss-target evidence is scoped to participating machines by the shared
+		// aura tracker. Any observed emergency-mode buff qualifies, even if it
+		// fades before the final phase. No earlier encounter is required.
+		if slices.Contains(enc.VariantAuras, 65101) || slices.Contains(enc.VariantAuras, 64582) {
+			return "hard"
+		}
+		return "normal"
 	}
 	if enc.Name == "Flame Leviathan" {
 		return leviathanEncounterVariant(enc)
