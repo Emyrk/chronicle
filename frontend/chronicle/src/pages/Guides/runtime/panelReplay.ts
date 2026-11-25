@@ -103,5 +103,7 @@ export function createStreamReplay(streams: ReadonlyArray<{ stream: PanelStream;
       }
       return true
     },
+    /** Ends the replay: the current or next run delivers nothing more and reports it finished. */
+    finish() { done = true },
   }
 }

@@ -232,11 +232,34 @@ events.onEvent(function(event)
 end)
 
 events.onComplete(function() ... end)   -- or Panel:OnComplete(fn); once, after the last event
+events.stop()                           -- or Panel:StopEvents(); end the replay early
 ```
 
-Every stream has a `chronicle.v1.events.<stream>` module with `onEvent(fn)` and `onComplete(fn)`. `Panel:OnEvent(fn)` without a stream name is the catch-all. When both a stream callback and the catch-all are registered, each event goes to the stream callback first, then the catch-all, with the same table. Registering again replaces the previous callback. Subscribing to a stream that `project.json` does not declare is an error.
+Every stream has a `chronicle.v1.events.<stream>` module with `onEvent(fn)`, `onComplete(fn)` and `stop()`. `Panel:OnEvent(fn)` without a stream name is the catch-all. When both a stream callback and the catch-all are registered, each event goes to the stream callback first, then the catch-all, with the same table. Registering again replaces the previous callback. Subscribing to a stream that `project.json` does not declare is an error.
 
 Events from all declared streams arrive interleaved in log order, so a `slain` event comes after the `damage` that caused it.
+
+### Stopping early
+
+Call `events.stop()` (or `Panel:StopEvents()`) when the module has seen enough. Once the current callback returns, Chronicle stops reading the log: no more events reach `onEvent`, and `onComplete` runs straight away, so the panel draws as usual. Called during startup, it skips every event. This is much faster than ignoring the remaining events, which Chronicle would otherwise still decode and deliver.
+
+```lua
+-- A panel that only makes sense for one encounter
+local first, tooMany
+events.onEvent(function(event)
+  first = first or event.encounterId
+  if event.encounterId ~= first then
+    tooMany = true
+    events.stop()
+    return
+  end
+  ...
+end)
+events.onComplete(function()
+  if tooMany then return showNotice("Select a single encounter.") end
+  ...
+end)
+```
 
 ### Common fields
 
@@ -295,6 +318,10 @@ Call `callback(event)` for every event of `stream`, or for every declared stream
 #### `Panel:OnComplete(callback: fun())`
 
 Call `callback()` once after the last event. Draw your results here.
+
+#### `Panel:StopEvents()`
+
+End the replay early: once the current callback returns, no more events are delivered and onComplete runs. Use it when the module knows it has seen enough, for example a single-encounter panel on a multi-encounter selection.
 
 <!-- END GENERATED LUA API REFERENCE: events -->
 

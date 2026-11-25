@@ -391,6 +391,9 @@ function Panel:OnEvent(stream, callback) end
 ---@param callback fun()
 function Panel:OnComplete(callback) end
 
+---End the replay early: once the current callback returns, no more events are delivered and onComplete runs. Use it when the module knows it has seen enough, for example a single-encounter panel on a multi-encounter selection.
+function Panel:StopEvents() end
+
 ---A unit from Chronicle.GetUnit. Lookups return a new table each call, so cache what you need.
 ---@class ChronicleUnit
 ---@field guid string

@@ -182,6 +182,8 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
           const luaStart = performance.now()
           active.panelStreamEvent(stream, event, encounter, selected.has(encounter))
           luaMs += performance.now() - luaStart
+          // Panel:StopEvents: nothing after this event is decoded or delivered; onComplete runs next.
+          if (active.stopEventsRequested()) replay.finish()
           if (count % 100 === 0) {
             const uiStart = performance.now()
             // The runtime bounds pending UI operations per batch (maxOperations), never the whole replay.
@@ -200,6 +202,8 @@ export function createPanelWorkerHandler(send: (value: unknown) => void) {
         // onComplete and reports replay-complete. Either report means everything Lua drew has been sent.
         advance = (untilMs: number, replayMs: number | null) => {
           const advanceStart = performance.now()
+          // StopEvents during startup ends the replay before its first event.
+          if (active.stopEventsRequested()) replay.finish()
           const finished = replay.run(onEvent, untilMs)
           if (finished) {
             const completeStart = performance.now()
