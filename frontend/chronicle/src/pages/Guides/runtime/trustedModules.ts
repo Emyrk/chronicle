@@ -11,6 +11,10 @@ const streamModule = (stream: PanelStream) => `
     function M.onComplete(callback)
       Panel:OnComplete(callback)
     end
+    -- Ends the replay: no more events after this callback returns; onComplete runs next.
+    function M.stop()
+      Panel:StopEvents()
+    end
     return M
   `
 
@@ -26,6 +30,10 @@ const MODULES: Readonly<Record<string, string>> = Object.freeze({
     function M.onComplete(callback)
       Panel:OnComplete(callback)
     end
+    -- Ends the replay: no more events after this callback returns; onComplete runs next.
+    function M.stop()
+      Panel:StopEvents()
+    end
     return M
   `,
   "chronicle/v1/events/damage.lua": `
@@ -36,6 +44,10 @@ const MODULES: Readonly<Record<string, string>> = Object.freeze({
     -- Called once after the last event of the replay; draw final totals here.
     function M.onComplete(callback)
       Panel:OnComplete(callback)
+    end
+    -- Ends the replay: no more events after this callback returns; onComplete runs next.
+    function M.stop()
+      Panel:StopEvents()
     end
     function M.bySource(onUpdate)
       local totals = {}

@@ -126,6 +126,7 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
   const panelCallbacks = new Map<PanelStream, number>()
   let anyEventCallback: number | undefined // Panel:OnEvent(fn), called for every declared stream.
   let completeCallback: number | undefined // Panel:OnComplete, called once after the host's last event.
+  let eventsStopped = false // Panel:StopEvents: the host delivers no more events and runs OnComplete.
   // Weak keys preserve replay order for retained messages without retaining Lua tables.
   const eventIndices = new WeakMap<object, number>()
   const allowedPanelStreams = new Set(options.panelStreams ?? [])
@@ -503,6 +504,8 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
         completeCallback = lauxlib.luaL_ref(state, lua.LUA_REGISTRYINDEX)
         return 0
       })
+      // Ends the replay early: the host stops after the current callback returns, then runs OnComplete.
+      registerFunction(L, "StopEvents", () => { eventsStopped = true; return 0 })
       lua.lua_setglobal(L, to_luastring("Panel"))
       const units = options.units ?? {}
       const playerGuids = Object.values(units).filter(unit => unit.player)
@@ -811,6 +814,8 @@ export function createGuideRuntime(options: GuideRuntimeOptions) {
       }
       lua.lua_pop(L, 1)
     },
+    /** Whether Lua called Panel:StopEvents; the host then delivers no more events and completes the replay. */
+    stopEventsRequested() { return eventsStopped },
     panelComplete() {
       ensureActive()
       if (!options.panelStreams) throw new GuideLuaError("panel profile is not enabled")

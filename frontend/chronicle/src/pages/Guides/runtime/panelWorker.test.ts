@@ -129,6 +129,38 @@ describe("Lua panel worker damage replay", () => {
     expect(messages.at(-1)).toMatchObject({ type: "replay-complete" })
   })
 
+  it("ends the replay at events.stop and still runs onComplete", () => {
+    const stopper = `
+      local label = CreateFrame("FontString", "out", UIParent)
+      local events = require("chronicle.v1.events")
+      local seen, first = 0, nil
+      events.onEvent(function(e)
+        first = first or e.encounterId
+        if e.encounterId ~= first then events.stop(); return end
+        seen = seen + 1
+      end)
+      events.onComplete(function() label:SetText("seen " .. seen) end)
+    `
+    const messages = replay("instance", { lua: stopper, data: [...encounter("e1", [1, 2, 3]), ...encounter("e2", new Array(5_000).fill(1))] })
+    expect(finalText(messages)).toEqual(["seen 3"])
+    // Only e2's first event was delivered before the replay ended.
+    expect(messages.at(-1)).toMatchObject({ type: "replay-complete", metrics: { events: 4, encounters: 2 } })
+    expect(messages).not.toContainEqual(expect.objectContaining({ type: "error" }))
+  })
+
+  it("skips every event when Panel:StopEvents runs during startup", () => {
+    const early = `
+      local label = CreateFrame("FontString", "out", UIParent)
+      local n = 0
+      Panel:OnEvent(function() n = n + 1 end)
+      Panel:OnComplete(function() label:SetText("events " .. n) end)
+      Panel:StopEvents()
+    `
+    const messages = replay("instance", { lua: early })
+    expect(finalText(messages)).toEqual(["events 0"])
+    expect(messages.at(-1)).toMatchObject({ type: "replay-complete", metrics: { events: 0 } })
+  })
+
   it("stops only at the manifest's own max_events", () => {
     expect(replay("instance", { maxEvents: 1 })).toContainEqual(expect.objectContaining({ type: "error", message: "panel exceeded its max_events (1)" }))
     expect(replay("instance", { maxEvents: 2 }).at(-1)).toMatchObject({ type: "replay-complete" })
@@ -282,6 +314,21 @@ describe("Lua panel worker Replay mode", () => {
   }
   const text = (messages: unknown[]) => messages.flatMap(message => (message as { operations?: Array<{ op: string; props?: { text?: string } }> }).operations ?? [])
     .filter(op => op.op === "set").map(op => op.props?.text).at(-1)
+
+  it("completes a paused incremental replay as soon as Lua stops events", () => {
+    const messages: unknown[] = []
+    const handle = createPanelWorkerHandler((message) => messages.push(message))
+    handle({ type: "start", entrypoint: "main.lua", streams: ["damage", "heal"], capabilities: ["ui"], sources: { "main.lua": `
+      local label = CreateFrame("FontString", "out", UIParent)
+      local count = 0
+      Panel:OnEvent(function() count = count + 1; if count == 2 then Panel:StopEvents() end end)
+      Panel:OnComplete(function() label:SetText("done " .. count) end)
+    ` } })
+    // The playhead at 1000ms would pause after all three events; the stop ends the replay after the second.
+    handle({ type: "streams", streams: { damage: new Uint8Array(damage), heal: new Uint8Array(heal) }, encounterIds: ["e1"], untilMs: 1_000, replayMs: 999 })
+    expect(text(messages)).toBe("done 2")
+    expect(messages.at(-1)).toMatchObject({ type: "replay-complete", metrics: { events: 2 } })
+  })
 
   it("delivers incremental events up to the playhead, resumes forward, and completes at the end", () => {
     const { messages, handle, streams } = begin()
