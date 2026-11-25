@@ -639,7 +639,7 @@ func (h *Hookable) ObserveUnits(m messages.Message) {
 	if h.observedUnits == nil {
 		h.observedUnits = make(map[guid.GUID]struct{})
 	}
-	for _, id := range messages.ObservedGUIDs(m, messages.ObservationPolicy{WoWForever: h.units.Flavor().Has(database.FlavorWoWForever)}) {
+	for _, id := range h.units.ObservedGUIDs(m) {
 		h.observedUnits[id] = struct{}{}
 	}
 }
