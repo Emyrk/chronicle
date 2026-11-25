@@ -451,6 +451,9 @@ type Damage struct {
 	Target    guid.GUID
 	HitType   types.HitType
 	Amount    int32
+	// DamageShield preserves reactive DAMAGE_SHIELD evidence for encounter policies.
+	// It does not remove the damage from event streams or ranking totals.
+	DamageShield bool
 	// Unranked is the effective portion excluded from DPS ranking. Overkill is
 	// separate and does not contribute to either ranked or unranked damage.
 	Unranked int64

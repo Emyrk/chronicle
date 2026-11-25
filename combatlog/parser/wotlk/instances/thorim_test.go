@@ -68,6 +68,13 @@ func TestThorimRoomMechanicBridgesEncounterPacks(t *testing.T) {
 	boss, ok := instance.Characters.Get(thorim)
 	require.True(t, ok)
 	require.False(t, boss.IsActive())
+	// Lightning Shield can retaliate against the balcony attack for positive
+	// damage. It must not end the gauntlet or activate Thorim either.
+	retaliation := damageEvent(player, thorim, 10)
+	retaliation.MessageBase = messages.Base(start.Add(41 * time.Second))
+	retaliation.SpellID = 49279
+	require.NoError(t, instance.Process(retaliation))
+	require.False(t, boss.IsActive())
 
 	bossStart := start.Add(54 * time.Second)
 	bossHit := damageEvent(player, thorim, 1)

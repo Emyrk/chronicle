@@ -235,6 +235,7 @@ func (p *Parser) suffixDamage(ts time.Time, base baseParams, spell *spellInfo, e
 		School:          school,
 		Trailer:         trailer,
 		EnvironmentType: envType,
+		DamageShield:    prefix == "DAMAGE_SHIELD",
 	})
 }
 

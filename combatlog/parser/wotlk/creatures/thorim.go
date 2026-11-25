@@ -248,11 +248,35 @@ func isThorimGauntletHit(damage *messages.Damage) bool {
 
 func isThorimBossHit(damage *messages.Damage) bool {
 	entry, ok := damage.Target.GetEntry()
-	return ok && entry == thorimEntry && isSuccessfulThorimDamage(damage)
+	return ok && entry == thorimEntry && isSuccessfulThorimDamage(damage) && !isThorimReactiveDamage(damage)
 }
 
 func isSuccessfulThorimDamage(damage *messages.Damage) bool {
 	return damage.Amount > 0 &&
 		!damage.HitType.Has(types.HitTypeImmune) &&
 		!damage.HitType.Has(types.HitTypeEvade)
+}
+
+// Balcony attacks can proc damage back onto Thorim before players can engage
+// him. Do not let these hits start activity or end the gauntlet phase. They
+// remain ordinary damage after he engages and in all damage/ranking streams.
+func isThorimReactiveDamage(damage *messages.Damage) bool {
+	if damage.DamageShield {
+		return true
+	}
+	id := damage.SpellID
+	if id == 0 && damage.SpellData != nil {
+		id = damage.SpellData.ID
+	}
+	// Some reactive spells arrive as SPELL_DAMAGE rather than DAMAGE_SHIELD.
+	// Use the raw ID so missing DBC data cannot enable premature activation.
+	switch id {
+	case 26363, 26364, 26365, 26366, 26367, 26369, 26370, 26371, 26372, 49278, 49279: // Lightning Shield damage ranks
+		return true
+	case 25997, 33619: // Eye for an Eye, Reflective Shield
+		return true
+	case 34913, 43043, 43044: // Molten Armor damage ranks
+		return true
+	}
+	return false
 }
