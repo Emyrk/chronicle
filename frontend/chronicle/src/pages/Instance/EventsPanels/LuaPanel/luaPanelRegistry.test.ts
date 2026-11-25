@@ -9,23 +9,29 @@ const main = { sha256: "main-sha", icon: "zap", updated_at: "2026-10-27T00:00:00
 describe("Lua panel discovery", () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it("lists tracked panels that have a release or a saved main", async () => {
+  it("offers releases for tracked modules and main only for authored modules", async () => {
     const projects = [
       { id: id("1"), owner_id: "me", kind: "panel", name: "Released", releases: [release("v2", false), release("v1")], main },
       { id: id("2"), owner_id: "me", kind: "panel", name: "Main only", releases: [], main },
       // The server lists the modules the user starred, so someone else's appears too.
-      { id: id("3"), owner_id: "other", kind: "panel", name: "Tracked", releases: [release("1.0")] },
+      { id: id("3"), owner_id: "other", kind: "panel", name: "Tracked", releases: [release("1.0")], main },
       { id: id("4"), owner_id: "me", kind: "panel", name: "Empty", releases: [release("v1", false)] },
+      { id: id("6"), owner_id: "other", kind: "panel", name: "Tracked main only", releases: [], main },
       { id: id("5"), owner_id: "me", kind: "guide", name: "Guide", releases: [release("v1")], main },
     ]
     const fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => projects })
     vi.stubGlobal("fetch", fetch)
 
-    const panels = await fetchTrackedLuaPanels()
+    const panels = await fetchTrackedLuaPanels("me")
     expect(panels.map(project => project.id)).toEqual([id("1"), id("2"), id("3")])
     expect(panels[0].release).toEqual({ tag: "v1", sha256: "v1-sha", icon: "swords" })
     expect(panels[1].release).toBeUndefined()
     expect(panels[1].main).toEqual({ sha256: "main-sha", icon: "zap" })
+    expect(panels[2].main).toBeUndefined()
+    expect(trackedLuaPanelOptions(panels).map(option => option.ref)).toEqual([
+      luaPanelRef(id("1"), "release"), luaPanelRef(id("1"), "main"),
+      luaPanelRef(id("2"), "main"), luaPanelRef(id("3"), "release"),
+    ])
     expect(fetch).toHaveBeenCalledWith("/api/v1/me/lua-projects/starred", { credentials: "include" })
   })
 

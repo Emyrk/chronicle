@@ -30,15 +30,16 @@ export interface LuaProjectCatalogEntry {
   main?: { sha256: string; icon?: string }
 }
 
-/** Panel modules the user tracks (stars; owners always do), with a release or a saved main. */
-export async function fetchTrackedLuaPanels(): Promise<LuaProjectCatalogEntry[]> {
+/** Panel modules the user tracks (stars; owners always do), with a release or an authored saved main. */
+export async function fetchTrackedLuaPanels(ownerId: string): Promise<LuaProjectCatalogEntry[]> {
   const projects = await listStarredProjects()
   return projects.flatMap(project => {
     const latest = latestRelease(project)
-    if (project.kind !== "panel" || !parseLuaPanelRef(luaPanelRef(project.id, "release")) || (!latest && !project.main)) return []
+    const main = project.owner_id === ownerId ? project.main : undefined
+    if (project.kind !== "panel" || !parseLuaPanelRef(luaPanelRef(project.id, "release")) || (!latest && !main)) return []
     return [{ id: project.id, kind: project.kind, name: project.name, author: project.author, description: project.description, stars: project.stars,
       ...(latest?.sha256 && { release: { tag: latest.tag, sha256: latest.sha256, icon: latest.icon } }),
-      ...(project.main && { main: { sha256: project.main.sha256, icon: project.main.icon } }) }]
+      ...(main && { main: { sha256: main.sha256, icon: main.icon } }) }]
   })
 }
 
@@ -49,7 +50,7 @@ export function useLuaPanelCatalog(enabled = true) {
     queryKey: ["lua-panel-catalog", ownerId], enabled: enabled && !!ownerId, staleTime: 60_000,
     queryFn: () => {
       if (!ownerId) throw new Error("Sign in to view your modules")
-      return fetchTrackedLuaPanels()
+      return fetchTrackedLuaPanels(ownerId)
     },
   })
 }
@@ -71,7 +72,7 @@ export interface LuaPanelOption {
   stars: number
 }
 
-/** Tracked modules as picker choices: the release, plus main (labelled so) when there is one. */
+/** Tracked modules as picker choices: the release, plus authored main (labelled so) when there is one. */
 export function trackedLuaPanelOptions(catalog: readonly LuaProjectCatalogEntry[]): LuaPanelOption[] {
   return catalog.flatMap(project => (["release", "main"] as const).filter(channel => project[channel]).map(channel => ({
     ref: luaPanelRef(project.id, channel), name: moduleDisplayName(project), channel, icon: project[channel]?.icon, description: project.description, stars: project.stars,
