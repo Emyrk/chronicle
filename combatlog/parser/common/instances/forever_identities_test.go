@@ -50,7 +50,7 @@ func TestForeverDungeonAddIdentities(t *testing.T) {
 	}
 	// Dungeon-specific lists contain their adds without redundant flavor gates.
 	require.Contains(t, RagefireChasmHostiles(), uint32(8996))
-	require.Contains(t, BlackfathomDeepsHostiles(), uint32(8996))
+	require.Contains(t, BlackfathomDeepsHostiles(database.WoWFlavor{database.FlavorVanilla}), uint32(8996))
 	for _, entry := range []uint32{250619, 250623, 250650} {
 		require.Contains(t, RuinsOfLordaeronHostiles(), entry)
 	}

@@ -232,7 +232,7 @@ func TestZoneDetector_VoidwalkerMinionDoesNotIdentifyZone(t *testing.T) {
 		distinct uint32
 	}{
 		{"ragefire chasm", instances.RagefireChasmHostiles(), 11324},
-		{"blackfathom deeps", instances.BlackfathomDeepsHostiles(), 4813},
+		{"blackfathom deeps", instances.BlackfathomDeepsHostiles(flavor), 4813},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

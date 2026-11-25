@@ -1921,17 +1921,8 @@ func ZulFarrakHostiles() map[uint32]Identity {
 	return hostile
 }
 
-// BlackfathomDeepsIdentifier adds explicitly selected flavor-specific bosses.
-func BlackfathomDeepsIdentifier(flavor database.WoWFlavor) *identifier.Identifier {
-	hostile := BlackfathomDeepsHostiles()
-	if flavor.Has(database.FlavorNightmareOfUrsol) {
-		LoadBosses(hostile, map[uint32]string{62530: "Velthelaxx the Defiler"})
-	}
-	return identifier.NewIdentifier(hostile)
-}
-
-// BlackfathomDeepsHostiles returns shared creature entries for Blackfathom Deeps (map 48).
-func BlackfathomDeepsHostiles() map[uint32]Identity {
+// BlackfathomDeepsHostiles returns creature entries for Blackfathom Deeps (map 48).
+func BlackfathomDeepsHostiles(flavor database.WoWFlavor) map[uint32]Identity {
 	hostile := make(map[uint32]Identity)
 	LoadAdds(hostile, map[uint32]string{
 		8996: "Voidwalker Minion",
@@ -1967,6 +1958,9 @@ func BlackfathomDeepsHostiles() map[uint32]Identity {
 		6243:  "Gelihast",
 		12902: "Lorgus Jett",
 	})
+	if flavor.Has(database.FlavorNightmareOfUrsol) {
+		LoadBosses(hostile, map[uint32]string{62530: "Velthelaxx the Defiler"})
+	}
 	return hostile
 }
 

@@ -48,5 +48,5 @@ func TestBlackfathomBossIdentities(t *testing.T) {
 			}
 		}
 	}
-	require.NotContains(t, BlackfathomDeepsHostiles(), uint32(62530), "Ursol boss must not leak into the shared base map")
+	require.NotContains(t, BlackfathomDeepsHostiles(database.WoWFlavor{database.FlavorVanilla}), uint32(62530), "Ursol boss must not leak into the shared base map")
 }
