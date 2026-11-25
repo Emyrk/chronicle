@@ -16,6 +16,7 @@ import (
 	"github.com/Emyrk/chronicle/combatlog/parser/guid"
 	"github.com/Emyrk/chronicle/combatlog/parser/types"
 	"github.com/Emyrk/chronicle/database"
+	"github.com/Emyrk/chronicle/database/gamedb/chrondbc"
 )
 
 func newThorimTestCharacters() *characters.Characters {
@@ -330,4 +331,116 @@ func TestThorimEncounterFactory(t *testing.T) {
 	require.IsType(t, &thorimCharacter{}, soldier)
 	require.IsType(t, &thorimCharacter{}, thorim)
 	require.IsType(t, characters.NeverActive{}, sif)
+}
+
+func TestThorimWaitsForPositiveIncomingDamage(t *testing.T) {
+	t.Parallel()
+	all := newThorimTestCharacters()
+	player, boss := guid.GUID(1), creatureGUID(thorimEntry)
+	start := time.Date(2026, 8, 28, 12, 0, 0, 0, time.UTC)
+	process := func(m messages.Message) { _, err := all.Process(m); require.NoError(t, err) }
+	process(testDamage(start, player, creatureGUID(32883)))
+	thorim, _ := all.Add(boss, start)
+	var transitions []phases.Transition
+	all.SetPhaseTransitionCallback(func(transition phases.Transition) { transitions = append(transitions, transition) })
+	outgoing := testDamage(start.Add(time.Second), boss, player)
+	outgoing.SpellData = &chrondbc.Spell{ID: 62042}
+	zero := testDamage(start.Add(2*time.Second), player, boss)
+	zero.Amount = 0
+	immune := testDamage(start.Add(3*time.Second), player, boss)
+	immune.HitType = types.HitTypeImmune
+	evade := testDamage(start.Add(4*time.Second), player, boss)
+	evade.HitType = types.HitTypeEvade
+	for _, m := range []messages.Message{
+		outgoing, zero, immune, evade,
+		&messages.SpellGo{MessageBase: messages.Base(start.Add(5 * time.Second)), Caster: boss, SpellData: &chrondbc.Spell{ID: 62042}},
+		&messages.Aura{MessageBase: messages.Base(start.Add(6 * time.Second)), Target: boss, SpellName: "Polymorph", Amount: 1},
+	} {
+		process(m)
+		require.False(t, thorim.IsActive())
+		require.Empty(t, thorim.Periods())
+		require.Empty(t, transitions)
+	}
+	process(testDamage(start.Add(10*time.Second), player, creatureGUID(32874)))
+	require.Len(t, transitions, 1)
+	require.False(t, thorim.IsActive())
+	hitAt := start.Add(20 * time.Second)
+	process(testDamage(hitAt, player, boss))
+	require.True(t, thorim.IsActive())
+	require.Len(t, thorim.Periods(), 1)
+	require.Equal(t, hitAt, thorim.Periods()[0].Start.Timestamp.Date())
+	require.Len(t, transitions, 2)
+	require.Equal(t, ThorimPhaseKeyP3, transitions[1].ToPhaseKey)
+	// Once engaged, outgoing damage continues normal activity.
+	process(testDamage(start.Add(30*time.Second), boss, player))
+	require.True(t, thorim.IsActive())
+	// Expiry on an outgoing event must not reopen activity without a fresh hit.
+	process(testDamage(start.Add(100*time.Second), boss, player))
+	require.False(t, thorim.IsActive())
+	require.Len(t, thorim.Periods(), 1)
+	process(testDamage(start.Add(101*time.Second), player, boss))
+	require.True(t, thorim.IsActive())
+	require.Len(t, thorim.Periods(), 2)
+	require.Equal(t, start.Add(101*time.Second), thorim.Periods()[1].Start.Timestamp.Date())
+}
+
+func TestThorimReactiveDamageDoesNotEngage(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		id      chrondbc.SpellID
+		shield  bool
+		dbcOnly bool
+	}{
+		{name: "reported Lightning Shield", id: 49279},
+		{name: "Lightning Shield without raw ID", id: 49279, dbcOnly: true},
+		{name: "lower rank Lightning Shield", id: 26364},
+		{name: "damage shield event", id: 53307, shield: true},
+		{name: "Eye for an Eye", id: 25997},
+		{name: "Reflective Shield", id: 33619},
+		{name: "Molten Armor", id: 43044},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			all := newThorimTestCharacters()
+			player, boss := guid.GUID(1), creatureGUID(thorimEntry)
+			start := time.Date(2026, 11, 9, 2, 41, 0, 768000000, time.UTC)
+			process := func(m messages.Message) { _, err := all.Process(m); require.NoError(t, err) }
+			process(testDamage(start, player, creatureGUID(32883)))
+			var transitions []phases.Transition
+			all.SetPhaseTransitionCallback(func(tr phases.Transition) { transitions = append(transitions, tr) })
+			process(testDamage(start.Add(43704*time.Millisecond), player, creatureGUID(32874)))
+			require.Len(t, transitions, 1)
+			process(testDamage(start.Add(49*time.Second), boss, player))
+			reactive := testDamage(start.Add(49904*time.Millisecond), player, boss)
+			reactive.Amount = 10
+			reactive.SpellID = tc.id
+			reactive.DamageShield = tc.shield
+			if tc.dbcOnly {
+				reactive.SpellID = 0
+				reactive.SpellData = &chrondbc.Spell{ID: tc.id}
+			}
+			process(reactive)
+			thorim, ok := all.Get(boss)
+			require.True(t, ok)
+			require.False(t, thorim.IsActive())
+			require.Empty(t, thorim.Periods())
+			require.Len(t, transitions, 1, "reactive damage must not end the gauntlet")
+			engageAt := start.Add(55 * time.Second)
+			hit := testDamage(engageAt, player, boss)
+			hit.SpellID = 48461 // Wrath, intentional incoming damage.
+			process(hit)
+			require.True(t, thorim.IsActive())
+			require.Equal(t, engageAt, thorim.Periods()[0].Start.Timestamp.Date())
+			require.Len(t, transitions, 2)
+			require.Equal(t, ThorimPhaseKeyP3, transitions[1].ToPhaseKey)
+			require.Equal(t, engageAt, transitions[1].Timestamp)
+			// Reactive damage still bumps normal activity after engagement.
+			reactive.MessageBase = messages.Base(start.Add(100 * time.Second))
+			process(reactive)
+			process(messages.TimedOut(start.Add(120 * time.Second)))
+			require.True(t, thorim.IsActive())
+			require.Equal(t, int32(10), reactive.Amount)
+		})
+	}
 }

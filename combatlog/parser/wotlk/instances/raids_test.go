@@ -450,16 +450,17 @@ func TestUlduarThorimEncounterPhases(t *testing.T) {
 		Amount:      1,
 		HitType:     types.HitTypeHit,
 	}))
-	require.NoError(t, instance.Process(&messages.Slain{
-		MessageBase: messages.Base(start.Add(10 * time.Second)),
-		Victim:      soldier,
-	}))
 	require.NoError(t, instance.Process(&messages.Damage{
 		MessageBase: messages.Base(start.Add(30 * time.Second)),
 		Caster:      &player,
 		Target:      guard,
 		Amount:      1,
 		HitType:     types.HitTypeHit,
+	}))
+	// Keep the arena anchor until a gauntlet unit is active. Thorim is still inactive.
+	require.NoError(t, instance.Process(&messages.Slain{
+		MessageBase: messages.Base(start.Add(31 * time.Second)),
+		Victim:      soldier,
 	}))
 	require.NoError(t, instance.Process(&messages.Damage{
 		MessageBase: messages.Base(start.Add(70 * time.Second)),

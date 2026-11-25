@@ -127,3 +127,30 @@ func TestCombatMessagesPreserveRawSpellIDWhenLookupFails(t *testing.T) {
 		})
 	}
 }
+
+func TestDamageShieldEvidence(t *testing.T) {
+	t.Parallel()
+	for _, event := range []string{"DAMAGE_SHIELD", "SPELL_DAMAGE", "DAMAGE_SPLIT"} {
+		t.Run(event, func(t *testing.T) {
+			t.Parallel()
+			line := fmt.Sprintf("11/8 20:41:50.672  %s,0x000000000008F422,\"Player\",0x511,0xF1300080610003EB,\"Thorim\",0x10a48,49279,\"Lightning Shield\",0x8,10,0,8,0,0,0,nil,nil,nil", event)
+			db := missingSpellTestDB{}
+			parser, err := New(context.Background(), slog.Default(), strings.NewReader(line), db, db, nil)
+			require.NoError(t, err)
+			msgs, err := parser.Advance(context.Background())
+			require.NoError(t, err)
+			var damage *messages.Damage
+			for _, m := range msgs {
+				if d, ok := m.(*messages.Damage); ok {
+					damage = d
+					break
+				}
+			}
+			require.NotNil(t, damage)
+			require.Equal(t, event == "DAMAGE_SHIELD", damage.DamageShield)
+			require.Equal(t, chrondbc.SpellID(49279), damage.SpellID)
+			require.Equal(t, int32(10), damage.Amount)
+			require.Nil(t, damage.SpellData)
+		})
+	}
+}

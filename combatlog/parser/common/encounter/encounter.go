@@ -40,7 +40,7 @@ type Encounter struct {
 	// VariantTooltip is display-only and never participates in cohort identity.
 	VariantTooltip     string
 	VariantTooltipData *encountervariant.Tooltip
-	// VariantAuras contains player auras observed active during this attempt.
+	// VariantAuras contains configured auras observed active during this attempt.
 	// Nil means the shared aura tracker was unavailable.
 	VariantAuras        []int32
 	HasEarlierEncounter bool

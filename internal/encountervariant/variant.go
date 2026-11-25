@@ -27,7 +27,7 @@ func Supported(instance, boss, key string) bool {
 		}
 	case "Assembly of Iron":
 		return key == "normal" || key == "medium" || key == "hard"
-	case "Mimiron", "Hodir", "XT-002 Deconstructor", "General Vezax":
+	case "Mimiron", "Hodir", "XT-002 Deconstructor", "General Vezax", "Thorim":
 		return key == "normal" || key == "hard"
 	default:
 		return false

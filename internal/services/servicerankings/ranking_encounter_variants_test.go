@@ -20,6 +20,11 @@ func TestRankingEncounterVariants(t *testing.T) {
 		invalid           bool
 	}{
 		{name: "combined omitted"},
+		{name: "Thorim normal", raw: `{"Thorim":"normal"}`, want: `{"Thorim":"normal"}`, instances: []string{"Ulduar"}, bosses: []string{"Thorim"}},
+		{name: "Thorim hard", raw: `{"Thorim":"hard"}`, want: `{"Thorim":"hard"}`, instances: []string{"Ulduar"}, bosses: []string{"Thorim"}},
+		{name: "Thorim rejects medium", raw: `{"Thorim":"medium"}`, instances: []string{"Ulduar"}, bosses: []string{"Thorim"}, invalid: true},
+		{name: "Thorim wrong instance", raw: `{"Thorim":"hard"}`, instances: []string{"Naxxramas"}, bosses: []string{"Thorim"}, invalid: true},
+		{name: "Thorim independent selection", raw: `{"Thorim":"normal","Hodir":"hard"}`, want: `{"Hodir":"hard","Thorim":"normal"}`, instances: []string{"Ulduar"}, bosses: []string{"Thorim", "Hodir"}},
 		{name: "Assembly normal", raw: `{"Assembly of Iron":"normal"}`, want: `{"Assembly of Iron":"normal"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}},
 		{name: "Assembly medium", raw: `{"Assembly of Iron":"medium"}`, want: `{"Assembly of Iron":"medium"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}},
 		{name: "Assembly hard", raw: `{"Assembly of Iron":"hard"}`, want: `{"Assembly of Iron":"hard"}`, instances: []string{"Ulduar"}, bosses: []string{"Assembly of Iron"}},

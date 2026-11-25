@@ -20,6 +20,17 @@ func ulduarEncounterVariant(enc *encounter.Encounter, flavor database.WoWFlavor,
 	if enc.KillType != encounter.KillTypeClean && enc.KillType != encounter.KillTypePartial {
 		return ""
 	}
+	if enc.Name == "Thorim" {
+		if enc.VariantAuras == nil || enc.Combat.Start.IsZero() || !enc.Combat.End.After(enc.Combat.Start) {
+			return ""
+		}
+		// Only the debuff on Thorim selects Normal. The identically named
+		// channel (62507) has no bearing on the encounter variant.
+		if slices.Contains(enc.VariantAuras, 62565) {
+			return "normal"
+		}
+		return "hard"
+	}
 	if enc.Name == "Mimiron" {
 		if enc.VariantAuras == nil || enc.Combat.Start.IsZero() || !enc.Combat.End.After(enc.Combat.Start) {
 			return ""

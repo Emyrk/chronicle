@@ -1046,6 +1046,8 @@ var UlduarFactory = &instances.CommonFactory{
 	EncounterVariant:  ulduarEncounterVariant,
 	VariantAuraSpells: []int32{62670, 62650, 62702, 62671},
 	VariantBossAuraSpells: map[uint32][]int32{
+		32865: {62565},
+		33147: {62565},
 		// Mimiron machines, including the registered Leviathan Mk II difficulty alias.
 		33432: {65101, 64582},
 		34106: {65101, 64582},

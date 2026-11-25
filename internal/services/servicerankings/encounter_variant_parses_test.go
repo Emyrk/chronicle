@@ -42,7 +42,7 @@ func (s *variantParseStore) ListParseVariantResultsForInstance(context.Context, 
 
 func TestIndividualParseEncounterVariantIsolation(t *testing.T) {
 	t.Parallel()
-	for _, boss := range []string{"Hodir", "XT-002 Deconstructor", "General Vezax"} {
+	for _, boss := range []string{"Hodir", "XT-002 Deconstructor", "General Vezax", "Thorim"} {
 		for _, metric := range []parsepolicy.Metric{parsepolicy.MetricDPS, parsepolicy.MetricHPS} {
 			t.Run(boss+"/"+string(metric), func(t *testing.T) {
 				t.Parallel()
