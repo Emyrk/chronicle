@@ -49,9 +49,9 @@ export const BOTTOM_SLOTS: GearSlotDef[] = [
   { outfitIndex: 17, label: "Ranged" },
 ];
 
-/** Maps a class name to the CSS variable */
+/** Maps API names (DEATH_KNIGHT) and display names (Death Knight) to CSS tokens. */
 export function getClassColorVar(cls: string): string {
-  return `var(--color-class-${cls.toLowerCase()})`;
+  return `var(--color-class-${cls.toLowerCase().replace(/[\s_-]+/g, "")})`;
 }
 
 /** Maps item quality number to a Tailwind border-quality-* utility */
