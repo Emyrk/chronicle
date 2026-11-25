@@ -452,7 +452,7 @@ var (
 		Category:  InstanceCategoryDungeon,
 		ZoneNames: []string{"blackfathom deeps"},
 		MapIDs:    []uint32{48},
-		Hostiles:  FromMap(BlackfathomDeepsHostiles()),
+		Hostiles:  BlackfathomDeepsIdentifier,
 	}
 
 	UldamanFactory = &CommonFactory{
