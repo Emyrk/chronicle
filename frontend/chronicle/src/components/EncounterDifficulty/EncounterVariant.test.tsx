@@ -165,3 +165,22 @@ it("keeps council tiers independent and the Hard mode shortcut above Medium mode
   expect(withHighestEncounterVariants("Ulduar", ["Assembly of Iron"], variants, true)).toEqual({ Hodir: "normal" });
   expect(variants).toEqual({ "Assembly of Iron": "medium", Hodir: "normal" });
 });
+
+it("exposes five Leviathan tower cohorts with only four towers hard", () => {
+  const options = encounterVariantOptions("Flame Leviathan");
+  expect(options).toEqual(["towers_0", "towers_1", "towers_2", "towers_3", "towers_4"]);
+  expect(supportsEncounterVariant("Ulduar", "Flame Leviathan")).toBe(true);
+  expect(highestEncounterVariant("Ulduar", "Flame Leviathan")).toBe("towers_4");
+  expect(withHighestEncounterVariants("Ulduar", ["Flame Leviathan"], { Hodir: "normal" })).toEqual({ Hodir: "normal", "Flame Leviathan": "towers_4" });
+  for (const [count, variant] of options.entries()) {
+    expect(isEncounterVariant(variant)).toBe(true);
+    expect(encounterVariantLabel(variant)).toBe(`${count} Tower`);
+    expect(isHardEncounterVariant(variant)).toBe(count === 4);
+    const badge = renderToStaticMarkup(<EncounterVariantMark variant={variant} />);
+    expect(badge).toContain(`${count} Tower`);
+    expect(badge.includes("text-amber")).toBe(count === 4);
+    const chips = renderToStaticMarkup(<EncounterVariantChips boss="Flame Leviathan" active={variant} onSelect={() => {}} />);
+    expect(chips.match(/aria-pressed="true"/g)).toHaveLength(1);
+  }
+  expect(activeEncounterVariants("Ulduar", ["Flame Leviathan"], { "Flame Leviathan": "hard" })).toBeUndefined();
+});

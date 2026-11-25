@@ -77,6 +77,8 @@ type CommonFactory struct {
 
 	// VariantAuraSpells selects player auras to observe through the shared tracker.
 	VariantAuraSpells []int32
+	// VariantBossAuraSpells selects boss-target auras by creature entry.
+	VariantBossAuraSpells map[uint32][]int32
 
 	Name      string
 	Category  InstanceCategory
