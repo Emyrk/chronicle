@@ -214,7 +214,7 @@ function LiveInstanceHub({ instanceName, names, summary, stale, realm, realmIDs,
   subject: HubSubject; onSubject: (subject: HubSubject) => void; onOpenGuildRatings: (view: RatingView) => void
   onRealm: (name: string) => void; onCohort: (difficulty: string, size: string) => void; onEncounters: (bosses: readonly string[]) => void
 }) {
-  const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
+  const raids = summary.instances.filter((row) => row.instance_name === instanceName)
   // The summary resolves the URL's cohort, or the busiest one when none (or a stale one) is given.
   const resolved = summary.selected_cohort
   const cohort = (size !== null && difficulty !== null
@@ -308,7 +308,7 @@ function LiveHubContent({ context, summary, stale = false, realmName, realmIDs, 
   const setPerformancePeriod = useCallback((period: PerformancePeriod) => {
     setParams((previous) => hubPerformancePeriodParams(previous, period))
   }, [setParams])
-  const raids = summary.instances.filter((row) => row.instance_name === instanceName && row.category === "raid")
+  const raids = summary.instances.filter((row) => row.instance_name === instanceName)
   const chosen = cohort && raids.some((row) => row.difficulty_name === cohort.difficulty_name && row.max_players === cohort.max_players) ? cohort : undefined
   // Hand-picked bosses (empty: the preset, i.e. whole-raid boards). One boss still has its own views.
   const picked = selection.kind === "bosses" ? selection.bosses : []

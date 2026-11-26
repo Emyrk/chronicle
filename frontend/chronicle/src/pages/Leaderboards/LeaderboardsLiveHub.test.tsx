@@ -125,6 +125,20 @@ describe("live Storybook Hub", () => {
     expect(vi.mocked(useRankingsKillTimeLeaderboard).mock.calls.at(-1)).toEqual(combined);
   });
 
+  it("loads the full-clear board for a dungeon's zero-size cohort", () => {
+    setSummary({ ...summary,
+      instances: [{ ...summary.instances[0], instance_name: "Deadmines", category: "dungeon", difficulty_name: "", max_players: 0 }],
+      selected_cohort: { difficulty_name: "", max_players: 0 },
+      encounters: [], progression_bosses: [], ranking_encounter_sets: [],
+    });
+    const html = hub("/leaderboards/Deadmines/speedruns");
+    const options = vi.mocked(useQuery).mock.calls.map(([options]) => options)
+      .find((options) => options.queryKey?.[0] === "hub-live-speedruns");
+    expect(options?.enabled).toBe(true);
+    expect(options?.queryKey).toEqual(["hub-live-speedruns", "Deadmines", undefined, "", 0, "guild", 1]);
+    expect(html).not.toContain("Choose a difficulty");
+  });
+
   it("requests full-clear pages with one lookahead row and a page-specific cache key", async () => {
     hub("/leaderboards/Molten-Core/speedruns?page=2");
     const options = vi.mocked(useQuery).mock.calls.map(([options]) => options)
