@@ -44,6 +44,7 @@ var (
 		ZoneNames: []string{"wailing caverns", "哀嚎洞穴"},
 		MapIDs:    []uint32{43},
 		Hostiles:  FromMap(WailingCavernsHostiles()),
+    FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings { return WailingCavernsSpeedrunRequirements(fl) },
 	}
 
 	RazorfenKraulFactory = &CommonFactory{

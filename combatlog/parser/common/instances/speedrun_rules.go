@@ -37,6 +37,37 @@ func Level70Cap(fl database.WoWFlavor) *rankings.LevelRangeRequirement {
 	return nil
 }
 
+func WailingCavernsSpeedrunRequirements(fl database.WoWFlavor) *rankings.Rankings {
+	bosses := []rankings.SpeedrunRequirement{
+		{Name: "Lady Anacondra", EntryIDs: []uint32{3671}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Lord Cobrahn", EntryIDs: []uint32{3669}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Kresh", EntryIDs: []uint32{3653}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Skum", EntryIDs: []uint32{3674}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Lord Pythas", EntryIDs: []uint32{3670}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Lord Serpentis", EntryIDs: []uint32{3673}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Verdan the Everliving", EntryIDs: []uint32{5775}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Mutanus the Devourer", EntryIDs: []uint32{3654}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}
+
+	if fl.Has(database.FlavorNightmareOfUrsol) {
+		bosses = append(bosses, []rankings.SpeedrunRequirement{
+			{Name: "Zandara Windhoof", EntryIDs: []uint32{61968}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			{Name: "Vangros", EntryIDs: []uint32{61965}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			{Name: "Deviate Faerie Dragon", EntryIDs: []uint32{5912}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		}...)
+	}
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			ReentryGap:   rankings.DungeonReentryGap,
+			Requirements: bosses,
+			LevelRange: Lunatic(fl, &rankings.LevelRangeRequirement{
+				MinLevel: 0,
+				MaxLevel: 24,
+			}),
+		},
+	}
+}
+
 func ShadowfangKeepSpeedrunRequirements(fl database.WoWFlavor) *rankings.Rankings {
 	bosses := []rankings.SpeedrunRequirement{
 		{Name: "Razorclaw the Butcher", EntryIDs: []uint32{3886}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
