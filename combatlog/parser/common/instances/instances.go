@@ -30,11 +30,12 @@ var (
 	}
 
 	ShadowfangKeepFactory = &CommonFactory{
-		Name:      "Shadowfang Keep",
-		Category:  InstanceCategoryDungeon,
-		ZoneNames: []string{"shadowfang keep", "影牙城堡"},
-		MapIDs:    []uint32{33},
-		Hostiles:  ShadowfangKeepHostiles,
+		Name:             "Shadowfang Keep",
+		Category:         InstanceCategoryDungeon,
+		ZoneNames:        []string{"shadowfang keep", "影牙城堡"},
+		MapIDs:           []uint32{33},
+		Hostiles:         ShadowfangKeepHostiles,
+		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings { return ShadowfangKeepSpeedrunRequirements(fl) },
 	}
 
 	WailingCavernsFactory = &CommonFactory{
@@ -229,8 +230,8 @@ var (
 		ZoneNames: []string{"ragefire chasm", "怒焰裂谷"},
 		MapIDs:    []uint32{389},
 		Hostiles:  FromMap(RagefireChasmHostiles()),
-		FlavoredRankings: func(database.WoWFlavor) *rankings.Rankings {
-			return RagefireChasmSpeedrunRequirements()
+		FlavoredRankings: func(fl database.WoWFlavor) *rankings.Rankings {
+			return RagefireChasmSpeedrunRequirements(fl)
 		},
 	}
 

@@ -5,6 +5,16 @@ import (
 	"github.com/Emyrk/chronicle/database"
 )
 
+func Lunatic(fl database.WoWFlavor, original *rankings.LevelRangeRequirement) *rankings.LevelRangeRequirement {
+	if fl.Has(database.FlavorLunatic) {
+		return &rankings.LevelRangeRequirement{
+			MinLevel: 0,
+			MaxLevel: 1,
+		}
+	}
+	return original
+}
+
 func Level60Cap(fl database.WoWFlavor) *rankings.LevelRangeRequirement {
 	if fl.Has(database.FlavorWrath, database.FlavorTBC) {
 		return &rankings.LevelRangeRequirement{
@@ -27,7 +37,39 @@ func Level70Cap(fl database.WoWFlavor) *rankings.LevelRangeRequirement {
 	return nil
 }
 
-func RagefireChasmSpeedrunRequirements() *rankings.Rankings {
+func ShadowfangKeepSpeedrunRequirements(fl database.WoWFlavor) *rankings.Rankings {
+	bosses := []rankings.SpeedrunRequirement{
+		{Name: "Razorclaw the Butcher", EntryIDs: []uint32{3886}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Baron Silverlaine", EntryIDs: []uint32{3887}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Rethilgore", EntryIDs: []uint32{3914}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Bazzalan", EntryIDs: []uint32{11519}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Wolf Master Nandos", EntryIDs: []uint32{3927}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Fenrus the Devourer", EntryIDs: []uint32{4274}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Archmage Arugal", EntryIDs: []uint32{4275}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Commander Springvale", EntryIDs: []uint32{4278}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Odo the Blindwatcher", EntryIDs: []uint32{4279}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		{Name: "Commander Springvale", EntryIDs: []uint32{4278}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+	}
+
+	if fl.Has(database.FlavorNightmareOfUrsol) {
+		bosses = append(bosses, []rankings.SpeedrunRequirement{
+			{Name: "Prelate Ironmane", EntryIDs: []uint32{61969}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+			{Name: "Spectral Cleric", EntryIDs: []uint32{61970}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
+		}...)
+	}
+	return &rankings.Rankings{
+		Speedrun: &rankings.SpeedrunRules{
+			ReentryGap:   rankings.DungeonReentryGap,
+			Requirements: bosses,
+			LevelRange: Lunatic(fl, &rankings.LevelRangeRequirement{
+				MinLevel: 0,
+				MaxLevel: 30,
+			}),
+		},
+	}
+}
+
+func RagefireChasmSpeedrunRequirements(fl database.WoWFlavor) *rankings.Rankings {
 	return &rankings.Rankings{
 		Speedrun: &rankings.SpeedrunRules{
 			ReentryGap: rankings.DungeonReentryGap,
@@ -37,10 +79,10 @@ func RagefireChasmSpeedrunRequirements() *rankings.Rankings {
 				{Name: "Oggleflint", EntryIDs: []uint32{11517}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 				{Name: "Bazzalan", EntryIDs: []uint32{11519}, Count: 1, Category: rankings.SpeedrunCategoryBosses},
 			},
-			LevelRange: &rankings.LevelRangeRequirement{
+			LevelRange: Lunatic(fl, &rankings.LevelRangeRequirement{
 				MinLevel: 0,
 				MaxLevel: 20,
-			},
+			}),
 		},
 	}
 }
@@ -66,10 +108,10 @@ func DeadminesSpeedrunRequirements(fl database.WoWFlavor) *rankings.Rankings {
 		Speedrun: &rankings.SpeedrunRules{
 			ReentryGap:   rankings.DungeonReentryGap,
 			Requirements: requirements,
-			LevelRange: &rankings.LevelRangeRequirement{
+			LevelRange: Lunatic(fl, &rankings.LevelRangeRequirement{
 				MinLevel: 0,
 				MaxLevel: 26,
-			},
+			}),
 		},
 	}
 }
