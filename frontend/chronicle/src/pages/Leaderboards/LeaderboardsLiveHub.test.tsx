@@ -7,8 +7,12 @@ import { useCareerLeaderboard } from "@/api/career"
 import type { CareerLeaderboardEntry, CareerLeaderboardResponse } from "@/api/typesGenerated"
 import { useRankingsKillTimeLeaderboard, useRankingsLeaderboard, useRankingsKillTimesByBoss } from "@/api/rankingsQueries"
 import { useHubSummary, type HubSummary } from "./Hub/hubSummaryAdapter"
-import { useSiteConfig } from "@/api/queries"
+import { useSiteConfig, useSupportedInstances } from "@/api/queries"
+import { useLeaderboardConfiguration } from "@/api/leaderboardConfiguration"
 import { LeaderboardsLiveHub } from "./LeaderboardsLiveHub"
+
+import { resolvedHubMetadata } from "./Hub/resolvedHubAdapter"
+import { configuration } from "./Hub/v2RatingAdapter.testdata"
 
 const summary = { landing_previews: [], instances: [{ instance_name: "Molten Core", difficulty_name: "Normal", max_players: 40, category: "raid", total_kills: 12, top_players: [] }],
   realms: [{ id: "realm-id", name: "Nordanaar" }], encounters: [
@@ -44,6 +48,7 @@ function careerResponse(entries: Partial<Record<"peak" | "mastery" | "renown", C
   }
 }
 
+vi.mock("@/api/leaderboardConfiguration", () => ({ useLeaderboardConfiguration: vi.fn(() => ({ data: undefined })) }))
 vi.mock("@/api/career", () => ({ useCareerLeaderboard: vi.fn() }))
 vi.mock("./Hub/landingHighlights", async (importOriginal) => ({
   ...await importOriginal<typeof import("./Hub/landingHighlights")>(),
@@ -65,7 +70,7 @@ vi.mock("@/api/rankingsQueries", () => ({
 vi.mock("@/api/queries", () => ({
   useSession: () => ({ data: undefined }),
   useSiteConfig: vi.fn(() => ({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false })),
-  useSupportedInstances: () => ({ data: [{ name: "Molten Core", category: "raid", raid_progression_order: 100 }] }),
+  useSupportedInstances: vi.fn(() => ({ data: [{ name: "Molten Core", category: "raid", raid_progression_order: 100 }] })),
   useRealms: () => ({ data: [{ id: "realm-id", name: "Nordanaar" }], isPending: false, isError: false }),
   useSupportedInstanceProgressionBosses: () => ({ data: new Map([["Molten Core", new Set(["Ragnaros"])]]), isPending: false, isError: false }),
   useSupportedInstanceRankingEncounterSets: () => ({ data: new Map([["Molten Core", [{ id: "", label: "Default", encounters: ["Ragnaros"] }]]]), isPending: false, isError: false }),
@@ -97,6 +102,8 @@ function hub(url: string) {
 describe("live Storybook Hub", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(useLeaderboardConfiguration).mockReturnValue({ data: undefined } as ReturnType<typeof useLeaderboardConfiguration>)
+    vi.mocked(useSupportedInstances).mockReturnValue({ data: [{ name: "Molten Core", category: "raid", raid_progression_order: 100 }] } as ReturnType<typeof useSupportedInstances>)
     vi.mocked(useSiteConfig).mockReturnValue({ data: { root_tenant_ratings_disabled: false }, isPending: false, isError: false } as ReturnType<typeof useSiteConfig>)
     vi.mocked(useCareerLeaderboard).mockReturnValue({ data: undefined, isPending: true, isError: false } as ReturnType<typeof useCareerLeaderboard>)
     vi.mocked(useLandingHighlights).mockReturnValue({ data: undefined, isFetching: true, isError: false, refetch: vi.fn() } as unknown as ReturnType<typeof useLandingHighlights>)
@@ -123,6 +130,26 @@ describe("live Storybook Hub", () => {
     const combined = vi.mocked(useRankingsKillTimeLeaderboard).mock.calls.at(-1);
     hub("/leaderboards/Molten-Core/speedruns?encounters=Ragnaros&encounter_variant=hard");
     expect(vi.mocked(useRankingsKillTimeLeaderboard).mock.calls.at(-1)).toEqual(combined);
+  });
+
+  it.each(["overview", "ratings", "speedruns", "performances", "statistics", "parsing", "rulesets"] as const)("shows dungeon cards rather than raids on the Lunatic %s landing", (tab) => {
+    setSummary(resolvedHubMetadata(
+      { ...configuration, effective_flavor: ["vanilla", "lunatic"] },
+      { tab, performance: "dps" }, [], [], [
+        { ...summary.instances[0], instance_name: "Raid" },
+        { ...summary.instances[0], instance_name: "Deadmines", category: "dungeon", difficulty_name: "", max_players: 0 },
+      ],
+    ));
+    vi.mocked(useLeaderboardConfiguration).mockReturnValue({ data: { ...configuration, effective_flavor: ["vanilla", "lunatic"] } } as unknown as ReturnType<typeof useLeaderboardConfiguration>);
+    vi.mocked(useSupportedInstances).mockReturnValue({ data: [
+      { name: "Raid", category: "raid", speedrun_rules: { requirements: [] } },
+      { name: "Deadmines", category: "dungeon", speedrun_rules: { requirements: [] } },
+    ] } as unknown as ReturnType<typeof useSupportedInstances>);
+    const html = hub(`/leaderboards/${tab}`);
+    expect(html).toContain("Deadmines</h2>");
+    expect(html).toContain("Dungeons</h2>");
+    expect(html).not.toContain("Raid</h2>");
+    expect(html).not.toContain("Raids</h2>");
   });
 
   it("loads the full-clear board for a dungeon's zero-size cohort", () => {

@@ -12,19 +12,16 @@ const raid: RankingsInstanceSummary = {
 };
 const lunatic = { ...configuration, effective_flavor: ["vanilla", "lunatic"] };
 
-describe("Lunatic dungeon speedrun discovery", () => {
-  it("lists published dungeons instead of configured raids for Lunatic speedruns", () => {
-    const summary = resolvedHubMetadata(lunatic, { tab: "speedruns", performance: "dps" }, [], [], [raid, dungeon]);
+const landingTabs = [undefined, "overview", "ratings", "speedruns", "performances", "statistics", "parsing", "rulesets"] as const;
+
+describe("Lunatic dungeon discovery", () => {
+  it.each(landingTabs)("lists published dungeons instead of configured raids for the %s landing", (tab) => {
+    const summary = resolvedHubMetadata(lunatic, { tab, performance: "dps" }, [], [], [raid, dungeon]);
     expect(summary.instances).toEqual([dungeon]);
   });
 
-  it.each(["overview", "ratings", "performances", "statistics", "parsing", "rulesets"] as const)("keeps configured instances for the %s landing", (tab) => {
-    const summary = resolvedHubMetadata(lunatic, { tab, performance: "dps" }, [], [], [raid, dungeon]);
-    expect(summary.instances.map((instance) => instance.instance_name)).toEqual(["Raid"]);
-  });
-
-  it("keeps configured speedrun instances without the Lunatic flavor", () => {
-    const summary = resolvedHubMetadata(configuration, { tab: "speedruns", performance: "dps" }, [], [], [raid, dungeon]);
+  it.each(landingTabs)("keeps configured instances without the Lunatic flavor for the %s landing", (tab) => {
+    const summary = resolvedHubMetadata(configuration, { tab, performance: "dps" }, [], [], [raid, dungeon]);
     expect(summary.instances.map((instance) => instance.instance_name)).toEqual(["Raid"]);
   });
 

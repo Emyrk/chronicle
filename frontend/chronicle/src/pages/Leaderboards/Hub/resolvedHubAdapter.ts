@@ -63,12 +63,9 @@ export function resolvedHubMetadata(
       instance,
     ]);
   }
-  // Lunatic speedruns rank dungeon clears, independently of raid rating policy.
-  // Keep dungeon cohorts available when opening a card, too.
-  const dungeonSpeedruns = config.effective_flavor.includes("lunatic") &&
-    (request.tab === "speedruns" || publishedInstances?.some(
-      (instance) => instance.instance_name === request.instanceName && instance.category === "dungeon",
-    ));
+  // Lunatic discovers published dungeons on every tab, independently of raid
+  // rating policy. Keep the same dungeon cohorts when opening a card.
+  const dungeonBoards = config.effective_flavor.includes("lunatic");
   const configuredInstances = config.rows
     .filter((row) => row.kind === "instance")
     .flatMap((row) => {
@@ -99,7 +96,7 @@ export function resolvedHubMetadata(
         };
       });
     });
-  const instances = dungeonSpeedruns
+  const instances = dungeonBoards
     ? (publishedInstances ?? []).filter((instance) => instance.category === "dungeon")
     : configuredInstances;
   const choices = instances.filter(
