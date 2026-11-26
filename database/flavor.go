@@ -79,10 +79,11 @@ const (
 )
 
 // LeaderboardRelevant explicitly classifies tags that may select shared leaderboard
-// configuration. Server identity tags never specialize leaderboard configuration.
+// configuration. Lunatic is an explicit challenge-policy exception; other server
+// identity tags never specialize leaderboard configuration.
 func (t FlavorTag) LeaderboardRelevant() bool {
 	switch t {
-	case FlavorVanilla, FlavorTBC, FlavorWrath, FlavorNightmareOfUrsol, FlavorVanillaPlus:
+	case FlavorVanilla, FlavorTBC, FlavorWrath, FlavorNightmareOfUrsol, FlavorVanillaPlus, FlavorLunatic:
 		return true
 	default:
 		return false

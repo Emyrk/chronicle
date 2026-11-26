@@ -333,6 +333,7 @@ export async function fetchResolvedHubSummary(
   if (!request.instanceName || !metadata.selected_cohort) return metadata;
   // These dungeon boards have speedrun data, but no v2 raid rating policy.
   if (request.metadataOnly && config.effective_flavor.includes("lunatic") &&
+    !config.rows.some((row) => row.kind === "instance" && row.instance_name === request.instanceName) &&
     metadata.instances.some((instance) => instance.instance_name === request.instanceName && instance.category === "dungeon")) return metadata;
   const p = new URLSearchParams({
     view: "cohorts",

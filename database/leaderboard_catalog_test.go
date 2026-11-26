@@ -10,7 +10,7 @@ import (
 
 func TestLeaderboardFlavors(t *testing.T) {
 	t.Parallel()
-	want := database.WoWFlavor{database.FlavorNightmareOfUrsol, database.FlavorTBC, database.FlavorVanilla, database.FlavorVanillaPlus, database.FlavorWrath}
+	want := database.WoWFlavor{database.FlavorLunatic, database.FlavorNightmareOfUrsol, database.FlavorTBC, database.FlavorVanilla, database.FlavorVanillaPlus, database.FlavorWrath}
 	for _, tag := range database.AllFlavorTagValues() {
 		require.Equal(t, want.Has(tag), tag.LeaderboardRelevant(), tag)
 	}
