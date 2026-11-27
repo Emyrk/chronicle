@@ -166,6 +166,17 @@ describe("map replay model", () => {
     ]);
   });
 
+  it("ends a movement trail at a teleport such as a graveyard respawn", () => {
+    const respawn = [
+      { timestampMs: 0, x: 0, y: 0, mapId: 489 },
+      { timestampMs: 100, x: 1, y: 0, mapId: 489 },
+      { timestampMs: 200, x: 400, y: 0, mapId: 489 },
+      { timestampMs: 300, x: 401, y: 0, mapId: 489 },
+    ];
+    const trail = movementTrailPoints(respawn, respawn[3], 300, true, (sample) => ({ leftPercent: sample.x, topPercent: sample.y }));
+    expect(trail.map(({ point }) => point.leftPercent)).toEqual([401, 400]);
+  });
+
   it("finds the latest health sample at or before the replay cursor", () => {
     const health = [
       { timestampMs: 100, current: 1000, max: 1000, absorb: 0 },

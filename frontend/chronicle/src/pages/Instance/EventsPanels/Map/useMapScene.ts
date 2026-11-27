@@ -156,6 +156,8 @@ export interface MapSceneMarker {
   debuffs?: number[];
   /** Power at the cursor (0-1) and its raid-frame colour, for the strip under the health bar; absent without power. */
   power?: { fraction: number; color: string };
+  /** An objective the unit carries (e.g. a battleground flag), drawn as a badge on the 2D token. */
+  carrying?: { color: string; title: string };
 }
 
 export interface MapSceneGround {
