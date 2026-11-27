@@ -1094,8 +1094,8 @@ Move the Replay playhead to `ms` from the start of the selected encounters; valu
 
 Load with `require`. The `chronicle` module names are reserved; you cannot ship your own files under them.
 
-- **`chronicle.v1.events`**: `onEvent(fn)` for every declared stream, `onComplete(fn)`. See [Events](#events).
-- **`chronicle.v1.events.<stream>`**: `onEvent(fn)`, `onComplete(fn)` for one stream, e.g. `chronicle.v1.events.aura`. The `damage` module also has `bySource(onUpdate)`.
+- **`chronicle.v1.events`**: `onEvent(fn)` for every declared stream, `onComplete(fn)`, `stop()`. See [Events](#events).
+- **`chronicle.v1.events.<stream>`**: `onEvent(fn)`, `onComplete(fn)`, `stop()` for one stream, e.g. `chronicle.v1.events.aura`. The `damage` module also has `bySource(onUpdate)`.
 - **`chronicle.v1.ui`**: host-owned widgets.
   - `metric(parent, id, label, value, x, y)` draws a label and a large value. It returns `{ frame, set(v) }`.
   - `table(parent, id, rows, x, y)` draws up to 50 `{label, value}` rows as text.
