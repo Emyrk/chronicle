@@ -1,5 +1,6 @@
 import { Loader2, Swords, Timer } from "lucide-react"
 import { useSupportedInstances } from "@/api/queries"
+import { useLeaderboardConfiguration } from "@/api/leaderboardConfiguration"
 import { METRIC_THEMES } from "./Ratings/ratingThemes"
 import { getInstanceCategory } from "@/pages/Logs/utils/instanceCategory"
 import { groupByRaidLevel } from "@/pages/Logs/utils/instanceProgressionOrder"
@@ -13,6 +14,7 @@ export function RulesetsLanding({ instanceHref, onOpen }: {
 } = {}) {
   const { data, isLoading, isError } = useSupportedInstances()
   const renown = useRenownAwards()
+  const { data: configuration } = useLeaderboardConfiguration()
 
   if (isLoading) {
     return (
@@ -25,7 +27,10 @@ export function RulesetsLanding({ instanceHref, onOpen }: {
     return <p className="py-12 text-center text-muted-foreground">Could not load rulesets. Please try again later.</p>
   }
 
-  const instances = rulesetEntries(data ?? [], renown)
+  const supported = configuration?.effective_flavor?.includes("lunatic")
+    ? (data ?? []).filter((instance) => getInstanceCategory(instance.name, data) === "dungeon")
+    : data ?? []
+  const instances = rulesetEntries(supported, renown)
   if (instances.length === 0) {
     return (
       <div className="rounded-xl border p-8 text-center text-muted-foreground">

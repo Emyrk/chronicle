@@ -63,7 +63,10 @@ export function resolvedHubMetadata(
       instance,
     ]);
   }
-  const instances = config.rows
+  // Lunatic discovers published dungeons on every tab, independently of raid
+  // rating policy. Keep the same dungeon cohorts when opening a card.
+  const dungeonBoards = config.effective_flavor.includes("lunatic");
+  const configuredInstances = config.rows
     .filter((row) => row.kind === "instance")
     .flatMap((row) => {
       const variants = config.rows.filter(
@@ -93,6 +96,9 @@ export function resolvedHubMetadata(
         };
       });
     });
+  const instances = dungeonBoards
+    ? (publishedInstances ?? []).filter((instance) => instance.category === "dungeon")
+    : configuredInstances;
   const choices = instances.filter(
     (row) => row.instance_name === request.instanceName,
   );
@@ -325,6 +331,10 @@ export async function fetchResolvedHubSummary(
     publishedInstances,
   );
   if (!request.instanceName || !metadata.selected_cohort) return metadata;
+  // These dungeon boards have speedrun data, but no v2 raid rating policy.
+  if (request.metadataOnly && config.effective_flavor.includes("lunatic") &&
+    !config.rows.some((row) => row.kind === "instance" && row.instance_name === request.instanceName) &&
+    metadata.instances.some((instance) => instance.instance_name === request.instanceName && instance.category === "dungeon")) return metadata;
   const p = new URLSearchParams({
     view: "cohorts",
     instance: request.instanceName,

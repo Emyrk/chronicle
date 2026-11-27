@@ -179,7 +179,7 @@ func TestInstanceDetailsBossCount(t *testing.T) {
 		{name: "vanilla plus scarlet monastery", flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, instance: "Scarlet Monastery", bossCount: intPtr(8)},
 		{name: "vanilla plus blackwing lair", flavor: database.WoWFlavor{database.FlavorVanilla, database.FlavorVanillaPlus}, instance: "Blackwing Lair", bossCount: intPtr(8)},
 		{name: "ulduar excludes optional encounters", flavor: database.WoWFlavor{database.FlavorWrath}, instance: "Ulduar", bossCount: intPtr(14)},
-		{name: "instance without speedrun rules", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Shadowfang Keep"},
+		{name: "instance without speedrun rules", flavor: database.WoWFlavor{database.FlavorVanilla}, instance: "Stormwind Stockade"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

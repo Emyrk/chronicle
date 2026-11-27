@@ -18,7 +18,8 @@ type Store interface {
 }
 
 // Resolve projects the dataset plus tenant flavor union. Unknown/server tags
-// cannot select layers. Unconfigured awards are distinguished by HasPoints.
+// cannot select layers, except the explicitly supported Lunatic challenge tag.
+// Unconfigured awards are distinguished by HasPoints.
 // Conflict diagnostics are never exposed as a successful partial configuration.
 func Resolve(ctx context.Context, db Store, dataset, tenant database.WoWFlavor) ([]database.ResolveLeaderboardConfigurationRow, error) {
 	rows, err := db.ResolveLeaderboardConfiguration(ctx, dataset.Merge(tenant).LeaderboardFlavors().Strings())

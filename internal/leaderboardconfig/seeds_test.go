@@ -39,7 +39,9 @@ func TestInitialSeeds(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &expected))
 	layers, err := db.ListLeaderboardLayers(ctx)
 	require.NoError(t, err)
-	require.Len(t, layers, 5)
+	require.Len(t, layers, 6)
+	// Later Lunatic calibration is verified by TestLunaticDungeonConfiguration.
+	expected.Layers["lunatic"] = []string{"lunatic", "vanilla"}
 	effective := map[string][]database.ResolveLeaderboardConfigurationRow{}
 	for _, layer := range layers {
 		require.Equal(t, expected.Layers[layer.Key], layer.RequiredFlavors)

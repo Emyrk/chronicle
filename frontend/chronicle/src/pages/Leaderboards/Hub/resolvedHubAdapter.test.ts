@@ -1,6 +1,67 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { configuration } from "./v2RatingAdapter.testdata";
-import { fetchResolvedHubSummary } from "./resolvedHubAdapter";
+import { fetchResolvedHubSummary, resolvedHubMetadata } from "./resolvedHubAdapter";
+import type { RankingsInstanceSummary } from "@/api/typesGenerated";
+
+const dungeon: RankingsInstanceSummary = {
+  instance_name: "Deadmines", difficulty_name: "", max_players: 0,
+  category: "dungeon", total_kills: 34, top_players: [],
+};
+const raid: RankingsInstanceSummary = {
+  ...dungeon, instance_name: "Raid", category: "raid",
+};
+const lunatic = { ...configuration, effective_flavor: ["vanilla", "lunatic"] };
+
+const landingTabs = [undefined, "overview", "ratings", "speedruns", "performances", "statistics", "parsing", "rulesets"] as const;
+
+describe("Lunatic dungeon discovery", () => {
+  it.each(landingTabs)("lists published dungeons instead of configured raids for the %s landing", (tab) => {
+    const summary = resolvedHubMetadata(lunatic, { tab, performance: "dps" }, [], [], [raid, dungeon]);
+    expect(summary.instances).toEqual([dungeon]);
+  });
+
+  it.each(landingTabs)("keeps configured instances without the Lunatic flavor for the %s landing", (tab) => {
+    const summary = resolvedHubMetadata(configuration, { tab, performance: "dps" }, [], [], [raid, dungeon]);
+    expect(summary.instances.map((instance) => instance.instance_name)).toEqual(["Raid"]);
+  });
+
+  it("loads configured dungeon bosses and rating cohorts instead of taking the unconfigured fallback", async () => {
+    const config = {
+      ...lunatic,
+      rows: configuration.rows.map((row) => ({ ...row, instance_name: "Deadmines" })),
+    };
+    const cohorts = [{ player_class: "MAGE", player_spec: "Frost", player_sub_spec: "", metric: "dps" }];
+    const fetch = vi.fn(async (url: string) => {
+      let data: unknown;
+      if (url === "/api/v1/leaderboard-configuration") data = config;
+      else if (url === "/api/v1/realms") data = [];
+      else if (url === "/api/v1/rankings/instances") data = [dungeon];
+      else if (url.startsWith("/api/v1/leaderboards-v2?view=cohorts")) data = cohorts;
+      else throw new Error(`Unexpected URL: ${url}`);
+      return { ok: true, json: async () => data };
+    });
+    vi.stubGlobal("fetch", fetch);
+    const summary = await fetchResolvedHubSummary({ instanceName: "Deadmines", performance: "dps", metadataOnly: true });
+    expect(summary.encounters.map((boss) => boss.encounter_name)).toContain("A");
+    expect(summary.progression_bosses).toEqual(["A"]);
+    expect(summary.cohorts).toEqual(cohorts);
+    expect(fetch).toHaveBeenCalledTimes(4);
+  });
+
+  it("opens a published dungeon without querying unconfigured raid ratings", async () => {
+    const fetch = vi.fn(async (url: string) => {
+      if (url === "/api/v1/leaderboard-configuration") return { ok: true, json: async () => lunatic };
+      if (url === "/api/v1/realms") return { ok: true, json: async () => [] };
+      if (url === "/api/v1/rankings/instances") return { ok: true, json: async () => [raid, dungeon] };
+      throw new Error(`Unexpected URL: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetch);
+    const summary = await fetchResolvedHubSummary({ instanceName: "Deadmines", performance: "dps", metadataOnly: true });
+    expect(summary.instances).toEqual([dungeon]);
+    expect(summary.selected_cohort).toEqual({ difficulty_name: "", max_players: 0 });
+    expect(fetch).toHaveBeenCalledTimes(3);
+  });
+});
 
 const performance = { player_name: "Mage", dps: 1234 };
 const speedrun = { instance_id: "run", guild_name: "Raiders", duration_ms: 3600000 };
