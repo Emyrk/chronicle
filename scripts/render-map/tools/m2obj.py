@@ -1,9 +1,9 @@
 """M2 doodads for adt2obj: fetch root + skin + textures for the file ids an ADT's MDDF places,
 and read them into per-material triangle lists in M2-local space.
 
-SPIKE (2026-10-14, Ruins of Lordaeron): geometry + diffuse texture 0 + alpha-key flag only.
-Not handled: bones/animation (rest pose only), multi-texture shaders, two-sided flag, vertex
-colours, particles/ribbons, LOD skin profiles beyond the first.
+SPIKE (2026-10-14, Ruins of Lordaeron): geometry + diffuse texture 0 + blend mode + material flags
+(0x4 = two-sided). Not handled: bones/animation (rest pose only), multi-texture shaders, vertex colours,
+particles/ribbons, LOD skin profiles beyond the first.
 
 Layout (offsets relative to the MD20 header, i.e. 8 bytes into the MD21 chunk):
   60 vertices (count, off; 48 B: pos 3f, bone weights 4B, bone idx 4B, normal 3f, uv 2f, uv2 2f)
@@ -75,16 +75,34 @@ def fetch(raw, cascget_bin, cache_params, fids, log=print):
     get(sk)
     tpath = lambda t: os.path.join(d, "textures", "%d.blp" % t)
     get(["%d=%s" % (t, tpath(t)) for t in sorted(tx)])
-    from PIL import Image
-    for t in sorted(tx):
-        png = tpath(t)[:-4] + ".png"
-        if os.path.exists(tpath(t)) and not os.path.exists(png):
-            Image.open(tpath(t)).convert("RGBA").save(png)
-    return bad
+    missing = convert_textures([tpath(t) for t in sorted(tx)], log)
+    return bad, missing
+
+
+def convert_textures(blps, log=print):
+    """BLP -> PNG beside it (skipped when the PNG exists). A texture the CDN served empty (0 bytes:
+    Excavation Site 8512854, elwynncampfire) or that Pillow cannot decode gets no PNG: adt2obj then
+    skips the parts that use it. Returns the paths of those textures."""
+    from PIL import Image, UnidentifiedImageError
+    missing = []
+    for blp in blps:
+        png = blp[:-4] + ".png"
+        if os.path.exists(png):
+            continue
+        try:
+            Image.open(blp).convert("RGBA").save(png)
+        except (OSError, UnidentifiedImageError, ValueError) as e:  # FileNotFoundError is an OSError
+            if os.path.exists(png):
+                os.remove(png)
+            missing.append(blp)
+            log("m2 texture %s unusable (%d bytes): %s" % (os.path.basename(blp),
+                                                           os.path.getsize(blp) if os.path.exists(blp) else -1, e))
+    return missing
 
 
 def load(raw, fid):
-    """-> {"parts": [{"verts": Nx3, "uvs": Nx2, "tris": [(a,b,c)], "tex": fid|None, "blend": int}]}
+    """-> {"parts": [{"verts": Nx3, "uvs": Nx2, "tris": [(a,b,c)], "tex": fid|None, "blend": int, "flags": int}]}
+    (flags = M2Material flags: 0x4 two-sided, 0x10 no depth write)
     or None when the model has no usable skin."""
     d = os.path.join(raw, "m2")
     rp, sp = os.path.join(d, "%d.m2" % fid), os.path.join(d, "%d.skin" % fid)
@@ -121,10 +139,10 @@ def load(raw, fid):
         fidtex = None
         if texidx is not None and texidx < ntex and types[texidx] == 0 and texidx < len(txid):
             fidtex = txid[texidx] or None
-        blend = mats[mi][1] if mi < len(mats) else 0
+        flags, blend = mats[mi] if mi < len(mats) else (0, 0)
         used = np.unique(tt)
         remap = np.zeros(nv, np.int64)
         remap[used] = np.arange(len(used))
         parts.append({"verts": pos[used], "uvs": uv[used], "tris": [tuple(int(x) for x in r) for r in remap[tt]],
-                      "tex": fidtex, "blend": int(blend)})
+                      "tex": fidtex, "blend": int(blend), "flags": int(flags)})
     return {"parts": parts}

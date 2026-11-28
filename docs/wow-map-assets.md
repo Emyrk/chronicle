@@ -160,6 +160,10 @@ A unit stands on the mesh at a probed floor height. When its position samples ca
 
 The exporter's liquid planes (`liquid_*` nodes) are plain translucent blue. Where the dungeon's liquid is not water, add `liquid` to the mesh entry: `color` is a CSS hex colour (`#rrggbb`) and `opacity` a number in (0, 1]; the frontend sets both on the liquid materials when the mesh loads. Without `liquid` the GLB's own blue shows. The merge rejects any other shape (a named or short colour, an opacity of 0 or above 1, extra fields); the frontend ignores a malformed tint and keeps the mesh.
 
+### Doodads
+
+A terrain GLB rendered with `--m2` carries the M2 props (grass, shrubs, trees, crates, fences) in their own `doodad` node, next to `terrain` and the `liquid_*` planes. The frontend draws the node but leaves it out of every floor probe and of the camera's collision (`dungeonMeshProbes.ts`), so a unit without a logged height stands on the ground under a tree, not on its canopy, and the camera passes through foliage. The node never moves the entry: `bounds`, `zMin` and `zMax` describe the rest of the mesh, and tree tops may stand above `zMax`.
+
 ### Where the GLB comes from
 
 Meshes are produced outside this repository by the `rendered-maps` pipeline (`render_set.py <slug> glb --glb`), which writes `<slug>-open-top.glb` (the WMO with ceilings culled, Blizzard textures embedded, glTF Y-up, centred) and `height.json` beside it. The frontend zeroes the GLB's centring node translations, so the file is used as exported.

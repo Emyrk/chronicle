@@ -177,6 +177,11 @@ def main():
     ap.add_argument("--m2", action="store_true",
                     help="terrain maps: also place M2 doodads (MDDF) — fetches raw/m2 once, builds raw/obj-m2/<slug>.obj")
     ap.add_argument("--m2-yaw", type=float, default=180.0, help="with --m2: yaw offset in degrees (fitted: 180)")
+    ap.add_argument("--m2-exclude", default="",
+                    help="with --m2: comma-separated FileDataIDs or model-path substrings to leave out (adt2obj.py)")
+    ap.add_argument("--m2-max-height", type=float, default=0.0,
+                    help="with --m2: shrink foliage (two-sided alpha-keyed models: trees) taller than this many yards "
+                         "to this height (0 = as placed; adt2obj.py)")
     ap.add_argument("--allow-blender-drift", action="store_true")
     ap.add_argument("--preview-width", type=int, default=1600)
     ap.add_argument("--preview-max-bytes", type=int, default=1_000_000)
@@ -206,18 +211,20 @@ def main():
     if a.m2:
         if fetch.get("kind") != "terrain":
             raise SystemExit("--m2 is for terrain maps (MDDF in the ADTs); WMO maps carry doodads in MODD, not built")
-        if a.glb:
-            raise SystemExit("--m2 with --glb is not supported yet (the GLB export culls floor from the WMO mesh)")
         subprocess.run([sys.executable, "-I", os.path.join(HERE, "m2fetch.py"), a.slug], check=True)
         m2obj_path = os.path.join(mdir, "raw", "obj-m2", a.slug + ".obj")
         os.makedirs(os.path.dirname(m2obj_path), exist_ok=True)
         subprocess.run([sys.executable, "-I", os.path.join(HERE, "adt2obj.py"), mdir, "--out", m2obj_path,
-                        "--chunk-px", str(cfg.get("atlas_chunk_px", 128)), "--m2", "--m2-yaw", str(a.m2_yaw)],
+                        "--chunk-px", str(cfg.get("atlas_chunk_px", 128)), "--m2", "--m2-yaw", str(a.m2_yaw),
+                        "--m2-exclude", a.m2_exclude, "--m2-max-height", str(a.m2_max_height)],
                        check=True, stderr=subprocess.DEVNULL)
         obj = m2obj_path
-        m2info = {"yaw_offset_deg": a.m2_yaw, "stats": json.load(open(os.path.splitext(obj)[0] + ".stats.json")),
+        m2info = {"yaw_offset_deg": a.m2_yaw, "exclude": a.m2_exclude, "max_height": a.m2_max_height,
+                  "stats": json.load(open(os.path.splitext(obj)[0] + ".stats.json")),
                   "frame": "terrain+WMO+water bounds only (--frame-exclude-prefix m2_)",
-                  "limits": "rest pose, first texture only, blend>=3 parts skipped, no two-sided flag"}
+                  "glb": "separate `doodad` node (export_glb.py); never moves bounds_wow, the offset or height.png",
+                  "limits": "rest pose, first texture only, blend>=2 parts skipped, parts with a missing texture "
+                            "skipped (stats m2_textures_missing), two-sided flag honoured"}
     rot = str(cfg.get("rot", 90))
     reference = cfg.get("reference")
     if reference:

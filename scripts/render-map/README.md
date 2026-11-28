@@ -162,7 +162,7 @@ then wait for the operator's explicit publish approval.
 | kind | detected by | what you get |
 |---|---|---|
 | **wmo** (caves, buildings: Wailing Caverns) | WDT `MODF` = one global WMO | Cycles passes: dry / water-mask / shaded / textured / shaded-water, any resolution |
-| **terrain** (outdoor-style: Excavation Site: Wetlands) | WDT `MAIN` tiles, no `MODF` | the same Cycles passes from the ADT geometry: heightmap mesh + ground textures baked from the splat layers + water (MH2O) + placed WMOs, **no M2 doodads** (trees, rocks, crates, scaffolds); plus `minimap.png`, Blizzard's own 512 px/tile top-down of the same tiles, which is the alignment reference |
+| **terrain** (outdoor-style: Excavation Site: Wetlands) | WDT `MAIN` tiles, no `MODF` | the same Cycles passes from the ADT geometry: heightmap mesh + ground textures baked from the splat layers + water (MH2O) + placed WMOs; M2 doodads (trees, shrubs, crates, fences) only with `--m2` (see "M2 doodads"); plus `minimap.png`, Blizzard's own 512 px/tile top-down of the same tiles, which is the alignment reference |
 
 Terrain, in detail (`tools/adt2obj.py`, run by `fetch_map.py`):
 
@@ -442,7 +442,7 @@ What the export does (`export_glb.py --kind terrain`; same files, same `height.j
 
 | step | rule | knob = Lordaeron value |
 |---|---|---|
-| frame | x/y of the `terrain_` objects (crop snapped to 33.3-yd chunks), z from everything; WMOs/water bisected at the 4 planes, so `bounds_wow` IS the crop | `--frame-include-prefix terrain_`, `--frame-exclude-prefix` (m2_ with --m2) |
+| frame | x/y of the `terrain_` objects (crop snapped to 33.3-yd chunks), z from everything but doodads; WMOs/water/doodads bisected at the 4 planes, so `bounds_wow` IS the crop | `--frame-include-prefix terrain_`, `--frame-exclude-prefix` (m2_ with --m2) |
 | no support cull | open sky: nothing to take off the top | — |
 | buried cull | a non-terrain face goes iff every vertex is buried: terrain more than `bury-depth` above it; under a terrain HOLE (a WMO that replaces the ground), more than `hole-depth` below the ground filled across the hole AND covered by solid geometry above (a pool floor under water is not covered) | `--bury-depth 0.5`, `--hole-depth 3`, `--keep-buried` off |
 | straddle | a face whose centroid is more than `straddle-depth` below ground also goes (one tall face from the Undercity up past the surface) | `--straddle-depth 10` |
@@ -450,6 +450,7 @@ What the export does (`export_glb.py --kind terrain`; same files, same `height.j
 | roofs | placed WMOs kept WHOLE | `--roof-cull` OFF (`--roof-min-drop 2`, `--roof-max-drop 25`) |
 | terrain | welded + smooth-shaded, as in the passes | `--smooth-prefix terrain_` |
 | atlases | 8192 px/tile bake downscaled, cropped to the UVs in use | `--terrain-px-per-yard 6` |
+| doodads (`--m2`) | `m2_*` joined into their own node `doodad`, smooth-shaded; buried-culled, but never cover, frame, offset, height z range or `height.png` | `--m2-exclude`, `--m2-max-height` (render_set) |
 | frame turn | adt2obj writes TRUE world coords, wmo2obj the pipeline frame (both horizontals negated): the terrain model is turned 180 deg about z before export; `height.png` is rendered unturned with the passes' camera | — |
 
 `--roof-cull` (opt-in): buildings with MOGP-interior (`0x2000`) groups only — on Lordaeron that is
@@ -463,6 +464,46 @@ and then, with roofs kept, a unit inside the throne room stands on the dome.
 
 Lordaeron GLB result: 582,860 faces in; clip −29,925; buried −376,560 (the Undercity, 80 of them straddling); 176,375 faces = 178,234 triangles out; open-top GLB 15.6 MB, of which images 3.97 MB. Dead ends on the way: `LEARNINGS.md` 2026-10-14.
 
+### M2 doodads (`--m2`, terrain maps)
+
+`render_set.py <slug> <label> --m2 [--glb]` fetches the models the ADTs' MDDF places (`m2fetch.py`, cached in
+`raw/m2/`), rebuilds `raw/obj-m2/<slug>.obj` with them (`adt2obj.py --m2`) and renders from that OBJ. WMO
+maps keep refusing `--m2` (their doodads are MODD, not built). What reaches the model:
+
+- rest pose, texture 0 of each batch; opaque (blend 0) and alpha-keyed (blend 1 → `alphaMode MASK`) parts;
+  blend ≥ 2 parts (alpha-blended, additive: light shafts, fog sheets, glows, wings) are skipped — a GLB can
+  only cut them out, which drew Excavation Site's light-shaft cones as pale-blue cards over the pond;
+- the M2 two-sided flag (`M2Material.flags & 0x4`, leaf cards) → `doubleSided`; one material per
+  texture/two-sided/alpha-key;
+- a texture the CDN serves empty or Pillow cannot decode gets no PNG; parts using it are skipped and
+  counted (`m2_textures_missing`, `m2_parts_missing_texture` in the OBJ stats = manifest `m2.stats`);
+- in the GLB the doodads are ONE node, `doodad` (next to `terrain` and `liquid_*`), smooth-shaded so the
+  exporter shares their vertices. They never move anything else: `bounds_wow`, `offset_applied`, the
+  `height` z range and `height.png` are the no-doodad values, and the terrain/WMO/liquid faces are
+  identical to a run without `--m2`. Tree tops may stand above `bounds_wow` max z (`height.json doodads.z_max`).
+  Consumers must draw the node but never use it as floor or as a camera blocker (chronicle's
+  `MapScene3D` leaves `doodad*` out of its probes, `docs/wow-map-assets.md` "Doodads").
+
+Knobs (render_set → adt2obj; recorded in the manifest `m2`):
+
+- `--m2-exclude a,b,...`: FileDataIDs or case-insensitive substrings of the model's community-listfile
+  path (e.g. `fish,dragonfly`, `wetlandtree01.m2`); counts in stats `m2_excluded`.
+- `--m2-max-height H`: shrink FOLIAGE taller than H yards to H, about its origin. Foliage = a model with
+  a two-sided alpha-keyed part (leaf cards); barriers, cranes, crates are never shrunk. Excavation Site's
+  wetland trees stand up to 136 yd and their canopies hide the pond in a 3/4 view.
+
+Excavation Site: Wetlands (rendered-maps crop, 2,085 placements, 199 models), open-top GLB, WebP:
+
+| version | knob | GLB | images | faces: terrain node / doodad node | pond water visible in the 3/4 proof vs v008 |
+|---|---|---|---|---|---|
+| `v008-glb` | no `--m2` | 7.4 MB | 2.5 MB (21) | 180,367 / — | 100 % |
+| `v010-glb-m2` | every doodad | 20.9 MB | 10.0 MB (202) | 180,367 / 133,345 | 52 % |
+| `v011-glb-m2-canopy30` | `--m2-max-height 30` (85 trees shrunk) | 20.9 MB | 10.0 MB (202) | 180,367 / 132,997 | 91 % |
+
+Not done: instancing (`EXT_mesh_gpu_instancing` or one mesh per model): smooth shading alone took the
+hand-run prototype from 29.4 MB to 20.9 MB; animated doodads (fish, dragonflies, bobbing debris) are
+frozen in their rest pose.
+
 Ceiling removal: faces whose geometric normal points down (`nz < -0.15`) are deleted; back
 faces render transparent. `--floors-only` additionally drops walls. The camera frame is
 computed on the full model before any pass drops objects, so all passes share one frame.
@@ -470,8 +511,9 @@ Alpha = not-geometry everywhere, so a pass doubles as a floor mask.
 
 ## Known limits
 
-- Doodads (M2 props: mushrooms, roots, bones, braziers) are not exported; the small white
-  holes in Wailing Caverns' overgrown chamber are mesh holes those props plug.
+- WMO doodads (MODD: mushrooms, roots, bones, braziers) are not exported; the small white
+  holes in Wailing Caverns' overgrown chamber are mesh holes those props plug. Terrain M2 doodads
+  (MDDF) are, with `--m2` (rest pose, no blended/additive parts; see "M2 doodads").
 - On the CDN path, textures referenced by name (`MOTX`) instead of FileDataID abort fetch;
   every Forever-build WMO seen so far uses FileDataIDs. The `source: mpq` path (below) is name-based.
 - Stacked floors collapse into one view; the pass with the higher floor wins.
@@ -485,7 +527,7 @@ Alpha = not-geometry everywhere, so a pass doubles as a floor mask.
   and new maps with numeric directories are in no listfile at all → wago.tools Map CSV.
 - A terrain tile's look is largely M2 doodads (812 on one Excavation Site tile); the
   geometry render has none of them. The minimap stitch (`minimap.png` in every terrain
-  version) shows what they add; M2 support is the next piece if that matters.
+  version) shows what they add; `--m2` places them (see "M2 doodads").
 - MODF rotation is not noggit's convention for this data; do not guess rotations, verify
   against the `MODF` extents (adt2obj does, every placement).
 - `MH2O` liquid vertex format cannot be trusted in modern files (LiquidObject ids); read
