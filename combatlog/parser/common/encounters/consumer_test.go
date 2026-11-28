@@ -612,3 +612,99 @@ func TestInstanceCatalogueIncludesMetadataOnlyAndOutOfCombatMessages(t *testing.
 	require.NoError(t, err)
 	require.Equal(t, []guid.GUID{other}, secondResult.PersistedUnits)
 }
+
+func TestScarletMonasteryWingSplit(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name          string
+		firstBoss     uint32
+		entry         uint32
+		boundaryName  string
+		activeTrash   bool
+		wantFirstWing string
+		wantNextWing  string
+	}{
+		{name: "explicit individual boss", firstBoss: 3975, entry: 3977, boundaryName: "High Inquisitor Whitemane", wantFirstWing: "Armory", wantNextWing: "Cathedral"},
+		{name: "explicit grouped boss", firstBoss: 3975, entry: 3977, boundaryName: "Mograine & Whitemane", wantFirstWing: "Armory", wantNextWing: "Cathedral"},
+		{name: "explicit boss during shared trash", firstBoss: 3975, entry: 3977, boundaryName: "High Inquisitor Whitemane", activeTrash: true, wantFirstWing: "Armory", wantNextWing: "Cathedral"},
+		{name: "explicit same wing", firstBoss: 3975, entry: 3975, boundaryName: "Herod", wantFirstWing: "Armory", wantNextWing: "Armory"},
+		{name: "unknown boundary", firstBoss: 3975, entry: 3975, boundaryName: "Unknown encounter", wantFirstWing: "Armory", wantNextWing: "Armory"},
+		{name: "centurion", firstBoss: 3975, entry: 4301, wantFirstWing: "Armory", wantNextWing: "Cathedral"},
+		{name: "champion", firstBoss: 3975, entry: 4302, wantFirstWing: "Armory", wantNextWing: "Cathedral"},
+		{name: "wizard", firstBoss: 3975, entry: 4300, wantFirstWing: "Armory", wantNextWing: "Cathedral"},
+		{name: "conjuror", firstBoss: 4542, entry: 4297, wantFirstWing: "Cathedral", wantNextWing: "Armory"},
+		{name: "evoker", firstBoss: 4542, entry: 4289, wantFirstWing: "Cathedral", wantNextWing: "Armory"},
+		{name: "guardsman", firstBoss: 4542, entry: 4290, wantFirstWing: "Cathedral", wantNextWing: "Armory"},
+		{name: "shared myrmidon", firstBoss: 3975, entry: 4295, wantFirstWing: "Armory", wantNextWing: "Armory"},
+		{name: "shared defender", firstBoss: 3975, entry: 4298, wantFirstWing: "Armory", wantNextWing: "Armory"},
+		{name: "shared monk", firstBoss: 3975, entry: 4540, wantFirstWing: "Armory", wantNextWing: "Armory"},
+		{name: "shared chaplain", firstBoss: 3975, entry: 4299, wantFirstWing: "Armory", wantNextWing: "Armory"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := context.Background()
+			logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+			flavor := database.WoWFlavor{database.FlavorVanilla}
+			factory := instances.AllScarletMonasteryFactory
+			state := NewWithInstanceResolver(ctx, logger, flavor, func(_ bool, z zone.Zone, db *unitdb.Units) *instances.Hookable {
+				return factory.New(ctx, logger, db, z, flavor)
+			})
+			seen := time.Date(2026, time.November, 27, 13, 0, 0, 0, time.UTC)
+			state.Zone(messages.Zone{Zone: zone.Zone{Seen: seen, Name: "Scarlet Monastery", InstanceID: 189, MapID: 189}})
+			player := guid.GUID(1)
+			boss := guid.GUID(0xF130000000000000 | uint64(tc.firstBoss)<<24 | 1)
+			target := guid.GUID(0xF130000000000000 | uint64(tc.entry)<<24 | 2)
+			require.NoError(t, state.Process(&messages.Damage{
+				MessageBase: messages.Base(seen), Caster: &player, Target: boss, Amount: 1,
+			}))
+			require.NoError(t, state.Process(&messages.Slain{
+				MessageBase: messages.Base(seen.Add(time.Second)), Victim: boss, Killer: &player,
+			}))
+			require.Len(t, state.Instances, 1)
+
+			wantCount := 1
+			if tc.wantNextWing != tc.wantFirstWing {
+				wantCount = 2
+			}
+			if tc.activeTrash {
+				sharedTrash := guid.GUID(0xF130000000000000 | uint64(4295)<<24 | 3)
+				require.NoError(t, state.Process(&messages.Damage{
+					MessageBase: messages.Base(seen.Add(30 * time.Second)), Caster: &player, Target: sharedTrash, Amount: 1,
+				}))
+				require.True(t, state.CurrentInstance.FightActive())
+			}
+			if tc.boundaryName != "" {
+				require.NoError(t, state.Process(&messages.EncounterBoundary{
+					MessageBase: messages.Base(seen.Add(time.Minute)), Active: true,
+					EncounterID: 450, Name: tc.boundaryName, InstanceID: 189,
+				}))
+				// The split must happen on the boundary, not on later boss damage.
+				require.Len(t, state.Instances, wantCount)
+			}
+			require.NoError(t, state.Process(&messages.Damage{
+				MessageBase: messages.Base(seen.Add(time.Minute + time.Second)), Caster: &player, Target: target, Amount: 1,
+			}))
+			require.Len(t, state.Instances, wantCount)
+			require.Same(t, state.Instances[wantCount-1], state.CurrentInstance)
+			if tc.boundaryName != "" {
+				success := true
+				require.NoError(t, state.Process(&messages.EncounterBoundary{
+					MessageBase: messages.Base(seen.Add(time.Minute + 2*time.Second)),
+					EncounterID: 450, Name: tc.boundaryName, InstanceID: 189, Success: &success,
+				}))
+				require.Same(t, state.Instances[wantCount-1], state.CurrentInstance)
+			} else {
+				require.NoError(t, state.Process(&messages.Slain{
+					MessageBase: messages.Base(seen.Add(time.Minute + 2*time.Second)), Victim: target, Killer: &player,
+				}))
+			}
+			for _, inst := range state.Instances {
+				_, err := inst.Finalize(ctx)
+				require.NoError(t, err)
+			}
+			require.Equal(t, "Scarlet Monastery "+tc.wantFirstWing, state.Instances[0].Name())
+			require.Equal(t, "Scarlet Monastery "+tc.wantNextWing, state.Instances[wantCount-1].Name())
+		})
+	}
+}

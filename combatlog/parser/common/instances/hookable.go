@@ -556,12 +556,7 @@ func (h *Hookable) speedrunReentryBoundary() (time.Time, time.Duration, bool) {
 // ShouldSplitDerived reports whether m starts activity in a different derived
 // sub-instance after this segment has already completed a fight.
 func (h *Hookable) ShouldSplitDerived(m messages.Message) bool {
-	if h.derivedName == nil || h.FightActive() || len(h.completedFights) == 0 {
-		return false
-	}
-
-	damage, ok := m.(*messages.Damage)
-	if !ok || !damage.RequiresActive() || damage.HitType.Has(types.HitTypeImmune) || damage.HitType.Has(types.HitTypeEvade) {
+	if h.derivedName == nil || len(h.completedFights) == 0 {
 		return false
 	}
 
@@ -569,8 +564,39 @@ func (h *Hookable) ShouldSplitDerived(m messages.Message) bool {
 	if !ok {
 		return false
 	}
-	incomingName, ok := h.derivedName.NameForGUIDs(m.Affects())
-	return ok && incomingName != currentName
+
+	switch msg := m.(type) {
+	case *messages.EncounterBoundary:
+		if !msg.Active || msg.Name == "" {
+			return false
+		}
+		// Explicit starts precede boss damage. Resolve both individual boss
+		// names (Whitemane) and grouped encounter names (Mograine & Whitemane)
+		// before the boundary makes the old segment's fight active.
+		incomingName := ""
+		for entry, identity := range h.HostileEntries() {
+			if !identity.Boss || (identity.Name != msg.Name && identity.EncounterName != msg.Name) {
+				continue
+			}
+			name, found := h.derivedName.config[entry]
+			if !found {
+				continue
+			}
+			if incomingName != "" && incomingName != name {
+				return false // An ambiguous name must not select an arbitrary wing.
+			}
+			incomingName = name
+		}
+		return incomingName != "" && incomingName != currentName
+	case *messages.Damage:
+		if h.FightActive() || !msg.RequiresActive() || msg.HitType.Has(types.HitTypeImmune) || msg.HitType.Has(types.HitTypeEvade) {
+			return false
+		}
+		incomingName, ok := h.derivedName.NameForGUIDs(m.Affects())
+		return ok && incomingName != currentName
+	default:
+		return false
+	}
 }
 
 // FightActive reports whether this instance currently has an active encounter.

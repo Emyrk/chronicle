@@ -114,9 +114,11 @@ var (
 		ZoneNames: []string{"scarlet monastery"},
 		DerivedName: func(database.WoWFlavor) *MultiInstanceZone {
 			return NewMultiInstanceZone(map[string][]uint32{
-				"Scarlet Monastery Cathedral": {3976, 3977, 4542},
+				// Use wing-specific trash to split before ENCOUNTER_START. Shared
+				// Myrmidons, Defenders, Monks and Chaplains cannot identify a wing.
+				"Scarlet Monastery Cathedral": {3976, 3977, 4542, 4301, 4302, 4300},
 				"Scarlet Monastery Library":   {3974, 61983, 6487},
-				"Scarlet Monastery Armory":    {3975},
+				"Scarlet Monastery Armory":    {3975, 4297, 4289, 4290},
 				"Scarlet Monastery Graveyard": {3983, 4543},
 				//"Gates of Scarlet Monastery":  {25221, 25222, 25243, 25245},
 			})
